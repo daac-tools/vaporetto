@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "vaporetto",
+    "predict",
+    "train",
+    "convert_kytea_model",
+]
