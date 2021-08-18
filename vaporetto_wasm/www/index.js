@@ -55,6 +55,8 @@ function run() {
     });
 
     input_text.addEventListener('input', function (e) {
+        const t0 = performance.now();
+
         const cur_text = e.target.value;
         let range_from = null;
         let range_to = null;
@@ -104,11 +106,15 @@ function run() {
         const boundaries = predictor.predict_partial(predict_text, predict_boundary_start, predict_boundary_end);
 
         console.log("input with window:", predict_text);
-        console.log("prediction range:", predict_boundary_start, predict_boundary_end);
+        console.log("prediction range:", [predict_boundary_start, predict_boundary_end]);
         console.log("boundaries:", boundaries);
-        console.log("-----");
 
         replace_text(tokenized, prev_text, cur_text, range_from, range_to, boundaries, window_size);
+
+        const t1 = performance.now();
+
+        console.log("Elapsed:", t1 - t0, "[ms]");
+        console.log("-----");
     });
 }
 
