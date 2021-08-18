@@ -1,4 +1,4 @@
-# 🚤 VAporetto: POintwise pREdicTion based TOkenizer
+# 🛥 VAporetto: POintwise pREdicTion based TOkenizer
 
 ## Usage
 
