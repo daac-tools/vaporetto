@@ -14,26 +14,30 @@ function run() {
     function replace_text(elem, prev_text, text, range_from, range_to, boundaries, window_size) {
         const prev_boundary_start = Math.max(range_from[0] - window_size, 0);
         const prev_boundary_end = Math.min(range_from[1] + window_size - 1, prev_text.length - 1);
-        const node_end_idx = prev_boundary_end * 2 + 1;
+        const node_end_idx = prev_boundary_end + 1;
         let node_end = elem.childNodes[0];
         if (prev_text.length != 0) {
             node_end = elem.childNodes[node_end_idx];
-            for (let i = (prev_boundary_end - prev_boundary_start) * 2; i >= 0; --i) {
+            if (range_from[0] == 0) {
+                node_end.previousSibling.remove();
+            }
+            for (let i = prev_boundary_end - prev_boundary_start; i > 0; --i) {
                 node_end.previousSibling.remove();
             }
         }
         const next_boundary_start = Math.max(range_to[0] - window_size, 0);
         const next_boundary_end = Math.min(range_to[1] + window_size - 1, text.length - 1);
-        node_end.before(createTextSpan(text.substr(next_boundary_start, 1)));
-        for (let i = 0; i < next_boundary_end - next_boundary_start; ++i) {
-            if (boundaries[i] >= 0) {
-                let elem = createTextSpan("\u00A0");
-                elem.style.backgroundColor = 'rgba(0, 0, 0, ' + Math.atan(boundaries[i] / 2) + ')';
-                node_end.before(elem);
-            } else {
-                node_end.before(createTextSpan(""));
+        if (text.length != 0) {
+            if (range_to[0] == 0) {
+                node_end.before(createTextSpan(text.substr(next_boundary_start, 1)));
             }
-            node_end.before(createTextSpan(text.substr(next_boundary_start + i + 1, 1)));
+            for (let i = 0; i < next_boundary_end - next_boundary_start; ++i) {
+                const elem = createTextSpan(text.substr(next_boundary_start + i + 1, 1));
+                if (boundaries[i] >= 0) {
+                    elem.style.borderLeft = '5pt solid rgba(0, 0, 0, ' + Math.atan(boundaries[i] / 2) + ')';
+                }
+                node_end.before(elem);
+            }
         }
     }
 
