@@ -42,15 +42,30 @@ function run() {
     }
 
     const input_text = document.getElementById('input_text');
+    input_text.value = "";
+
     const window_size = 3;
 
     let input_data = null;
     let prev_range = [0, 0];
     let prev_text = "";
 
+    let composition_start = null;
+    input_text.addEventListener('compositionstart', function (e) {
+        composition_start = e.target.selectionStart;
+    });
+
+    input_text.addEventListener('compositionend', function (e) {
+        composition_start = null;
+    });
+
     input_text.addEventListener('beforeinput', function (e) {
         input_data = e.data;
-        prev_range = [e.target.selectionStart, e.target.selectionEnd];
+        if (composition_start != null) {
+            prev_range = [composition_start, e.target.selectionEnd];
+        } else {
+            prev_range = [e.target.selectionStart, e.target.selectionEnd];
+        }
         prev_text = e.target.value;
     });
 
