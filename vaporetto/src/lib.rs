@@ -63,8 +63,11 @@ mod trainer;
 mod kytea_model;
 
 pub use model::Model;
-pub use predictor::{MultithreadPredictor, Predictor};
+pub use predictor::Predictor;
 pub use sentence::{BoundaryType, CharacterType, Sentence};
+
+#[cfg(feature = "multithreading")]
+pub use predictor::MultithreadPredictor;
 
 #[cfg(feature = "train")]
 pub use trainer::{Dataset, Trainer};
