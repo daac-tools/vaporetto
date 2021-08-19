@@ -1,12 +1,9 @@
-use std::fs;
-use std::io::prelude::*;
-use std::io::stdin;
-use std::io::BufReader;
+use std::fs::File;
+use std::io::{prelude::*, stdin, BufReader};
 use std::path::PathBuf;
 use std::time::Instant;
 
 use structopt::StructOpt;
-
 use vaporetto::{Model, Predictor, Sentence};
 
 #[derive(StructOpt, Debug)]
@@ -33,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
     eprintln!("Loading model file...");
-    let mut f = BufReader::new(fs::File::open(opt.model).unwrap());
+    let mut f = BufReader::new(File::open(opt.model).unwrap());
     let model = Model::read(&mut f)?;
     let predictor = Predictor::new(model, true).dict_overwrap_size(opt.chunk_dict_window);
 

@@ -1,13 +1,9 @@
 use std::collections::HashSet;
-use std::fs;
 use std::fs::File;
-use std::io::prelude::*;
-use std::io::{stderr, BufReader, BufWriter};
+use std::io::{prelude::*, stderr, BufReader, BufWriter};
 use std::path::PathBuf;
 
-use structopt::clap::ArgGroup;
-use structopt::StructOpt;
-
+use structopt::{clap::ArgGroup, StructOpt};
 use vaporetto::{Dataset, Sentence, Trainer};
 
 #[derive(StructOpt, Debug)]
@@ -116,7 +112,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dictionary: Vec<String> = dictionary.into_iter().collect();
 
     eprintln!("Extracting into features...");
-    let mut dataset = Dataset::new(opt.charn, opt.charw, opt.typen, opt.typew, dictionary, 0)?;
+    let mut dataset = Dataset::new(
+        opt.charn, opt.charw, opt.typen, opt.typew, dictionary, opt.dictn,
+    )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
             eprint!("# of features: {}\r", dataset.n_features());
@@ -131,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = trainer.train(dataset)?;
     eprintln!("Finish training.");
 
-    let mut f = BufWriter::new(fs::File::create(opt.model)?);
+    let mut f = BufWriter::new(File::create(opt.model)?);
     model.write(&mut f)?;
 
     Ok(())

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-/// Character types.
+/// Character type.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CharacterType {

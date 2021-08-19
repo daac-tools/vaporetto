@@ -4,7 +4,6 @@ use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 
 use structopt::StructOpt;
-
 use vaporetto::{KyteaModel, Model};
 
 #[derive(StructOpt, Debug)]
