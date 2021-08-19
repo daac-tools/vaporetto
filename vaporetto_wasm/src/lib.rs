@@ -1,8 +1,8 @@
 use std::io::Cursor;
 
 use js_sys::{Array, Object};
+use vaporetto::{Model, Predictor, Sentence};
 use wasm_bindgen::{prelude::*, JsValue};
-use vaporetto::{Predictor, Model, Sentence};
 
 #[wasm_bindgen]
 pub struct Vaporetto {
@@ -16,9 +16,7 @@ impl Vaporetto {
         let mut f = Cursor::new(include_bytes!("../../model/kftt.model"));
         let model = Model::read(&mut f).unwrap();
         let predictor = Predictor::new(model, false);
-        Self {
-            predictor,
-        }
+        Self { predictor }
     }
 
     #[wasm_bindgen]

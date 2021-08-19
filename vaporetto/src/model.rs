@@ -24,6 +24,7 @@ pub(crate) type ScoreValue = f64;
 #[cfg(feature = "model-quantize")]
 pub(crate) type ScoreValue = i32;
 
+/// Model data.
 pub struct Model {
     pub(crate) word_fst: Fst<Vec<u8>>,
     pub(crate) type_fst: Fst<Vec<u8>>,
@@ -44,6 +45,15 @@ pub struct Model {
 }
 
 impl Model {
+    /// Exports the model data.
+    ///
+    /// # Arguments
+    ///
+    /// * `wtr` - Byte-oriented sink object.
+    ///
+    /// # Errors
+    ///
+    /// When `wtr` generates an error, it will be returned as is.
     pub fn write<W: Write>(&self, wtr: &mut W) -> Result<()> {
         wtr.write_u64::<BigEndian>(self.word_fst.as_bytes().len() as u64)?;
         wtr.write_all(self.word_fst.as_bytes())?;
@@ -102,6 +112,19 @@ impl Model {
         Ok(())
     }
 
+    /// Creates a model from a reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `rdr` - A data source.
+    ///
+    /// # Returns
+    ///
+    /// A model data read from `rdr`.
+    ///
+    /// # Errors
+    ///
+    /// When `rdr` generates an error, it will be returned as is.
     pub fn read<R: Read>(rdr: &mut R) -> Result<Self> {
         let word_fst_size = rdr.read_u64::<BigEndian>()? as usize;
         let mut word_fst_bytes = vec![0; word_fst_size];
@@ -198,7 +221,7 @@ impl Model {
     }
 
     #[cfg(feature = "train")]
-    pub fn from_liblinear_model(
+    pub(crate) fn from_liblinear_model(
         model: impl LibLinearModel,
         fid_manager: FeatureIDManager,
         dict_fst: Fst<Vec<u8>>,

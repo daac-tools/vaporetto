@@ -1,17 +1,47 @@
 use anyhow::{anyhow, Result};
 
+/// Character types.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CharacterType {
+    /// Digit character. (e.g. 0, 1, 2, ...)
     Digit = b'D',
+
+    /// Roman character. (e.g. A, B, C, ...)
     Roman = b'R',
+
+    /// Japanese Hiragana character. (e.g. あ, い, う, ...)
     Hiragana = b'H',
+
+    /// Japanese Katakana character. (e.g. ア, イ, ウ, ...)
     Katakana = b'T',
+
+    /// Kanji (a.k.a. Hanzi or Hanja) character. (e.g. 漢, 字, ...)
     Kanji = b'K',
+
+    /// Other character.
     Other = b'O',
 }
 
 impl CharacterType {
+    /// Gets a character type of a given character.
+    ///
+    /// # Arguments
+    ///
+    /// * `c` - A character.
+    ///
+    /// # Returns
+    ///
+    /// A character type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::CharacterType;
+    ///
+    /// let t = CharacterType::get_type('A');
+    /// assert_eq!(CharacterType::Roman, t);
+    /// ```
     pub fn get_type(c: char) -> Self {
         match c as u32 {
             0x30..=0x39 | 0xFF10..=0xFF19 => Self::Digit,
@@ -32,14 +62,21 @@ impl CharacterType {
     }
 }
 
+/// Boundary type.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum BoundaryType {
+    /// Inner of a word.
     NotWordBoundary = 0,
+
+    /// Word boundary.
     WordBoundary = 1,
+
+    /// Unknown. (Not annotated.)
     Unknown = 2,
 }
 
+/// Sentence with boundary annotations.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Sentence {
     pub(crate) text: String,
@@ -71,6 +108,31 @@ impl Sentence {
         (char_to_str_pos, str_to_char_pos, char_type)
     }
 
+    /// Creates a new [`Sentence`] from a given string.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - A raw string without any annotation.
+    ///
+    /// # Returns
+    ///
+    /// A new [`Sentence`].
+    ///
+    /// # Errors
+    ///
+    /// If the given `text` is empty, an error variant will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_raw("How are you?");
+    /// assert!(s.is_ok());
+    ///
+    /// let s = Sentence::from_raw("");
+    /// assert!(s.is_err());
+    /// ```
     pub fn from_raw<S>(text: S) -> Result<Self>
     where
         S: Into<String>,
@@ -96,36 +158,79 @@ impl Sentence {
         })
     }
 
+    /// Gets a string without any annotation.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_raw("How are you?").unwrap();
+    /// assert_eq!("How are you?", s.to_raw_string());
+    /// ```
     pub fn to_raw_string(&self) -> &str {
         &self.text
     }
 
-    pub fn from_tokenized<S>(labeled_text: S) -> Result<Self>
+    /// Creates a new [`Sentence`] from a tokenized string.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokenized_text` - A tokenized string containing whitespaces for word boundaries.
+    ///
+    /// # Returns
+    ///
+    /// A new [`Sentence`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error variant when:
+    ///
+    /// * `tokenized_text` is empty.
+    /// * `tokenized_text` starts/ends with a whitespace.
+    /// * `tokenized_text` contains consecutive whitespaces.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_tokenized("How are you?");
+    /// assert!(s.is_ok());
+    ///
+    /// let s = Sentence::from_tokenized("How  are you?");
+    /// assert!(s.is_err());
+    /// ```
+    pub fn from_tokenized<S>(tokenized_text: S) -> Result<Self>
     where
         S: AsRef<str>,
     {
-        let labeled_text = labeled_text.as_ref();
+        let tokenized_text = tokenized_text.as_ref();
 
-        if labeled_text.is_empty() {
-            return Err(anyhow!("`labeled_text` is empty"));
+        if tokenized_text.is_empty() {
+            return Err(anyhow!("`tokenized_text` is empty"));
         }
 
-        let labeled_chars: Vec<char> = labeled_text.chars().collect();
-        let mut chars = Vec::with_capacity(labeled_chars.len());
-        let mut boundaries = Vec::with_capacity(labeled_chars.len() - 1);
+        let tokenized_chars: Vec<char> = tokenized_text.chars().collect();
+        let mut chars = Vec::with_capacity(tokenized_chars.len());
+        let mut boundaries = Vec::with_capacity(tokenized_chars.len() - 1);
 
         let mut prev_boundary = false;
         let mut escape = false;
-        for c in labeled_chars {
+        for c in tokenized_chars {
             match (escape, c) {
                 (false, '\\') => {
                     escape = true;
                 }
                 (false, ' ') => {
                     if chars.is_empty() {
-                        return Err(anyhow!("`labeled_text` starts with a whitespace"));
+                        return Err(anyhow!("`tokenized_text` starts with a whitespace"));
                     } else if prev_boundary {
-                        return Err(anyhow!("`labeled_text` contains consecutive whitespaces"));
+                        return Err(anyhow!("`tokenized_text` contains consecutive whitespaces"));
                     }
                     prev_boundary = true;
                 }
@@ -144,7 +249,7 @@ impl Sentence {
             };
         }
         if prev_boundary {
-            return Err(anyhow!("`labeled_text` ends with a whitespace"));
+            return Err(anyhow!("`tokenized_text` ends with a whitespace"));
         }
 
         let (char_to_str_pos, str_to_char_pos, char_type) = Sentence::common_info(&chars);
@@ -158,6 +263,24 @@ impl Sentence {
         })
     }
 
+    /// Generates a string with whitespaces for word boundaries.
+    ///
+    /// # Returns
+    ///
+    /// A newly allocated string containing whitespaces for word boundaries.
+    ///
+    /// # Errors
+    ///
+    /// If the sentence contains unknown boundary, an error variant will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_tokenized("How are you?").unwrap();
+    /// assert_eq!("How are you?", s.to_tokenized_string().unwrap());
+    /// ```
     pub fn to_tokenized_string(&self) -> Result<String> {
         let chars: Vec<char> = self.text.chars().collect();
         let mut result = String::with_capacity(self.text.len() + chars.len() - 1);
@@ -185,6 +308,29 @@ impl Sentence {
         Ok(result)
     }
 
+    /// Generates a vector of words.
+    ///
+    /// # Returns
+    ///
+    /// A newly allocated vector of words.
+    ///
+    /// # Errors
+    ///
+    /// If the sentence contains unknown boundaries, an error variant will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_tokenized("How are you ?").unwrap();
+    /// assert_eq!(vec![
+    ///     "How".to_string(),
+    ///     "are".to_string(),
+    ///     "you".to_string(),
+    ///     "?".to_string(),
+    /// ], s.to_tokenized_vec().unwrap());
+    /// ```
     pub fn to_tokenized_vec(&self) -> Result<Vec<String>> {
         let chars: Vec<char> = self.text.chars().collect();
         let mut result = vec![];
@@ -205,6 +351,35 @@ impl Sentence {
         Ok(result)
     }
 
+    /// Creates a new [`Sentence`] from a string with partial annotations.
+    ///
+    /// # Arguments
+    ///
+    /// * `labeled_text` - A string with partial annotations.
+    ///
+    /// # Returns
+    ///
+    /// A new [`Sentence`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error variant when:
+    ///
+    /// * `labeled_text` is empty.
+    /// * The length of `lsbeled_text` is even numbers.
+    /// * `labeled_text` contains invalid boundary characters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_partial_annotation("g-o-o-d|i-d e-a");
+    /// assert!(s.is_ok());
+    ///
+    /// let s = Sentence::from_partial_annotation("b-a-d/i-d-e-a");
+    /// assert!(s.is_err());
+    /// ```
     pub fn from_partial_annotation<S>(labeled_text: S) -> Result<Self>
     where
         S: Into<String>,
@@ -248,6 +423,20 @@ impl Sentence {
         })
     }
 
+    /// Generates a string with partial annotations.
+    ///
+    /// # Returns
+    ///
+    /// A newly allocated string with partial annotations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_tokenized("How are you ?").unwrap();
+    /// assert_eq!("H-o-w|a-r-e|y-o-u|?", &s.to_partial_annotation_string());
+    /// ```
     pub fn to_partial_annotation_string(&self) -> String {
         let chars: Vec<char> = self.text.chars().collect();
         let mut result = String::with_capacity(self.text.len() + chars.len() - 1);
@@ -269,10 +458,51 @@ impl Sentence {
         result
     }
 
+    /// Gets a reference to the boundary information.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the boundary information.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::{BoundaryType, Sentence};
+    ///
+    /// let s = Sentence::from_partial_annotation("a|b-c d").unwrap();
+    /// assert_eq!(&[
+    ///     BoundaryType::WordBoundary,
+    ///     BoundaryType::NotWordBoundary,
+    ///     BoundaryType::Unknown,
+    /// ], s.boundaries());
+    /// ```
     pub fn boundaries(&self) -> &[BoundaryType] {
         &self.boundaries
     }
 
+    /// Gets a reference to the character type information.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the character type information.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_raw("A1あエ漢?").unwrap();
+    /// assert_eq!(&[b'R', b'D', b'H', b'T', b'K', b'O',], s.char_types());
+    /// ```
+    pub fn char_types(&self) -> &[u8] {
+        &self.char_type
+    }
+
+    /// Gets a reference to the boundary score information.
+    ///
+    /// # Returns
+    ///
+    /// If the predictor inserted, the boundary score information is returned. Otherwise, None.
     pub fn boundary_scores(&self) -> Option<&[f64]> {
         self.boundary_scores.as_ref().map(|v| v.as_slice())
     }
@@ -357,7 +587,7 @@ mod tests {
         let s = Sentence::from_tokenized("");
 
         assert!(s.is_err());
-        assert_eq!("`labeled_text` is empty", &s.err().unwrap().to_string());
+        assert_eq!("`tokenized_text` is empty", &s.err().unwrap().to_string());
     }
 
     #[test]
@@ -366,7 +596,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "`labeled_text` starts with a whitespace",
+            "`tokenized_text` starts with a whitespace",
             &s.err().unwrap().to_string()
         );
     }
@@ -377,7 +607,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "`labeled_text` ends with a whitespace",
+            "`tokenized_text` ends with a whitespace",
             &s.err().unwrap().to_string()
         );
     }
@@ -388,7 +618,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "`labeled_text` contains consecutive whitespaces",
+            "`tokenized_text` contains consecutive whitespaces",
             &s.err().unwrap().to_string()
         );
     }

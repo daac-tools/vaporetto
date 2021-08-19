@@ -15,6 +15,7 @@ use crossbeam_channel::{Receiver, Sender};
 use crate::model::{Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 
+/// Predictor.
 pub struct Predictor {
     word_pma: AhoCorasick,
     type_pma: AhoCorasick,
@@ -33,6 +34,17 @@ pub struct Predictor {
 }
 
 impl Predictor {
+    /// Creates a new predictor.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - A model data.
+    /// * `use_dfa` - If True, the predictor compiles the standard Aho-Corasick automaton into a
+    ///   deterministic finite automaton (DFA).
+    ///
+    /// # Returns
+    ///
+    /// A new predictor.
     pub fn new(model: Model, use_dfa: bool) -> Self {
         let mut words = Vec::with_capacity(model.word_fst.len());
         for i in 0..model.word_fst.len() as u64 {
@@ -281,6 +293,16 @@ impl Predictor {
         }
     }
 
+    /// Predicts word boundaries of the specified range of a sentence.
+    ///
+    /// # Arguments
+    ///
+    /// * `sentence` - A sentence.
+    /// * `range` - The range of the sentence.
+    ///
+    /// # Returns
+    ///
+    /// A sentence with predicted boundary information.
     pub fn predict_partial(&self, sentence: Sentence, range: Range<usize>) -> Sentence {
         let mut ys = vec![ScoreValue::default(); range.end - range.start];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
@@ -295,12 +317,30 @@ impl Predictor {
         sentence
     }
 
+    /// Predicts word boundaries of the specified range of a sentence. This function inserts
+    /// scores.
+    ///
+    /// # Arguments
+    ///
+    /// * `sentence` - A sentence.
+    /// * `range` - The range of the sentence.
+    ///
+    /// # Returns
+    ///
+    /// A sentence with predicted boundary information.
     pub fn predict_partial_with_score(&self, sentence: Sentence, range: Range<usize>) -> Sentence {
         let mut ys = vec![ScoreValue::default(); range.end - range.start];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
         let mut sentence = sentence;
-        let mut scores = sentence.boundary_scores.take().unwrap_or_else(|| vec![0.; sentence.boundaries.len()]);
-        for (y, (b, s)) in ys.into_iter().zip(sentence.boundaries[range.clone()].iter_mut().zip(scores[range].iter_mut())) {
+        let mut scores = sentence
+            .boundary_scores
+            .take()
+            .unwrap_or_else(|| vec![0.; sentence.boundaries.len()]);
+        for (y, (b, s)) in ys.into_iter().zip(
+            sentence.boundaries[range.clone()]
+                .iter_mut()
+                .zip(scores[range].iter_mut()),
+        ) {
             if y >= ScoreValue::default() {
                 *b = BoundaryType::WordBoundary;
             } else {
@@ -319,6 +359,15 @@ impl Predictor {
         sentence
     }
 
+    /// Predicts word boundaries.
+    ///
+    /// # Arguments
+    ///
+    /// * `sentence` - A sentence.
+    ///
+    /// # Returns
+    ///
+    /// A sentence with predicted boundary information.
     pub fn predict(&self, sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
         if boundaries_size == 0 {
@@ -328,6 +377,15 @@ impl Predictor {
         }
     }
 
+    /// Predicts word boundaries. This function inserts scores.
+    ///
+    /// # Arguments
+    ///
+    /// * `sentence` - A sentence.
+    ///
+    /// # Returns
+    ///
+    /// A sentence with predicted boundary information.
     pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
         if boundaries_size == 0 {
@@ -337,6 +395,15 @@ impl Predictor {
         }
     }
 
+    /// Sets the window size of words in the dictionary.
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - The window size.
+    ///
+    /// # Returns
+    ///
+    /// A predictor with the specified window size.
     pub fn dict_overwrap_size(mut self, size: usize) -> Self {
         if size >= 1 {
             self.dict_overwrap_size = size;
@@ -346,6 +413,17 @@ impl Predictor {
         self
     }
 
+    /// Creates a multithreading predictor. This function is the alias of
+    /// [`MultithreadPredictor::new()`].
+    ///
+    /// # Arguments
+    ///
+    /// * `n_threads` - The number of threads.
+    /// * `chunk_size` - The chunk size of each thread.
+    ///
+    /// # Returns
+    ///
+    /// A multithread predictor.
     #[cfg(feature = "multithreading")]
     pub fn multithreading(self, n_threads: usize, chunk_size: usize) -> MultithreadPredictor {
         MultithreadPredictor::new(self, n_threads, chunk_size)
@@ -362,6 +440,17 @@ pub struct MultithreadPredictor {
 
 #[cfg(feature = "multithreading")]
 impl MultithreadPredictor {
+    /// Creates a multithreading predictor.
+    ///
+    /// # Arguments
+    ///
+    /// * `predictor` - A normal predictor.
+    /// * `n_threads` - The number of threads.
+    /// * `chunk_size` - The chunk size of each thread.
+    ///
+    /// # Returns
+    ///
+    /// A multithread predictor.
     pub fn new(predictor: Predictor, n_threads: usize, chunk_size: usize) -> Self {
         let predictor = Arc::new(predictor);
 
@@ -393,6 +482,15 @@ impl MultithreadPredictor {
         }
     }
 
+    /// Predicts word boundaries.
+    ///
+    /// # Arguments
+    ///
+    /// * `sentence` - A sentence.
+    ///
+    /// # Returns
+    ///
+    /// A sentence with predicted boundary information.
     pub fn predict(&self, sentence: Sentence) -> Sentence {
         let sentence = Arc::new(sentence);
 

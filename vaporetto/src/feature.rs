@@ -4,32 +4,32 @@ use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Result};
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub enum FeatureContent<'a> {
+pub(crate) enum FeatureContent<'a> {
     CharacterNgram(&'a str),
     CharacterTypeNgram(&'a [u8]),
     DictionaryWord(usize),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct FeatureSpan<'a> {
+pub(crate) struct FeatureSpan<'a> {
     start: usize,
     end: usize,
     feature: FeatureContent<'a>,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct Feature<'a> {
+pub(crate) struct Feature<'a> {
     pub(crate) rel_position: usize,
     pub(crate) feature: FeatureContent<'a>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Example<'a> {
+pub(crate) struct Example<'a> {
     pub features: Vec<Feature<'a>>,
     pub label: BoundaryType,
 }
 
-pub struct FeatureExtractor {
+pub(crate) struct FeatureExtractor {
     char_ngram_size: usize,
     type_ngram_size: usize,
     dict_ac: AhoCorasick,
@@ -107,7 +107,7 @@ impl FeatureExtractor {
     }
 }
 
-pub struct ExampleGenerator {
+pub(crate) struct ExampleGenerator {
     char_window_size: usize,
     type_window_size: usize,
 }

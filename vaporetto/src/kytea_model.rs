@@ -341,6 +341,7 @@ impl Readable for ProbTagEntry {
     }
 }
 
+/// Model data created by KyTea.
 pub struct KyteaModel {
     config: KyteaConfig,
     wordseg_model: Option<LinearModel>,
@@ -351,6 +352,19 @@ pub struct KyteaModel {
 }
 
 impl KyteaModel {
+    /// Creates a model from a reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `rdr` - A data source.
+    ///
+    /// # Returns
+    ///
+    /// A model data read from `rdr`.
+    ///
+    /// # Errors
+    ///
+    /// When `rdr` generates an error, it will be returned as is.
     pub fn read<R: BufRead>(rdr: &mut R) -> Result<Self> {
         let config = KyteaConfig::read(rdr)?;
 

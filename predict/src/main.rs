@@ -10,10 +10,7 @@ use structopt::StructOpt;
 use vaporetto::{Model, Predictor, Sentence};
 
 #[derive(StructOpt, Debug)]
-#[structopt(
-    name = "predict",
-    about = "A program to perform word segmentation."
-)]
+#[structopt(name = "predict", about = "A program to perform word segmentation.")]
 struct Opt {
     /// The model file to use when analyzing text
     #[structopt(long)]

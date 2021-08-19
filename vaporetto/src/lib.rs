@@ -1,3 +1,7 @@
+//! # Vaporetto
+//!
+//! Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
+
 #[macro_use]
 mod utils;
 
@@ -14,8 +18,8 @@ mod trainer;
 mod kytea_model;
 
 pub use model::Model;
-pub use predictor::Predictor;
-pub use sentence::{BoundaryType, Sentence};
+pub use predictor::{MultithreadPredictor, Predictor};
+pub use sentence::{BoundaryType, CharacterType, Sentence};
 
 #[cfg(feature = "train")]
 pub use trainer::{Dataset, Trainer};

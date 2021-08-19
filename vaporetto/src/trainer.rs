@@ -8,6 +8,7 @@ use crate::model::Model;
 use crate::sentence::Sentence;
 use crate::utils::FeatureIDManager;
 
+/// Dataset manager.
 pub struct Dataset<'a> {
     dictionary_fst: Fst<Vec<u8>>,
     feature_extractor: FeatureExtractor,
@@ -21,6 +22,24 @@ pub struct Dataset<'a> {
 }
 
 impl<'a> Dataset<'a> {
+    /// Creates a new dataset manager.
+    ///
+    /// # Arguments
+    ///
+    /// * `char_ngram_size` - The character n-gram length.
+    /// * `char_window_size` - The character window size.
+    /// * `type_ngram_size` - The character type n-gram length.
+    /// * `type_window_size` - The character type window size.
+    /// * `dictionary` - A word dictionary.
+    /// * `dict_word_max_size` - Dictionary words greater than this value will be grouped together.
+    ///
+    /// # Returns
+    ///
+    /// A dataset manager.
+    ///
+    /// # Errors
+    ///
+    /// If invalid parameters are given, an error variant will be returned.
     pub fn new<D, P>(
         char_ngram_size: usize,
         char_window_size: usize,
@@ -56,6 +75,11 @@ impl<'a> Dataset<'a> {
         })
     }
 
+    /// Adds a sentence to the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - A sentence.
     pub fn push_sentence(&mut self, s: &'a Sentence) {
         let feature_spans = self.feature_extractor.extract(s);
         let examples = self.example_generator.generate(s, feature_spans, false);
@@ -74,11 +98,17 @@ impl<'a> Dataset<'a> {
         }
     }
 
+    /// Gets the number of features.
+    ///
+    /// # Returns
+    ///
+    /// The number of features.
     pub fn n_features(&self) -> usize {
         self.fid_manager.map.len()
     }
 }
 
+/// Trainer.
 pub struct Trainer {
     epsilon: f64,
     cost: f64,
@@ -86,6 +116,17 @@ pub struct Trainer {
 }
 
 impl Trainer {
+    /// Creates a new trainer.
+    ///
+    /// # Arguments
+    ///
+    /// * `epsilon` - The tolerance of the termination criterion.
+    /// * `cost` - The parameter C.
+    /// * `bias` - The bias term.
+    ///
+    /// # Returns
+    ///
+    /// A new trainer.
     pub fn new(epsilon: f64, cost: f64, bias: f64) -> Self {
         Self {
             epsilon,
@@ -94,6 +135,15 @@ impl Trainer {
         }
     }
 
+    /// Trains a given dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset` - A dataset.
+    ///
+    /// # Returns
+    ///
+    /// A trained model.
     pub fn train(&self, dataset: Dataset) -> Result<Model> {
         let mut builder = liblinear::Builder::new();
         let training_input =
