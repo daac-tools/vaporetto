@@ -1,8 +1,13 @@
 import init from '../pkg/vaporetto_wasm.js';
 import * as wasm from '../pkg/vaporetto_wasm.js';
 
+const loading = document.getElementById("loading");
+loading.style.display = "block";
+
 function run() {
-    let predictor = wasm.Vaporetto.new();
+    const predictor = wasm.Vaporetto.new();
+
+    loading.style.display = "none";
 
     function createTextSpan(text) {
         const span = document.createElement("span");
