@@ -94,7 +94,7 @@ impl Predictor {
         }
     }
 
-    fn merge_weights(fst: &Fst<Vec<u8>>, weights: &Vec<Vec<i16>>) -> Vec<Vec<i32>> {
+    fn merge_weights(fst: &Fst<Vec<u8>>, weights: &[Vec<i16>]) -> Vec<Vec<i32>> {
         let mut result = vec![];
         for i in 0..fst.len() as u64 {
             let seq = fst.get_key(i).unwrap();

@@ -504,7 +504,7 @@ impl Sentence {
     ///
     /// If the predictor inserted, the boundary score information is returned. Otherwise, None.
     pub fn boundary_scores(&self) -> Option<&[f64]> {
-        self.boundary_scores.as_ref().map(|v| v.as_slice())
+        self.boundary_scores.as_deref()
     }
 
     #[cfg(feature = "train")]
