@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::thread;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use fst::raw::Fst;
 
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
@@ -60,53 +61,8 @@ impl Predictor {
         }
 
         let bias = model.bias;
-
-        let mut word_weights = vec![];
-        for word in &words {
-            let mut weights: Option<Vec<_>> = None;
-            for st in (0..word.len()).rev() {
-                if let Some(idx) = model.word_fst.get(&word[st..]) {
-                    let idx = idx.value() as usize;
-                    if let Some(weights) = weights.as_mut() {
-                        for (i, &w) in model.word_weights[idx].iter().enumerate() {
-                            weights[i] += w as ScoreValue;
-                        }
-                    } else {
-                        weights.replace(
-                            model.word_weights[idx]
-                                .iter()
-                                .map(|&w| w as ScoreValue)
-                                .collect(),
-                        );
-                    }
-                }
-            }
-            word_weights.push(weights.unwrap());
-        }
-
-        let mut type_weights = vec![];
-        for type_seq in &types {
-            let mut weights: Option<Vec<_>> = None;
-            for st in (0..type_seq.len()).rev() {
-                if let Some(idx) = model.type_fst.get(&type_seq[st..]) {
-                    let idx = idx.value() as usize;
-                    if let Some(weights) = weights.as_mut() {
-                        for (i, &w) in model.type_weights[idx].iter().enumerate() {
-                            weights[i] += w as ScoreValue;
-                        }
-                    } else {
-                        weights.replace(
-                            model.type_weights[idx]
-                                .iter()
-                                .map(|&w| w as ScoreValue)
-                                .collect(),
-                        );
-                    }
-                }
-            }
-            type_weights.push(weights.unwrap());
-        }
-
+        let word_weights = Self::merge_weights(&model.word_fst, &model.word_weights);
+        let type_weights = Self::merge_weights(&model.type_fst, &model.type_weights);
         let dict_weights = model.dict_weights;
 
         #[cfg(feature = "model-quantize")]
@@ -136,6 +92,33 @@ impl Predictor {
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
         }
+    }
+
+    fn merge_weights(fst: &Fst<Vec<u8>>, weights: &Vec<Vec<i16>>) -> Vec<Vec<i32>> {
+        let mut result = vec![];
+        for i in 0..fst.len() as u64 {
+            let seq = fst.get_key(i).unwrap();
+            let mut new_weights: Option<Vec<_>> = None;
+            for st in (0..seq.len()).rev() {
+                if let Some(idx) = fst.get(&seq[st..]) {
+                    let idx = idx.value() as usize;
+                    if let Some(new_weights) = new_weights.as_mut() {
+                        for (i, &w) in weights[idx].iter().enumerate() {
+                            new_weights[i] += w as ScoreValue;
+                        }
+                    } else {
+                        new_weights.replace(
+                            weights[idx]
+                                .iter()
+                                .map(|&w| w as ScoreValue)
+                                .collect(),
+                        );
+                    }
+                }
+            }
+            result.push(new_weights.unwrap());
+        }
+        result
     }
 
     unsafe fn add_word_ngram_scores(
