@@ -50,6 +50,7 @@
 #[macro_use]
 mod utils;
 
+mod da_ahocorasick;
 mod model;
 mod predictor;
 mod sentence;

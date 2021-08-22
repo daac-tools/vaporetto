@@ -1,6 +1,6 @@
+use crate::da_ahocorasick::DoubleArrayAhoCorasick;
 use crate::sentence::{BoundaryType, Sentence};
 
-use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Result};
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub(crate) struct Example<'a> {
 pub(crate) struct FeatureExtractor {
     char_ngram_size: usize,
     type_ngram_size: usize,
-    dict_ac: AhoCorasick,
+    dict_ac: DoubleArrayAhoCorasick,
     dict_word_size: Vec<usize>,
 }
 
@@ -61,7 +61,7 @@ impl FeatureExtractor {
         Ok(Self {
             char_ngram_size,
             type_ngram_size,
-            dict_ac: AhoCorasick::new(dictionary.as_ref()),
+            dict_ac: DoubleArrayAhoCorasick::new(dictionary.as_ref()),
             dict_word_size,
         })
     }
@@ -93,7 +93,7 @@ impl FeatureExtractor {
                 });
             }
         }
-        for m in self.dict_ac.find_overlapping_iter(&sentence.text) {
+        for m in self.dict_ac.find_iter(&sentence.text) {
             let start = sentence.str_to_char_pos[m.start()];
             let end = sentence.str_to_char_pos[m.end()];
             let feature = FeatureContent::DictionaryWord(self.dict_word_size[m.pattern()]);

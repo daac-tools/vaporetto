@@ -7,20 +7,20 @@ use std::sync::Arc;
 #[cfg(feature = "multithreading")]
 use std::thread;
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use fst::raw::Fst;
 
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
+use crate::da_ahocorasick::{DoubleArrayAhoCorasick, DoubleArrayAhoCorasickBuilder};
 use crate::model::{Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 
 /// Predictor.
 pub struct Predictor {
-    word_pma: AhoCorasick,
-    type_pma: AhoCorasick,
-    dict_pma: AhoCorasick,
+    word_pma: DoubleArrayAhoCorasick,
+    type_pma: DoubleArrayAhoCorasick,
+    dict_pma: DoubleArrayAhoCorasick,
     word_weights: Vec<Vec<ScoreValue>>,
     type_weights: Vec<Vec<ScoreValue>>,
     dict_weights: Vec<[ScoreValue; 3]>,
@@ -40,13 +40,11 @@ impl Predictor {
     /// # Arguments
     ///
     /// * `model` - A model data.
-    /// * `use_dfa` - If True, the predictor compiles the standard Aho-Corasick automaton into a
-    ///   deterministic finite automaton (DFA).
     ///
     /// # Returns
     ///
     /// A new predictor.
-    pub fn new(model: Model, use_dfa: bool) -> Self {
+    pub fn new(model: Model) -> Self {
         let mut words = Vec::with_capacity(model.word_fst.len());
         for i in 0..model.word_fst.len() as u64 {
             words.push(model.word_fst.get_key(i).unwrap())
@@ -73,9 +71,13 @@ impl Predictor {
             .map(|ws| [ws[0] as i32, ws[1] as i32, ws[2] as i32])
             .collect();
 
-        let word_pma = AhoCorasickBuilder::new().dfa(use_dfa).build(words);
-        let type_pma = AhoCorasickBuilder::new().dfa(use_dfa).build(types);
-        let dict_pma = AhoCorasickBuilder::new().dfa(use_dfa).build(dict);
+        let word_pma = DoubleArrayAhoCorasickBuilder::new(65536, 65536)
+            .match_shorter_suffix(false)
+            .build(words);
+        let type_pma = DoubleArrayAhoCorasickBuilder::new(65536, 65536)
+            .match_shorter_suffix(false)
+            .build(types);
+        let dict_pma = DoubleArrayAhoCorasick::new(dict);
         Self {
             word_pma,
             type_pma,
@@ -107,12 +109,8 @@ impl Predictor {
                             new_weights[i] += w as ScoreValue;
                         }
                     } else {
-                        new_weights.replace(
-                            weights[idx]
-                                .iter()
-                                .map(|&w| w as ScoreValue)
-                                .collect(),
-                        );
+                        new_weights
+                            .replace(weights[idx].iter().map(|&w| w as ScoreValue).collect());
                     }
                 }
             }
@@ -142,13 +140,7 @@ impl Predictor {
 
         let padding = start - char_start + 1;
 
-        let mut prev_end = 0;
-        for m in self.word_pma.find_overlapping_iter(&text) {
-            if m.end() == prev_end {
-                continue;
-            }
-            prev_end = m.end();
-
+        for m in self.word_pma.find_iter(&text) {
             let m_end = *sentence.str_to_char_pos.get_unchecked(m.end() + text_start) - char_start;
             let offset = m_end as isize - self.char_window_size as isize - padding as isize;
             if offset >= 0 {
@@ -188,13 +180,7 @@ impl Predictor {
 
         let padding = start - type_start + 1;
 
-        let mut prev_end = 0;
-        for m in self.type_pma.find_overlapping_iter(&char_type) {
-            if m.end() == prev_end {
-                continue;
-            }
-            prev_end = m.end();
-
+        for m in self.type_pma.find_iter(&char_type) {
             let offset = m.end() as isize - self.type_window_size as isize - padding as isize;
             if offset >= 0 {
                 let weights = self.type_weights.get_unchecked(m.pattern());
@@ -230,7 +216,7 @@ impl Predictor {
 
         let padding = start - char_start + 1;
 
-        for m in self.dict_pma.find_overlapping_iter(&text) {
+        for m in self.dict_pma.find_iter(&text) {
             let m_start = *sentence
                 .str_to_char_pos
                 .get_unchecked(m.start() + text_start)
@@ -287,7 +273,7 @@ impl Predictor {
     ///
     /// A sentence with predicted boundary information.
     pub fn predict_partial(&self, sentence: Sentence, range: Range<usize>) -> Sentence {
-        let mut ys = vec![ScoreValue::default(); range.end - range.start];
+        let mut ys = vec![ScoreValue::default(); range.len()];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
         let mut sentence = sentence;
         for (y, b) in ys.into_iter().zip(sentence.boundaries[range].iter_mut()) {
@@ -312,7 +298,7 @@ impl Predictor {
     ///
     /// A sentence with predicted boundary information.
     pub fn predict_partial_with_score(&self, sentence: Sentence, range: Range<usize>) -> Sentence {
-        let mut ys = vec![ScoreValue::default(); range.end - range.start];
+        let mut ys = vec![ScoreValue::default(); range.len()];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
         let mut sentence = sentence;
         let mut scores = sentence

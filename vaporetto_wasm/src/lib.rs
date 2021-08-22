@@ -15,7 +15,7 @@ impl Vaporetto {
     pub fn new() -> Self {
         let mut f = Cursor::new(include_bytes!("../../model/kftt.model"));
         let model = Model::read(&mut f).unwrap();
-        let predictor = Predictor::new(model, false);
+        let predictor = Predictor::new(model);
         Self { predictor }
     }
 

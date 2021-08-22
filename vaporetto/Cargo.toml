@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-aho-corasick = "0.7"
 anyhow = "1.0"
 byteorder = "1.4"
 fst = "0.4"

@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Loading model file...");
     let mut f = BufReader::new(File::open(opt.model).unwrap());
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model, true).dict_overwrap_size(opt.chunk_dict_window);
+    let predictor = Predictor::new(model).dict_overwrap_size(opt.chunk_dict_window);
 
     eprintln!("Start tokenization");
     let mut n_boundaries = 0;
