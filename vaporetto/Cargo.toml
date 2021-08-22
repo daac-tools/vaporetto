@@ -2,11 +2,21 @@
 name = "vaporetto"
 version = "0.1.0"
 edition = "2018"
+authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
+description = "Vaporetto: a pointwise prediction based tokenizer"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/legalforce-research/vaporetto"
+repository = "https://github.com/legalforce-research/vaporetto"
+readme = "README.md"
+keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
+categories = ["text-processing"]
+autotests = false
 
 [dependencies]
 anyhow = "1.0"
 byteorder = "1.4"
 fst = "0.4"
+
 crossbeam-channel = { version = "0.5", optional = true }
 liblinear = { version = "1", optional = true }
 
