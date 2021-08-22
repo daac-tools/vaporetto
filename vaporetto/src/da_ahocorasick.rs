@@ -233,15 +233,9 @@ impl DoubleArrayAhoCorasickBuilder {
             if node.is_empty() {
                 continue;
             }
-            let mut min_c = std::u8::MAX;
-            for &c in node.keys() {
-                if c < min_c {
-                    min_c = c;
-                }
-            }
+            let min_c = *node.keys().next().unwrap();
             let mut base = min_idx - min_c as isize;
-            loop {
-                let mut is_available = true;
+            'outer: loop {
                 for (i, &c) in node.keys().enumerate() {
                     let idx = (base + c as isize) as usize;
                     if idx + 1 > act_size {
@@ -249,22 +243,20 @@ impl DoubleArrayAhoCorasickBuilder {
                     }
                     self.extend_arrays(idx + 1);
                     if self.check[idx] != std::usize::MAX {
-                        is_available = false;
                         if i == 0 {
                             min_idx += 1;
                         }
-                        break;
+                        base += 1;
+                        continue 'outer;
                     }
                 }
-                if is_available {
-                    for (&c, &child_id) in node {
-                        self.check[(base + c as isize) as usize] = node_id_map[i];
-                        self.pattern_ids[(base + c as isize) as usize] = tmp_pattern_ids[child_id];
-                        node_id_map[child_id] = (base + c as isize) as usize;
-                    }
-                    break;
-                }
-                base += 1;
+                break;
+            }
+            for (&c, &child_id) in node {
+                let idx = (base + c as isize) as usize;
+                self.check[idx] = node_id_map[i];
+                self.pattern_ids[idx] = tmp_pattern_ids[child_id];
+                node_id_map[child_id] = idx;
             }
             self.base[node_id_map[i]] = base;
         }
@@ -299,7 +291,6 @@ impl DoubleArrayAhoCorasickBuilder {
                                 cs_pattern_ids[child_pattern_id].append(&mut fail_ids);
                             }
                         }
-
                         break;
                     } else {
                         let next_fail_idx = self.fail[fail_idx];

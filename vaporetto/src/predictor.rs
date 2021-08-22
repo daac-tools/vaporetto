@@ -119,54 +119,37 @@ impl Predictor {
         result
     }
 
-    unsafe fn add_word_ngram_scores(
-        &self,
-        sentence: &Sentence,
-        start: usize,
-        ys: &mut [ScoreValue],
-    ) {
+    fn add_word_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
         let char_start = if start >= self.char_window_size {
             start + 1 - self.char_window_size
         } else {
             0
         };
-        let text_start = *sentence.char_to_str_pos.get_unchecked(char_start);
+        let text_start = sentence.char_to_str_pos[char_start];
         let char_end = std::cmp::min(
             start + ys.len() + self.char_window_size,
             sentence.char_to_str_pos.len() - 1,
         );
-        let text_end = *sentence.char_to_str_pos.get_unchecked(char_end);
-        let text = &sentence.text.get_unchecked(text_start..text_end);
-
+        let text_end = sentence.char_to_str_pos[char_end];
+        let text = &sentence.text[text_start..text_end];
         let padding = start - char_start + 1;
-
         for m in self.word_pma.find_iter(&text) {
-            let m_end = *sentence.str_to_char_pos.get_unchecked(m.end() + text_start) - char_start;
+            let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
             let offset = m_end as isize - self.char_window_size as isize - padding as isize;
+            let weights = &self.word_weights[m.pattern()];
             if offset >= 0 {
-                let weights = self.word_weights.get_unchecked(m.pattern());
-                let ys = ys.get_unchecked_mut(offset as usize..);
-                for (w, y) in weights.iter().zip(ys.iter_mut()) {
+                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
                     *y += w;
                 }
             } else {
-                let weights = self
-                    .word_weights
-                    .get_unchecked(m.pattern())
-                    .get_unchecked(-offset as usize..);
-                for (w, y) in weights.iter().zip(ys.iter_mut()) {
+                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
                     *y += w;
                 }
             }
         }
     }
 
-    unsafe fn add_type_ngram_scores(
-        &self,
-        sentence: &Sentence,
-        start: usize,
-        ys: &mut [ScoreValue],
-    ) {
+    fn add_type_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
         let type_start = if start >= self.type_window_size {
             start + 1 - self.type_window_size
         } else {
@@ -176,71 +159,58 @@ impl Predictor {
             start + ys.len() + self.type_window_size,
             sentence.char_type.len(),
         );
-        let char_type = sentence.char_type.get_unchecked(type_start..type_end);
-
+        let char_type = &sentence.char_type[type_start..type_end];
         let padding = start - type_start + 1;
-
         for m in self.type_pma.find_iter(&char_type) {
             let offset = m.end() as isize - self.type_window_size as isize - padding as isize;
+            let weights = &self.type_weights[m.pattern()];
             if offset >= 0 {
-                let weights = self.type_weights.get_unchecked(m.pattern());
-                let ys = ys.get_unchecked_mut(offset as usize..);
-                for (w, y) in weights.iter().zip(ys.iter_mut()) {
+                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
                     *y += w;
                 }
             } else {
-                let weights = self
-                    .type_weights
-                    .get_unchecked(m.pattern())
-                    .get_unchecked(-offset as usize..);
-                for (w, y) in weights.iter().zip(ys.iter_mut()) {
+                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
                     *y += w;
                 }
             }
         }
     }
 
-    unsafe fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
+    fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
         let char_start = if start >= self.dict_overwrap_size {
             start + 1 - self.dict_overwrap_size
         } else {
             0
         };
-        let text_start = *sentence.char_to_str_pos.get_unchecked(char_start);
+        let text_start = sentence.char_to_str_pos[char_start];
         let char_end = std::cmp::min(
             start + ys.len() + self.dict_overwrap_size,
             sentence.char_to_str_pos.len() - 1,
         );
-        let text_end = *sentence.char_to_str_pos.get_unchecked(char_end);
-        let text = &sentence.text.get_unchecked(text_start..text_end);
-
+        let text_end = sentence.char_to_str_pos[char_end];
+        let text = &sentence.text[text_start..text_end];
         let padding = start - char_start + 1;
-
         for m in self.dict_pma.find_iter(&text) {
-            let m_start = *sentence
-                .str_to_char_pos
-                .get_unchecked(m.start() + text_start)
-                - char_start;
-            let m_end = *sentence.str_to_char_pos.get_unchecked(m.end() + text_start) - char_start;
-
+            let m_start = sentence.str_to_char_pos[m.start() + text_start] - char_start;
+            let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
             let idx = if self.dict_word_wise {
                 m.pattern()
             } else {
                 std::cmp::min(m_end - m_start - 1, self.dict_weights.len())
             };
-            let weights = self.dict_weights.get_unchecked(idx);
+            let weights = self.dict_weights[idx];
             if m_start >= padding && m_start < padding + ys.len() {
-                *ys.get_unchecked_mut(m_start - padding) += weights.get_unchecked(0);
+                ys[m_start - padding] += weights[0];
             }
             let range_start = std::cmp::max(0, m_start as isize - padding as isize + 1);
             let range_end = std::cmp::min(m_end as isize - padding as isize, ys.len() as isize);
             if range_start < range_end {
-                for y in ys.get_unchecked_mut(range_start as usize..range_end as usize) {
-                    *y += weights.get_unchecked(1);
+                for y in &mut ys[range_start as usize..range_end as usize] {
+                    *y += weights[1];
                 }
             }
             if m_end >= padding && m_end < ys.len() + padding {
-                *ys.get_unchecked_mut(m_end - padding) += weights.get_unchecked(2);
+                ys[m_end - padding] += weights[2];
             }
         }
     }
@@ -255,11 +225,9 @@ impl Predictor {
             panic!("invalid range: {:?}", range);
         }
         ys.fill(self.bias);
-        unsafe {
-            self.add_word_ngram_scores(sentence, range.start, ys);
-            self.add_type_ngram_scores(sentence, range.start, ys);
-            self.add_dict_scores(sentence, range.start, ys);
-        }
+        self.add_word_ngram_scores(sentence, range.start, ys);
+        self.add_type_ngram_scores(sentence, range.start, ys);
+        self.add_dict_scores(sentence, range.start, ys);
     }
 
     /// Predicts word boundaries of the specified range of a sentence.
