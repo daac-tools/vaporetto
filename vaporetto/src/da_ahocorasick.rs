@@ -1,7 +1,53 @@
 //! Aho-Corasick algorithm using Double-Array Trie.
 
-use std::collections::BTreeMap;
 use std::collections::VecDeque;
+
+struct SparseTrie {
+    nodes: Vec<Vec<(u8, usize)>>,
+    pattern_id: Vec<usize>,
+    len: usize,
+}
+
+impl SparseTrie {
+    fn new() -> Self {
+        Self {
+            nodes: vec![vec![]],
+            pattern_id: vec![std::usize::MAX],
+            len: 0,
+        }
+    }
+
+    fn add(&mut self, pattern: &[u8]) -> usize {
+        let mut node_id = 0;
+        let prev_n_nodes = self.nodes.len();
+        for &c in pattern {
+            node_id = if let Some(next_node_id) = self.get(node_id, c) {
+                next_node_id
+            } else {
+                let next_node_id = self.nodes.len();
+                self.nodes.push(vec![]);
+                self.nodes[node_id].push((c, next_node_id));
+                self.pattern_id.push(std::usize::MAX);
+                next_node_id
+            };
+        }
+        if prev_n_nodes == self.nodes.len() {
+            panic!("failed to add");
+        }
+        self.pattern_id[node_id] = self.len;
+        self.len += 1;
+        node_id
+    }
+
+    fn get(&self, node_id: usize, c: u8) -> Option<usize> {
+        for trans in &self.nodes[node_id] {
+            if c == trans.0 {
+                return Some(trans.1);
+            }
+        }
+        None
+    }
+}
 
 pub struct Match {
     start: usize,
@@ -170,9 +216,9 @@ impl DoubleArrayAhoCorasickBuilder {
         D: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
     {
-        let (tree, tmp_pattern_ids) = self.build_tree(dict);
-        self.construct_double_array(&tree, &tmp_pattern_ids);
-        self.add_fails(&tree);
+        let sparse_trie = self.build_sparse_tree(dict);
+        self.build_double_array(&sparse_trie);
+        self.add_fails(&sparse_trie);
 
         let DoubleArrayAhoCorasickBuilder {
             base,
@@ -193,57 +239,44 @@ impl DoubleArrayAhoCorasickBuilder {
         }
     }
 
-    fn build_tree<D, P>(&mut self, dict: D) -> (Vec<BTreeMap<u8, usize>>, Vec<usize>)
+    fn build_sparse_tree<D, P>(&mut self, dict: D) -> SparseTrie
     where
         D: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
     {
-        let mut tree = vec![BTreeMap::new()];
-        let mut pattern_ids = vec![std::usize::MAX];
-        for (i, word) in dict.into_iter().enumerate() {
-            let mut node_id = 0;
+        let mut trie = SparseTrie::new();
+        for word in dict.into_iter() {
             let word = word.as_ref();
-            for c in word {
-                node_id = if let Some(&node_id) = tree[node_id].get(c) {
-                    node_id
-                } else {
-                    let new_node_id = tree.len();
-                    tree[node_id].insert(*c, new_node_id);
-                    tree.push(BTreeMap::new());
-                    pattern_ids.push(std::usize::MAX);
-                    new_node_id
-                };
-            }
-            pattern_ids[node_id] = i;
+            trie.add(word);
             if let Some(cs_pattern_ids) = self.common_suffix_pattern_ids.as_mut() {
                 cs_pattern_ids.push(vec![]);
             };
             self.pattern_len.push(word.len());
         }
-        (tree, pattern_ids)
+        trie
     }
 
-    fn construct_double_array(&mut self, tree: &[BTreeMap<u8, usize>], tmp_pattern_ids: &[usize]) {
-        let mut node_id_map = vec![std::usize::MAX; tree.len()];
+    fn build_double_array(&mut self, sparse_trie: &SparseTrie) {
+        let mut node_id_map = vec![std::usize::MAX; sparse_trie.nodes.len()];
         let mut min_idx = 1;
         let mut act_size = 1;
         node_id_map[0] = 0;
         self.check[0] = 0;
-        for (i, node) in tree.iter().enumerate() {
+        for (i, node) in sparse_trie.nodes.iter().enumerate() {
             if node.is_empty() {
                 continue;
             }
-            let min_c = *node.keys().next().unwrap();
+            let min_c = node[0].0;
             let mut base = min_idx - min_c as isize;
             'outer: loop {
-                for (i, &c) in node.keys().enumerate() {
+                for &(c, _) in node {
                     let idx = (base + c as isize) as usize;
                     if idx + 1 > act_size {
                         act_size = idx + 1;
                     }
                     self.extend_arrays(idx + 1);
                     if self.check[idx] != std::usize::MAX {
-                        if i == 0 {
+                        if c == min_c {
                             min_idx += 1;
                         }
                         base += 1;
@@ -252,10 +285,10 @@ impl DoubleArrayAhoCorasickBuilder {
                 }
                 break;
             }
-            for (&c, &child_id) in node {
+            for &(c, child_id) in node {
                 let idx = (base + c as isize) as usize;
                 self.check[idx] = node_id_map[i];
-                self.pattern_ids[idx] = tmp_pattern_ids[child_id];
+                self.pattern_ids[idx] = sparse_trie.pattern_id[child_id];
                 node_id_map[child_id] = idx;
             }
             self.base[node_id_map[i]] = base;
@@ -263,16 +296,16 @@ impl DoubleArrayAhoCorasickBuilder {
         self.truncate_arrays(act_size);
     }
 
-    fn add_fails(&mut self, tree: &[BTreeMap<u8, usize>]) {
+    fn add_fails(&mut self, sparse_trie: &SparseTrie) {
         let mut queue = VecDeque::new();
         self.fail[0] = 0;
-        for (&c, &orig_child_idx) in &tree[0] {
+        for &(c, orig_child_idx) in &sparse_trie.nodes[0] {
             let child_idx = self.get_child_index(0, c).unwrap();
             self.fail[child_idx] = 0;
             queue.push_back((child_idx, orig_child_idx));
         }
         while let Some((node_idx, orig_node_idx)) = queue.pop_front() {
-            for (&c, &orig_child_idx) in &tree[orig_node_idx] {
+            for &(c, orig_child_idx) in &sparse_trie.nodes[orig_node_idx] {
                 let child_idx = self.get_child_index(node_idx, c).unwrap();
                 let mut fail_idx = self.fail[node_idx];
                 loop {
