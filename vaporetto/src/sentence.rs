@@ -480,6 +480,15 @@ impl Sentence {
         &self.boundaries
     }
 
+    /// Gets a mutable reference to the boundary information.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the boundary information.
+    pub fn boundaries_mut(&mut self) -> &mut [BoundaryType] {
+        &mut self.boundaries
+    }
+
     /// Gets a reference to the character type information.
     ///
     /// # Returns

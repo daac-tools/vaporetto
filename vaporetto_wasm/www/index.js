@@ -38,8 +38,8 @@ function run() {
             }
             for (let i = 0; i < next_boundary_end - next_boundary_start; ++i) {
                 const elem = createTextSpan(text[next_boundary_start + i + 1]);
-                if (boundaries[i] >= 0) {
-                    elem.style.borderLeft = '5pt solid rgba(0, 0, 0, ' + Math.atan(boundaries[i] / 2) + ')';
+                if (boundaries[i][0]) {
+                    elem.style.borderLeft = '5pt solid rgba(0, 0, 0, ' + Math.atan(boundaries[i][1] / 2) + ')';
                 }
                 node_end.before(elem);
             }
