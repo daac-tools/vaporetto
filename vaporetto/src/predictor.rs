@@ -198,19 +198,19 @@ impl Predictor {
             } else {
                 std::cmp::min(m_end - m_start - 1, self.dict_weights.len())
             };
-            let weights = self.dict_weights[idx];
+            let [w_right, w_center, w_left] = self.dict_weights[idx];
             if m_start >= padding && m_start < padding + ys.len() {
-                ys[m_start - padding] += weights[0];
+                ys[m_start - padding] += w_right;
             }
             let range_start = std::cmp::max(0, m_start as isize - padding as isize + 1);
             let range_end = std::cmp::min(m_end as isize - padding as isize, ys.len() as isize);
             if range_start < range_end {
                 for y in &mut ys[range_start as usize..range_end as usize] {
-                    *y += weights[1];
+                    *y += w_center;
                 }
             }
             if m_end >= padding && m_end < ys.len() + padding {
-                ys[m_end - padding] += weights[2];
+                ys[m_end - padding] += w_left;
             }
         }
     }
