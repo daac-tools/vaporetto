@@ -1,5 +1,6 @@
 use std::io::Cursor;
 
+use include_flate::flate;
 use js_sys::{Array, Object};
 use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
 use wasm_bindgen::{prelude::*, JsValue};
@@ -9,11 +10,13 @@ pub struct Vaporetto {
     predictor: Predictor,
 }
 
+flate!(pub static MODEL_DATA: [u8] from "../model/kftt.model");
+
 #[wasm_bindgen]
 impl Vaporetto {
     #[wasm_bindgen]
     pub fn new() -> Self {
-        let mut f = Cursor::new(include_bytes!("../../model/kftt.model"));
+        let mut f = Cursor::new(&MODEL_DATA as &[u8]);
         let model = Model::read(&mut f).unwrap();
         let predictor = Predictor::new(model);
         Self { predictor }
