@@ -105,8 +105,8 @@ impl Predictor {
                 if let Some(idx) = fst.get(&seq[st..]) {
                     let idx = idx.value() as usize;
                     if let Some(new_weights) = new_weights.as_mut() {
-                        for (i, &w) in weights[idx].iter().enumerate() {
-                            new_weights[i] += w as ScoreValue;
+                        for (w_new, w) in new_weights.iter_mut().zip(&weights[idx]) {
+                            *w_new += *w as ScoreValue;
                         }
                     } else {
                         new_weights
