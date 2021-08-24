@@ -10,4 +10,5 @@ crate-type = ["cdylib", "rlib"]
 js-sys = "0.3.52"
 unicode-segmentation = "1.8.0"
 vaporetto = { path = "../vaporetto" }
+vaporetto_rules = { path = "../vaporetto_rules" }
 wasm-bindgen = "0.2.75"

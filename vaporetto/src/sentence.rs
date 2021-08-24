@@ -516,6 +516,26 @@ impl Sentence {
         self.boundary_scores.as_deref()
     }
 
+    /// Gets a character position in the code point unit.
+    ///
+    /// # Returns
+    ///
+    /// A position in the code point unit.
+    ///
+    /// # Errors
+    ///
+    /// `index` must be a valid position.
+    pub fn get_char_pos(&self, index: usize) -> Result<usize> {
+        if index == 0 {
+            Ok(0)
+        } else {
+            match self.str_to_char_pos.get(index) {
+                Some(index) if *index != 0 => Ok(*index),
+                _ => Err(anyhow!("invalid index")),
+            }
+        }
+    }
+
     #[cfg(feature = "train")]
     pub(crate) fn char_substring(&self, start: usize, end: usize) -> &str {
         let begin = self.char_to_str_pos[start];

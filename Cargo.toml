@@ -2,11 +2,9 @@
 
 members = [
     "vaporetto",
+    "vaporetto_rules",
     "predict",
     "train",
     "convert_kytea_model",
     "vaporetto_wasm",
 ]
-
-[profile.release.package.vaporetto_wasm]
-opt-level = "s"

@@ -71,7 +71,7 @@ impl LazyIndexSort {
 #[cfg(test)]
 macro_rules! ct2u8 {
     ( $( $v:path ),* ) => {
-        ct2u8!( $( $v, )* );
+        ct2u8!( $( $v, )* )
     };
     ( $( $v:path, )* ) => {
         [
@@ -85,7 +85,7 @@ macro_rules! ct2u8 {
 #[cfg(test)]
 macro_rules! ct2u8vec {
     ( $( $v:path ),* ) => {
-        ct2u8vec!( $( $v, )* );
+        ct2u8vec!( $( $v, )* )
     };
     ( $( $v:path, )* ) => {
         vec![
