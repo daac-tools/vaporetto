@@ -404,7 +404,7 @@ impl MultithreadPredictor {
                     predictor.predict_partial_impl(
                         &sentence,
                         range.clone(),
-                        &mut ys[..range.end - range.start],
+                        &mut ys[..range.len()],
                     );
                     std::mem::drop(sentence);
                     result_tx.send((ys, range)).unwrap();

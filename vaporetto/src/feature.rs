@@ -437,7 +437,7 @@ mod tests {
                 Feature { rel_position: 1, feature: CharacterTypeNgram(&ct2u8![Kanji, Kanji]) },
                 Feature { rel_position: 0, feature: CharacterTypeNgram(&ct2u8![Kanji, Hiragana]) },
                 Feature { rel_position: 1, feature: DictionaryWord(2) },
-                Feature { rel_position: 2, feature: DictionaryWord(1) },
+                Feature { rel_position: 0, feature: DictionaryWord(1) },
             ],
             label: Unknown,
         };
@@ -461,8 +461,8 @@ mod tests {
                 Feature { rel_position: 1, feature: CharacterTypeNgram(&ct2u8![Hiragana]) },
                 Feature { rel_position: 2, feature: CharacterTypeNgram(&ct2u8![Kanji, Kanji]) },
                 Feature { rel_position: 1, feature: CharacterTypeNgram(&ct2u8![Kanji, Hiragana]) },
-                Feature { rel_position: 0, feature: DictionaryWord(2) },
-                Feature { rel_position: 0, feature: DictionaryWord(1) },
+                Feature { rel_position: 2, feature: DictionaryWord(2) },
+                Feature { rel_position: 2, feature: DictionaryWord(1) },
             ],
             label: WordBoundary,
         };
