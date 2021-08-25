@@ -47,8 +47,9 @@ impl FeatureExtractor {
         D: AsRef<[P]>,
         P: AsRef<[u8]> + AsRef<str>,
     {
-        let mut dict_word_size = Vec::with_capacity(dictionary.as_ref().len());
-        for word in dictionary.as_ref() {
+        let dictionary = dictionary.as_ref();
+        let mut dict_word_size = Vec::with_capacity(dictionary.len());
+        for word in dictionary {
             let size = std::cmp::min(
                 AsRef::<str>::as_ref(word).chars().count(),
                 dict_word_max_size,
@@ -61,7 +62,7 @@ impl FeatureExtractor {
         Ok(Self {
             char_ngram_size,
             type_ngram_size,
-            dict_ac: DoubleArrayAhoCorasick::new(dictionary.as_ref()),
+            dict_ac: DoubleArrayAhoCorasick::new(dictionary),
             dict_word_size,
         })
     }
