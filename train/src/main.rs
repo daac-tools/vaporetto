@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{prelude::*, stderr, BufReader, BufWriter};
 use std::path::PathBuf;
@@ -95,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("# of sentences: {}", train_sents.len());
     }
 
-    let mut dictionary = HashSet::new();
+    let mut dictionary = BTreeSet::new();
     for path in opt.dict {
         eprintln!("Loading {:?} ...", path);
         let f = File::open(path)?;

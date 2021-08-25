@@ -173,7 +173,7 @@ impl ExampleGenerator {
                         let example = &mut examples[span.start - 1];
                         if include_unknown || example.label != BoundaryType::Unknown {
                             example.features.push(Feature {
-                                rel_position: 2,
+                                rel_position: 0,
                                 feature: span.feature,
                             });
                         }
@@ -190,7 +190,7 @@ impl ExampleGenerator {
                         let example = &mut examples[span.end - 1];
                         if include_unknown || example.label != BoundaryType::Unknown {
                             example.features.push(Feature {
-                                rel_position: 0,
+                                rel_position: 2,
                                 feature: span.feature,
                             });
                         }

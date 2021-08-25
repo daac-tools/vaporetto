@@ -196,7 +196,7 @@ impl Predictor {
             let idx = if self.dict_word_wise {
                 m.pattern()
             } else {
-                std::cmp::min(m_end - m_start - 1, self.dict_weights.len())
+                std::cmp::min(m_end - m_start, self.dict_weights.len()) - 1
             };
             let [w_right, w_center, w_left] = self.dict_weights[idx];
             if m_start >= padding && m_start < padding + ys.len() {

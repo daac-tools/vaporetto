@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Result};
 use fst::raw::Fst;
@@ -30,7 +30,7 @@ impl<'a> Dataset<'a> {
     /// * `char_window_size` - The character window size.
     /// * `type_ngram_size` - The character type n-gram length.
     /// * `type_window_size` - The character type window size.
-    /// * `dictionary` - A word dictionary.
+    /// * `dictionary` - A word dictionary (must be alphabetical ascending order).
     /// * `dict_word_max_size` - Dictionary words greater than this value will be grouped together.
     ///
     /// # Returns
@@ -52,13 +52,14 @@ impl<'a> Dataset<'a> {
         D: AsRef<[P]>,
         P: AsRef<[u8]> + AsRef<str>,
     {
-        let sorted_dict: BTreeSet<Vec<u8>> = dictionary
-            .as_ref()
-            .iter()
-            .map(|w| AsRef::<[u8]>::as_ref(w).into())
-            .collect();
         Ok(Self {
-            dictionary_fst: Fst::from_iter_set(sorted_dict)?,
+            dictionary_fst: Fst::from_iter_map(
+                dictionary
+                    .as_ref()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, word)| (word, i as u64)),
+            )?,
             feature_extractor: FeatureExtractor::new(
                 char_ngram_size,
                 type_ngram_size,
