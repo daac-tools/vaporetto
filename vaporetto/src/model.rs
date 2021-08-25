@@ -16,13 +16,13 @@ use liblinear::LibLinearModel;
 const EPSILON: f64 = 1e-6;
 
 #[cfg(not(feature = "model-quantize"))]
-pub(crate) type WeightValue = f64;
+pub type WeightValue = f64;
 #[cfg(feature = "model-quantize")]
-pub(crate) type WeightValue = i16;
+pub type WeightValue = i16;
 #[cfg(not(feature = "model-quantize"))]
-pub(crate) type ScoreValue = f64;
+pub type ScoreValue = f64;
 #[cfg(feature = "model-quantize")]
-pub(crate) type ScoreValue = i32;
+pub type ScoreValue = i32;
 
 /// Model data.
 pub struct Model {

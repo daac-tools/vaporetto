@@ -4,32 +4,32 @@ use crate::sentence::{BoundaryType, Sentence};
 use anyhow::{anyhow, Result};
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FeatureContent<'a> {
+pub enum FeatureContent<'a> {
     CharacterNgram(&'a str),
     CharacterTypeNgram(&'a [u8]),
     DictionaryWord(usize),
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct FeatureSpan<'a> {
+pub struct FeatureSpan<'a> {
     start: usize,
     end: usize,
     feature: FeatureContent<'a>,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub(crate) struct Feature<'a> {
+pub struct Feature<'a> {
     pub(crate) rel_position: usize,
     pub(crate) feature: FeatureContent<'a>,
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Example<'a> {
+pub struct Example<'a> {
     pub features: Vec<Feature<'a>>,
     pub label: BoundaryType,
 }
 
-pub(crate) struct FeatureExtractor {
+pub struct FeatureExtractor {
     char_ngram_size: usize,
     type_ngram_size: usize,
     dict_ac: DoubleArrayAhoCorasick,
@@ -108,13 +108,13 @@ impl FeatureExtractor {
     }
 }
 
-pub(crate) struct ExampleGenerator {
+pub struct ExampleGenerator {
     char_window_size: usize,
     type_window_size: usize,
 }
 
 impl ExampleGenerator {
-    pub fn new(char_window_size: usize, type_window_size: usize) -> Self {
+    pub const fn new(char_window_size: usize, type_window_size: usize) -> Self {
         Self {
             char_window_size,
             type_window_size,

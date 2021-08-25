@@ -342,11 +342,7 @@ impl Predictor {
     ///
     /// A predictor with the specified window size.
     pub fn dict_overwrap_size(mut self, size: usize) -> Self {
-        if size >= 1 {
-            self.dict_overwrap_size = size;
-        } else {
-            self.dict_overwrap_size = 1;
-        }
+        self.dict_overwrap_size = std::cmp::max(size, 1);
         self
     }
 

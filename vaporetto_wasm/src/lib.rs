@@ -49,3 +49,9 @@ impl Vaporetto {
         result.into()
     }
 }
+
+impl Default for Vaporetto {
+    fn default() -> Self {
+        Self::new()
+    }
+}

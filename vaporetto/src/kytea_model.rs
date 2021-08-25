@@ -89,7 +89,7 @@ where
 {
     fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
         let size = rdr.read_u32::<LittleEndian>()?;
-        let mut result = Vec::with_capacity(size as usize);
+        let mut result = Self::with_capacity(size as usize);
         for _ in 0..size {
             result.push(T::read(config, rdr)?);
         }
@@ -100,7 +100,7 @@ where
 impl Readable for String {
     fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
         let size = rdr.read_u32::<LittleEndian>()?;
-        let mut result = String::new();
+        let mut result = Self::new();
         for _ in 0..size {
             let cidx = rdr.read_u16::<LittleEndian>()? as usize;
             result.push(config.char_map[cidx - 1]);

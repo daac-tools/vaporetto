@@ -56,15 +56,15 @@ pub struct Match {
 }
 
 impl Match {
-    pub fn start(&self) -> usize {
+    pub const fn start(&self) -> usize {
         self.start
     }
 
-    pub fn end(&self) -> usize {
+    pub const fn end(&self) -> usize {
         self.end
     }
 
-    pub fn pattern(&self) -> usize {
+    pub const fn pattern(&self) -> usize {
         self.pattern
     }
 }
@@ -204,10 +204,10 @@ impl DoubleArrayAhoCorasickBuilder {
 
     pub fn match_shorter_suffix(mut self, flag: bool) -> Self {
         if flag {
-            self.common_suffix_pattern_ids = Some(vec![]);
+            self.common_suffix_pattern_ids.replace(vec![]);
         } else {
-            self.common_suffix_pattern_ids = None;
-        }
+            self.common_suffix_pattern_ids.take();
+        };
         self
     }
 

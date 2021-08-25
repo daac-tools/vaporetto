@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::feature::Feature;
 
 #[cfg(feature = "train")]
-pub(crate) struct FeatureIDManager<'a> {
+pub struct FeatureIDManager<'a> {
     pub(crate) map: HashMap<Feature<'a>, u32>,
 }
 
@@ -36,7 +36,7 @@ impl<'a> Default for FeatureIDManager<'a> {
 }
 
 #[cfg(feature = "train")]
-pub(crate) struct LazyIndexSort {
+pub struct LazyIndexSort {
     pub(crate) map: BTreeMap<Vec<u8>, u64>,
 }
 

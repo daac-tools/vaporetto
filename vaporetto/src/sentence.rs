@@ -42,7 +42,7 @@ impl CharacterType {
     /// let t = CharacterType::get_type('A');
     /// assert_eq!(CharacterType::Roman, t);
     /// ```
-    pub fn get_type(c: char) -> Self {
+    pub const fn get_type(c: char) -> Self {
         match c as u32 {
             0x30..=0x39 | 0xFF10..=0xFF19 => Self::Digit,
             0x41..=0x5A | 0x61..=0x7A | 0xFF21..=0xFF3A | 0xFF41..=0xFF5A => Self::Roman,
@@ -146,7 +146,7 @@ impl Sentence {
         let chars: Vec<char> = text.chars().collect();
         let boundaries = vec![BoundaryType::Unknown; chars.len() - 1];
 
-        let (char_to_str_pos, str_to_char_pos, char_type) = Sentence::common_info(&chars);
+        let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
 
         Ok(Self {
             text,
@@ -252,7 +252,7 @@ impl Sentence {
             return Err(anyhow!("`tokenized_text` ends with a whitespace"));
         }
 
-        let (char_to_str_pos, str_to_char_pos, char_type) = Sentence::common_info(&chars);
+        let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
         Ok(Self {
             text: chars.iter().collect(),
             char_to_str_pos,
@@ -412,7 +412,7 @@ impl Sentence {
             chars.push(c);
         }
 
-        let (char_to_str_pos, str_to_char_pos, char_type) = Sentence::common_info(&chars);
+        let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
         Ok(Self {
             text: chars.iter().collect(),
             char_to_str_pos,

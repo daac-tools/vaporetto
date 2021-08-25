@@ -128,7 +128,7 @@ impl Trainer {
     /// # Returns
     ///
     /// A new trainer.
-    pub fn new(epsilon: f64, cost: f64, bias: f64) -> Self {
+    pub const fn new(epsilon: f64, cost: f64, bias: f64) -> Self {
         Self {
             epsilon,
             cost,
