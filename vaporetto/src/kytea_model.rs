@@ -342,6 +342,7 @@ impl Readable for ProbTagEntry {
 }
 
 /// Model data created by KyTea.
+#[doc(cfg(feature = "kytea"))]
 pub struct KyteaModel {
     config: KyteaConfig,
     wordseg_model: Option<LinearModel>,

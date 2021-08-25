@@ -9,6 +9,7 @@ use crate::sentence::Sentence;
 use crate::utils::FeatureIDManager;
 
 /// Dataset manager.
+#[doc(cfg(feature = "train"))]
 pub struct Dataset<'a> {
     dictionary_fst: Fst<Vec<u8>>,
     feature_extractor: FeatureExtractor,
@@ -110,6 +111,33 @@ impl<'a> Dataset<'a> {
 }
 
 /// Trainer.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::fs::File;
+/// use std::io::{prelude::*, BufReader, BufWriter};
+///
+/// use vaporetto::{Dataset, Sentence, Trainer};
+///
+/// let mut train_sents = vec![];
+/// let f = BufReader::new(File::open("dataset-train.txt").unwrap());
+/// for (i, line) in f.lines().enumerate() {
+///     train_sents.push(Sentence::from_tokenized(line.unwrap()).unwrap());
+/// }
+///
+/// let dict: Vec<String> = vec![];
+/// let mut dataset = Dataset::new(3, 3, 3, 3, &dict, 0).unwrap();
+/// for (i, s) in train_sents.iter().enumerate() {
+///     dataset.push_sentence(s);
+/// }
+///
+/// let trainer = Trainer::new(0.01, 1., 1.);
+/// let model = trainer.train(dataset).unwrap();
+/// let mut f = BufWriter::new(File::create("model.bin").unwrap());
+/// model.write(&mut f).unwrap();
+/// ```
+#[doc(cfg(feature = "train"))]
 pub struct Trainer {
     epsilon: f64,
     cost: f64,

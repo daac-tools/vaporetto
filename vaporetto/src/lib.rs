@@ -1,34 +1,10 @@
+#![feature(doc_cfg)]
+
 //! # Vaporetto
 //!
 //! Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 //!
-//! ## Example of training
-//!
-//! ```no_run
-//! use std::fs::File;
-//! use std::io::{prelude::*, BufReader, BufWriter};
-//!
-//! use vaporetto::{Dataset, Sentence, Trainer};
-//!
-//! let mut train_sents = vec![];
-//! let f = BufReader::new(File::open("dataset-train.txt").unwrap());
-//! for (i, line) in f.lines().enumerate() {
-//!     train_sents.push(Sentence::from_tokenized(line.unwrap()).unwrap());
-//! }
-//!
-//! let dict: Vec<String> = vec![];
-//! let mut dataset = Dataset::new(3, 3, 3, 3, &dict, 0).unwrap();
-//! for (i, s) in train_sents.iter().enumerate() {
-//!     dataset.push_sentence(s);
-//! }
-//!
-//! let trainer = Trainer::new(0.01, 1., 1.);
-//! let model = trainer.train(dataset).unwrap();
-//! let mut f = BufWriter::new(File::create("model.bin").unwrap());
-//! model.write(&mut f).unwrap();
-//! ```
-//!
-//! ## Example of prediction
+//! ## Examples
 //! ```no_run
 //! use std::fs::File;
 //! use std::io::{prelude::*, stdin, BufReader};
@@ -46,6 +22,8 @@
 //!     println!("{}", toks);
 //! }
 //! ```
+//!
+//! Training requires **crate feature** `train`. For more details, see [`Trainer`].
 
 #[macro_use]
 mod utils;

@@ -365,6 +365,7 @@ impl Predictor {
 
 /// Predictor for multithreading.
 #[cfg(feature = "multithreading")]
+#[doc(cfg(feature = "multithreading"))]
 pub struct MultithreadPredictor {
     task_tx: Sender<(Arc<Sentence>, Range<usize>, Vec<ScoreValue>)>,
     result_rx: Receiver<(Vec<ScoreValue>, Range<usize>)>,
