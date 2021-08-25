@@ -240,10 +240,9 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict_partial(&self, sentence: Sentence, range: Range<usize>) -> Sentence {
+    pub fn predict_partial(&self, mut sentence: Sentence, range: Range<usize>) -> Sentence {
         let mut ys = vec![ScoreValue::default(); range.len()];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
-        let mut sentence = sentence;
         for (y, b) in ys.into_iter().zip(sentence.boundaries[range].iter_mut()) {
             if y >= ScoreValue::default() {
                 *b = BoundaryType::WordBoundary;
@@ -265,10 +264,9 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict_partial_with_score(&self, sentence: Sentence, range: Range<usize>) -> Sentence {
+    pub fn predict_partial_with_score(&self, mut sentence: Sentence, range: Range<usize>) -> Sentence {
         let mut ys = vec![ScoreValue::default(); range.len()];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
-        let mut sentence = sentence;
         let mut scores = sentence
             .boundary_scores
             .take()
@@ -371,6 +369,9 @@ pub struct MultithreadPredictor {
     result_rx: Receiver<(Vec<ScoreValue>, Range<usize>)>,
     chunk_size: usize,
     ys_pool: RefCell<Vec<Vec<ScoreValue>>>,
+
+    #[cfg(feature = "model-quantize")]
+    quantize_multiplier: f64,
 }
 
 #[cfg(feature = "multithreading")]
@@ -414,6 +415,9 @@ impl MultithreadPredictor {
             result_rx,
             chunk_size,
             ys_pool: RefCell::new(vec![]),
+
+            #[cfg(feature = "model-quantize")]
+            quantize_multiplier: predictor.quantize_multiplier,
         }
     }
 
@@ -445,8 +449,8 @@ impl MultithreadPredictor {
         let mut boundaries = vec![BoundaryType::Unknown; sentence.boundaries.len()];
         for _ in 0..n_chunks {
             let (ys, range) = self.result_rx.recv().unwrap();
-            for (y, b) in ys.iter().zip(&mut boundaries[range]) {
-                if *y >= ScoreValue::default() {
+            for (&y, b) in ys.iter().zip(&mut boundaries[range]) {
+                if y >= ScoreValue::default() {
                     *b = BoundaryType::WordBoundary;
                 } else {
                     *b = BoundaryType::NotWordBoundary;
@@ -457,6 +461,61 @@ impl MultithreadPredictor {
 
         let mut sentence = Arc::try_unwrap(sentence).unwrap();
         sentence.boundaries = boundaries;
+        sentence
+    }
+
+    /// Predicts word boundaries. This function inserts scores.
+    ///
+    /// # Arguments
+    ///
+    /// * `sentence` - A sentence.
+    ///
+    /// # Returns
+    ///
+    /// A sentence with predicted boundary information.
+    pub fn predict_with_score(&self, mut sentence: Sentence) -> Sentence {
+        let mut scores = sentence
+            .boundary_scores
+            .take()
+            .unwrap_or_else(|| vec![0.; sentence.boundaries.len()]);
+        let sentence = Arc::new(sentence);
+        let mut n_chunks = 0;
+        let mut ys_pool = self.ys_pool.borrow_mut();
+        for start in (0..sentence.boundaries.len()).step_by(self.chunk_size) {
+            let ys = if let Some(ys) = ys_pool.pop() {
+                ys
+            } else {
+                vec![ScoreValue::default(); self.chunk_size]
+            };
+            let sentence = Arc::clone(&sentence);
+            let end = std::cmp::min(start + self.chunk_size, sentence.boundaries.len());
+            self.task_tx.send((sentence, start..end, ys)).unwrap();
+            n_chunks += 1;
+        }
+        let mut boundaries = vec![BoundaryType::Unknown; sentence.boundaries.len()];
+        for _ in 0..n_chunks {
+            let (ys, range) = self.result_rx.recv().unwrap();
+            for (&y, (b, s)) in ys.iter().zip(boundaries[range.clone()].iter_mut().zip(&mut scores[range])) {
+                if y >= ScoreValue::default() {
+                    *b = BoundaryType::WordBoundary;
+                } else {
+                    *b = BoundaryType::NotWordBoundary;
+                }
+                #[cfg(not(feature = "model-quantize"))]
+                {
+                    *s = y;
+                }
+                #[cfg(feature = "model-quantize")]
+                {
+                    *s = y as f64 * self.quantize_multiplier;
+                }
+            }
+            ys_pool.push(ys);
+        }
+
+        let mut sentence = Arc::try_unwrap(sentence).unwrap();
+        sentence.boundaries = boundaries;
+        sentence.boundary_scores.replace(scores);
         sentence
     }
 }
