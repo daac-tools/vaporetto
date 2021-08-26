@@ -9,7 +9,7 @@ use crate::sentence::Sentence;
 use crate::utils::FeatureIDManager;
 
 /// Dataset manager.
-#[doc(cfg(feature = "train"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "train")))]
 pub struct Dataset<'a> {
     dictionary_fst: Fst<Vec<u8>>,
     feature_extractor: FeatureExtractor,
@@ -137,7 +137,7 @@ impl<'a> Dataset<'a> {
 /// let mut f = BufWriter::new(File::create("model.bin").unwrap());
 /// model.write(&mut f).unwrap();
 /// ```
-#[doc(cfg(feature = "train"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "train")))]
 pub struct Trainer {
     epsilon: f64,
     cost: f64,

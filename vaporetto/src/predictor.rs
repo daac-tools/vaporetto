@@ -356,7 +356,7 @@ impl Predictor {
     ///
     /// A multithread predictor.
     #[cfg(feature = "multithreading")]
-    #[doc(cfg(feature = "multithreading"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "multithreading")))]
     pub fn multithreading(self, n_threads: usize, chunk_size: usize) -> MultithreadPredictor {
         MultithreadPredictor::new(self, n_threads, chunk_size)
     }
@@ -364,7 +364,7 @@ impl Predictor {
 
 /// Predictor for multithreading.
 #[cfg(feature = "multithreading")]
-#[doc(cfg(feature = "multithreading"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "multithreading")))]
 pub struct MultithreadPredictor {
     task_tx: Sender<(Arc<Sentence>, Range<usize>, Vec<ScoreValue>)>,
     result_rx: Receiver<(Vec<ScoreValue>, Range<usize>)>,
