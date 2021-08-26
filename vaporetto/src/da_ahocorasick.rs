@@ -77,7 +77,8 @@ where
     haystack: P,
     state_id: usize,
     pos: usize,
-    common_suffix_idx: usize,
+    cs_idx: usize,
+    cs_pattern_ids: Option<&'a [usize]>
 }
 
 impl<'a, P> Iterator for DoubleArrayAhoCorasickIterator<'a, P>
@@ -87,28 +88,24 @@ where
     type Item = Match;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.common_suffix_idx >= 1 {
-            if let Some(cs_pattern_ids) = self.pma.common_suffix_pattern_ids.as_ref() {
-                let pattern = self.pma.pattern_ids[self.state_id];
-                if self.common_suffix_idx <= cs_pattern_ids[pattern].len() {
-                    let pattern = cs_pattern_ids[pattern][self.common_suffix_idx - 1];
-                    self.common_suffix_idx += 1;
-                    return Some(Match {
-                        start: self.pos - self.pma.pattern_len[pattern],
-                        end: self.pos,
-                        pattern,
-                    });
-                }
+        if let Some(cs_pattern_ids) = self.cs_pattern_ids {
+            if let Some(&pattern) = cs_pattern_ids.get(self.cs_idx) {
+                self.cs_idx += 1;
+                return Some(Match {
+                    start: self.pos - self.pma.pattern_len[pattern],
+                    end: self.pos,
+                    pattern,
+                });
             }
         }
-        self.common_suffix_idx = 0;
         let haystack = self.haystack.as_ref();
         for (pos, &c) in haystack.iter().enumerate().skip(self.pos) {
             self.state_id = self.pma.get_next_state_id(self.state_id, c);
             if self.pma.pattern_ids[self.state_id] != std::usize::MAX {
                 self.pos = pos + 1;
                 let pattern = self.pma.pattern_ids[self.state_id];
-                self.common_suffix_idx = 1;
+                self.cs_idx = 0;
+                self.cs_pattern_ids = self.pma.cs_pattern_ids.as_ref().map(|cs_pattern_ids| cs_pattern_ids[pattern].as_ref());
                 return Some(Match {
                     start: self.pos - self.pma.pattern_len[pattern],
                     end: self.pos,
@@ -127,7 +124,7 @@ pub struct DoubleArrayAhoCorasick {
     fail: Vec<usize>,
     pattern_ids: Vec<usize>,
     pattern_len: Vec<usize>,
-    common_suffix_pattern_ids: Option<Vec<Vec<usize>>>,
+    cs_pattern_ids: Option<Vec<Vec<usize>>>,
 }
 
 impl DoubleArrayAhoCorasick {
@@ -148,7 +145,8 @@ impl DoubleArrayAhoCorasick {
             haystack,
             state_id: 0,
             pos: 0,
-            common_suffix_idx: 0,
+            cs_idx: 0,
+            cs_pattern_ids: None,
         }
     }
 
@@ -185,7 +183,7 @@ pub struct DoubleArrayAhoCorasickBuilder {
     fail: Vec<usize>,
     pattern_ids: Vec<usize>,
     pattern_len: Vec<usize>,
-    common_suffix_pattern_ids: Option<Vec<Vec<usize>>>,
+    cs_pattern_ids: Option<Vec<Vec<usize>>>,
     step_size: usize,
 }
 
@@ -195,7 +193,7 @@ impl DoubleArrayAhoCorasickBuilder {
             base: vec![std::isize::MIN; init_size],
             check: vec![std::usize::MAX; init_size],
             pattern_ids: vec![std::usize::MAX; init_size],
-            common_suffix_pattern_ids: Some(vec![]),
+            cs_pattern_ids: Some(vec![]),
             pattern_len: vec![],
             fail: vec![std::usize::MAX; init_size],
             step_size,
@@ -204,9 +202,9 @@ impl DoubleArrayAhoCorasickBuilder {
 
     pub fn match_shorter_suffix(mut self, flag: bool) -> Self {
         if flag {
-            self.common_suffix_pattern_ids.replace(vec![]);
+            self.cs_pattern_ids.replace(vec![]);
         } else {
-            self.common_suffix_pattern_ids.take();
+            self.cs_pattern_ids.take();
         };
         self
     }
@@ -226,7 +224,7 @@ impl DoubleArrayAhoCorasickBuilder {
             fail,
             pattern_ids,
             pattern_len,
-            common_suffix_pattern_ids,
+            cs_pattern_ids,
             ..
         } = self;
         DoubleArrayAhoCorasick {
@@ -235,7 +233,7 @@ impl DoubleArrayAhoCorasickBuilder {
             fail,
             pattern_ids,
             pattern_len,
-            common_suffix_pattern_ids,
+            cs_pattern_ids,
         }
     }
 
@@ -248,7 +246,7 @@ impl DoubleArrayAhoCorasickBuilder {
         for word in dict.into_iter() {
             let word = word.as_ref();
             trie.add(word);
-            if let Some(cs_pattern_ids) = self.common_suffix_pattern_ids.as_mut() {
+            if let Some(cs_pattern_ids) = self.cs_pattern_ids.as_mut() {
                 cs_pattern_ids.push(vec![]);
             };
             self.pattern_len.push(word.len());
@@ -315,7 +313,7 @@ impl DoubleArrayAhoCorasickBuilder {
                             if self.pattern_ids[child_idx] == std::usize::MAX {
                                 self.pattern_ids[child_idx] = self.pattern_ids[child_fail_idx];
                             } else if let Some(cs_pattern_ids) =
-                                self.common_suffix_pattern_ids.as_mut()
+                                self.cs_pattern_ids.as_mut()
                             {
                                 let child_pattern_id = self.pattern_ids[child_idx];
                                 let fail_pattern_id = self.pattern_ids[child_fail_idx];

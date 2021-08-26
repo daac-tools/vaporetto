@@ -356,6 +356,7 @@ impl Predictor {
     ///
     /// A multithread predictor.
     #[cfg(feature = "multithreading")]
+    #[doc(cfg(feature = "multithreading"))]
     pub fn multithreading(self, n_threads: usize, chunk_size: usize) -> MultithreadPredictor {
         MultithreadPredictor::new(self, n_threads, chunk_size)
     }
