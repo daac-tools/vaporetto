@@ -24,6 +24,10 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 % cargo run --release --bin convert_kytea_model -- --model-in ./jp-0.4.7-5.mod --model-out ./kytea.model
 ```
 
+## Disclaimer
+
+This is not an officially supported LegalForce product.
+
 ## License
 
 Licensed under either of
