@@ -2,7 +2,9 @@
 
 Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 
-## Usage
+## Overview
+
+This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
 
 The following examples use [KFTT](http://www.phontron.com/kftt/) for training and prediction data.
 
@@ -26,7 +28,8 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 
 ## Disclaimer
 
-This is not an officially supported LegalForce product.
+This software is developed by LegalForce, Inc.,
+but not an officially supported LegalForce product.
 
 ## License
 
