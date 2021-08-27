@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::io::BufRead;
 
@@ -111,7 +110,7 @@ impl Readable for String {
 
 struct State {
     _failure: u32,
-    gotos: BTreeMap<char, u32>,
+    gotos: Vec<(char, u32)>,
     outputs: Vec<u32>,
     is_branch: bool,
 }
@@ -129,18 +128,18 @@ impl<T> Dictionary<T>
 where
     T: Readable,
 {
-    fn dump_items(&self) -> Vec<(String, &T)> {
+    fn dump_items(&self) -> Vec<(Vec<char>, &T)> {
         let mut result = vec![];
         let mut stack = vec![(0, vec![])];
         while let Some((idx, word)) = stack.pop() {
             let state = &self.states[idx];
             if state.is_branch {
                 result.push((
-                    word.iter().collect(),
+                    word.clone(),
                     &self.entries[state.outputs[0] as usize],
                 ));
             }
-            for (&c, &next_idx) in state.gotos.iter().rev() {
+            for &(c, next_idx) in state.gotos.iter().rev() {
                 let mut word = word.clone();
                 word.push(c);
                 stack.push((next_idx as usize, word));
@@ -164,12 +163,13 @@ where
         for _ in 0..n_states {
             let failure = rdr.read_u32::<LittleEndian>()?;
             let n_gotos = rdr.read_u32::<LittleEndian>()?;
-            let mut gotos = BTreeMap::new();
+            let mut gotos = vec![];
             for _ in 0..n_gotos {
                 let k = char::read(config, rdr)?;
                 let v = rdr.read_u32::<LittleEndian>()?;
-                gotos.insert(k, v);
+                gotos.push((k, v));
             }
+            gotos.sort();
             let n_outputs = rdr.read_u32::<LittleEndian>()? as usize;
             let mut outputs = Vec::with_capacity(n_outputs);
             for _ in 0..n_outputs {
@@ -413,27 +413,29 @@ impl TryFrom<KyteaModel> for Model {
             .type_dict
             .ok_or_else(|| anyhow!("no type dictionary."))?;
 
-        let mut word_map = vec![];
+        let mut word_map: Vec<(String, u64)> = vec![];
         let mut word_weights = vec![];
         for (i, (word, v)) in char_dict.dump_items().into_iter().enumerate() {
-            word_map.push((word, i as u64));
-            word_weights.push(v.clone());
+            let weight_size = config.char_w as usize * 2 - word.len() + 1;
+            word_map.push((word.into_iter().collect(), i as u64));
+            word_weights.push(v[..weight_size].to_vec());
         }
         let word_fst = Fst::from_iter_map(word_map)?;
 
-        let mut type_map = vec![];
+        let mut type_map: Vec<(String, u64)> = vec![];
         let mut type_weights = vec![];
         for (i, (word, v)) in type_dict.dump_items().into_iter().enumerate() {
-            type_map.push((word, i as u64));
-            type_weights.push(v.clone());
+            let weight_size = config.type_w as usize * 2 - word.len() + 1;
+            type_map.push((word.into_iter().collect(), i as u64));
+            type_weights.push(v[..weight_size].to_vec());
         }
         let type_fst = Fst::from_iter_map(type_map)?;
 
-        let mut dict_map = vec![];
+        let mut dict_map: Vec<(String, u64)> = vec![];
         let mut dict_weights = vec![];
         if let Some(dict) = model.dict {
             for (i, (w, data)) in dict.dump_items().into_iter().enumerate() {
-                let word_len = std::cmp::min(w.chars().count(), config.dict_n as usize) - 1;
+                let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
                 let mut weights = [0i32; 3];
                 for j in 0..dict.n_dicts as usize {
                     if data.in_dict >> j & 1 == 1 {
@@ -444,7 +446,7 @@ impl TryFrom<KyteaModel> for Model {
                     }
                 }
                 dict_weights.push(weights);
-                dict_map.push((w, i as u64));
+                dict_map.push((w.into_iter().collect(), i as u64));
             }
         }
         let dict_fst = Fst::from_iter_map(dict_map)?;
