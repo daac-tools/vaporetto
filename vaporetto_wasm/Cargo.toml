@@ -7,8 +7,7 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-js-sys = "0.3.52"
-unicode-segmentation = "1.8.0"
-vaporetto = { path = "../vaporetto" }
-vaporetto_rules = { path = "../vaporetto_rules" }
-wasm-bindgen = "0.2.75"
+js-sys = "0.3.52"  # MIT OR Apache-2.0
+vaporetto = { path = "../vaporetto" }  # MIT OR Apache-2.0
+vaporetto_rules = { path = "../vaporetto_rules" }  # MIT OR Apache-2.0
+wasm-bindgen = "0.2.75"  # MIT OR Apache-2.0

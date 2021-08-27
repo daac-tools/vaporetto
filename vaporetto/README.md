@@ -1,27 +1,25 @@
-# 🛥 VAporetto: POintwise pREdicTion based TOkenizer
+# Vaporetto
 
 Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 
-## Usage
+## Examples
 
-The following examples use [KFTT](http://www.phontron.com/kftt/) for training and prediction data.
+```rust
+use std::fs::File;
+use std::io::{prelude::*, stdin, BufReader};
 
-### Training
+use vaporetto::{Model, Predictor, Sentence};
 
-```
-% cargo run --release --bin train -- --model ./kftt.model --tok ./kftt-data-1.0/data/tok/kyoto-train.ja
-```
+let mut f = BufReader::new(File::open("model.bin").unwrap());
+let model = Model::read(&mut f).unwrap();
+let mut predictor = Predictor::new(model).dict_overwrap_size(3);
 
-### Prediction
-
-```
-% cargo run --release --bin predict -- --model ./kftt.model < ./kftt-data-1.0/data/orig/kyoto-test.ja > ./tokenized.ja
-```
-
-### Conversion from KyTea's Model File
-
-```
-% cargo run --release --bin convert_kytea_model -- --model-in ./jp-0.4.7-5.mod --model-out ./kytea.model
+for line in stdin().lock().lines() {
+    let s = Sentence::from_raw(line.unwrap()).unwrap();
+    let s = predictor.predict(s);
+    let toks = s.to_tokenized_string().unwrap();
+    println!("{}", toks);
+}
 ```
 
 ## License
