@@ -28,7 +28,7 @@ pub struct Predictor {
     bias: ScoreValue,
     char_window_size: usize,
     type_window_size: usize,
-    dict_overwrap_size: usize,
+    dict_window_size: usize,
 
     #[cfg(feature = "model-quantize")]
     quantize_multiplier: f64,
@@ -89,7 +89,7 @@ impl Predictor {
             bias,
             char_window_size: model.char_window_size,
             type_window_size: model.type_window_size,
-            dict_overwrap_size: 1,
+            dict_window_size: 1,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
@@ -177,14 +177,14 @@ impl Predictor {
     }
 
     fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let char_start = if start >= self.dict_overwrap_size {
-            start + 1 - self.dict_overwrap_size
+        let char_start = if start >= self.dict_window_size {
+            start + 1 - self.dict_window_size
         } else {
             0
         };
         let text_start = sentence.char_to_str_pos[char_start];
         let char_end = std::cmp::min(
-            start + ys.len() + self.dict_overwrap_size,
+            start + ys.len() + self.dict_window_size,
             sentence.char_to_str_pos.len() - 1,
         );
         let text_end = sentence.char_to_str_pos[char_end];
@@ -339,8 +339,8 @@ impl Predictor {
     /// # Returns
     ///
     /// A predictor with the specified window size.
-    pub fn dict_overwrap_size(mut self, size: usize) -> Self {
-        self.dict_overwrap_size = std::cmp::max(size, 1);
+    pub fn dict_window_size(mut self, size: usize) -> Self {
+        self.dict_window_size = std::cmp::max(size, 1);
         self
     }
 

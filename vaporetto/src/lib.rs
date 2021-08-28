@@ -13,7 +13,7 @@
 //!
 //! let mut f = BufReader::new(File::open("model.bin").unwrap());
 //! let model = Model::read(&mut f).unwrap();
-//! let mut predictor = Predictor::new(model).dict_overwrap_size(3);
+//! let mut predictor = Predictor::new(model);
 //!
 //! for line in stdin().lock().lines() {
 //!     let s = Sentence::from_raw(line.unwrap()).unwrap();
