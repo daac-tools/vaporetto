@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto: a pointwise prediction based tokenizer"
