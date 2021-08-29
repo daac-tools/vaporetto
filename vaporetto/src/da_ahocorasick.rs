@@ -2,6 +2,8 @@
 
 use std::collections::VecDeque;
 
+use anyhow::{anyhow, Result};
+
 struct SparseTrie {
     nodes: Vec<Vec<(u8, usize)>>,
     pattern_id: Vec<usize>,
@@ -17,26 +19,24 @@ impl SparseTrie {
         }
     }
 
-    fn add(&mut self, pattern: &[u8]) -> usize {
+    fn add(&mut self, pattern: &[u8]) -> Result<()> {
         let mut node_id = 0;
-        let prev_n_nodes = self.nodes.len();
         for &c in pattern {
-            node_id = if let Some(next_node_id) = self.get(node_id, c) {
-                next_node_id
-            } else {
+            node_id = self.get(node_id, c).unwrap_or_else(|| {
                 let next_node_id = self.nodes.len();
                 self.nodes.push(vec![]);
                 self.nodes[node_id].push((c, next_node_id));
                 self.pattern_id.push(std::usize::MAX);
                 next_node_id
-            };
+            });
         }
-        if prev_n_nodes == self.nodes.len() {
-            panic!("failed to add");
+        let pattern_id = self.pattern_id.get_mut(node_id).unwrap();
+        if *pattern_id != std::usize::MAX {
+            return Err(anyhow!("duplicated patterns are added"));
         }
-        self.pattern_id[node_id] = self.len;
+        *pattern_id = self.len;
         self.len += 1;
-        node_id
+        Ok(())
     }
 
     fn get(&self, node_id: usize, c: u8) -> Option<usize> {
@@ -77,8 +77,7 @@ where
     haystack: P,
     state_id: usize,
     pos: usize,
-    cs_idx: usize,
-    cs_pattern_ids: Option<&'a [usize]>
+    cs_pattern_ids: Option<std::slice::Iter<'a, usize>>,
 }
 
 impl<'a, P> Iterator for DoubleArrayAhoCorasickIterator<'a, P>
@@ -88,9 +87,8 @@ where
     type Item = Match;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(cs_pattern_ids) = self.cs_pattern_ids {
-            if let Some(&pattern) = cs_pattern_ids.get(self.cs_idx) {
-                self.cs_idx += 1;
+        if let Some(cs_pattern_ids) = self.cs_pattern_ids.as_mut() {
+            if let Some(&pattern) = cs_pattern_ids.next() {
                 return Some(Match {
                     start: self.pos - self.pma.pattern_len[pattern],
                     end: self.pos,
@@ -104,8 +102,11 @@ where
             if self.pma.pattern_ids[self.state_id] != std::usize::MAX {
                 self.pos = pos + 1;
                 let pattern = self.pma.pattern_ids[self.state_id];
-                self.cs_idx = 0;
-                self.cs_pattern_ids = self.pma.cs_pattern_ids.as_ref().map(|cs_pattern_ids| cs_pattern_ids[pattern].as_ref());
+                self.cs_pattern_ids = self
+                    .pma
+                    .cs_pattern_ids
+                    .as_ref()
+                    .map(|cs_pattern_ids| cs_pattern_ids[pattern].iter());
                 return Some(Match {
                     start: self.pos - self.pma.pattern_len[pattern],
                     end: self.pos,
@@ -128,12 +129,12 @@ pub struct DoubleArrayAhoCorasick {
 }
 
 impl DoubleArrayAhoCorasick {
-    pub fn new<D, P>(dict: D) -> Self
+    pub fn new<D, P>(dict: D) -> Result<Self>
     where
         D: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
     {
-        DoubleArrayAhoCorasickBuilder::new(65536, 65536).build(dict)
+        DoubleArrayAhoCorasickBuilder::new(65536, 65536)?.build(dict)
     }
 
     pub fn find_iter<P>(&self, haystack: P) -> DoubleArrayAhoCorasickIterator<P>
@@ -145,7 +146,6 @@ impl DoubleArrayAhoCorasick {
             haystack,
             state_id: 0,
             pos: 0,
-            cs_idx: 0,
             cs_pattern_ids: None,
         }
     }
@@ -188,8 +188,11 @@ pub struct DoubleArrayAhoCorasickBuilder {
 }
 
 impl DoubleArrayAhoCorasickBuilder {
-    pub fn new(init_size: usize, step_size: usize) -> Self {
-        Self {
+    pub fn new(init_size: usize, step_size: usize) -> Result<Self> {
+        if init_size == 0 || step_size == 0 {
+            return Err(anyhow!("init_size and step_size must be >= 1"));
+        }
+        Ok(Self {
             base: vec![std::isize::MIN; init_size],
             check: vec![std::usize::MAX; init_size],
             pattern_ids: vec![std::usize::MAX; init_size],
@@ -197,7 +200,7 @@ impl DoubleArrayAhoCorasickBuilder {
             pattern_len: vec![],
             fail: vec![std::usize::MAX; init_size],
             step_size,
-        }
+        })
     }
 
     pub fn match_shorter_suffix(mut self, flag: bool) -> Self {
@@ -209,12 +212,12 @@ impl DoubleArrayAhoCorasickBuilder {
         self
     }
 
-    pub fn build<D, P>(mut self, dict: D) -> DoubleArrayAhoCorasick
+    pub fn build<D, P>(mut self, dict: D) -> Result<DoubleArrayAhoCorasick>
     where
         D: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
     {
-        let sparse_trie = self.build_sparse_tree(dict);
+        let sparse_trie = self.build_sparse_trie(dict)?;
         self.build_double_array(&sparse_trie);
         self.add_fails(&sparse_trie);
 
@@ -227,17 +230,17 @@ impl DoubleArrayAhoCorasickBuilder {
             cs_pattern_ids,
             ..
         } = self;
-        DoubleArrayAhoCorasick {
+        Ok(DoubleArrayAhoCorasick {
             base,
             check,
             fail,
             pattern_ids,
             pattern_len,
             cs_pattern_ids,
-        }
+        })
     }
 
-    fn build_sparse_tree<D, P>(&mut self, dict: D) -> SparseTrie
+    fn build_sparse_trie<D, P>(&mut self, dict: D) -> Result<SparseTrie>
     where
         D: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
@@ -245,13 +248,13 @@ impl DoubleArrayAhoCorasickBuilder {
         let mut trie = SparseTrie::new();
         for word in dict.into_iter() {
             let word = word.as_ref();
-            trie.add(word);
+            trie.add(word)?;
             if let Some(cs_pattern_ids) = self.cs_pattern_ids.as_mut() {
                 cs_pattern_ids.push(vec![]);
             };
             self.pattern_len.push(word.len());
         }
-        trie
+        Ok(trie)
     }
 
     fn build_double_array(&mut self, sparse_trie: &SparseTrie) {
@@ -264,6 +267,16 @@ impl DoubleArrayAhoCorasickBuilder {
             if node.is_empty() {
                 continue;
             }
+            /*
+            let mut min_c = std::u8::MAX;
+            for (c, _) in node {
+                if *c < min_c {
+                    min_c = *c;
+                }
+            }
+            */
+            // NOTE(vbkaisetsu): patterns are lexicographically ordered, so the first item is the
+            // smallest value.
             let min_c = node[0].0;
             let mut base = min_idx - min_c as isize;
             'outer: loop {
@@ -312,9 +325,7 @@ impl DoubleArrayAhoCorasickBuilder {
                         if self.pattern_ids[child_fail_idx] != std::usize::MAX {
                             if self.pattern_ids[child_idx] == std::usize::MAX {
                                 self.pattern_ids[child_idx] = self.pattern_ids[child_fail_idx];
-                            } else if let Some(cs_pattern_ids) =
-                                self.cs_pattern_ids.as_mut()
-                            {
+                            } else if let Some(cs_pattern_ids) = self.cs_pattern_ids.as_mut() {
                                 let child_pattern_id = self.pattern_ids[child_idx];
                                 let fail_pattern_id = self.pattern_ids[child_fail_idx];
                                 let mut fail_ids = cs_pattern_ids[fail_pattern_id].clone();

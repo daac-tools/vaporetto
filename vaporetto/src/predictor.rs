@@ -72,12 +72,16 @@ impl Predictor {
             .collect();
 
         let word_pma = DoubleArrayAhoCorasickBuilder::new(65536, 65536)
+            .unwrap()
             .match_shorter_suffix(false)
-            .build(words);
+            .build(words)
+            .unwrap();
         let type_pma = DoubleArrayAhoCorasickBuilder::new(65536, 65536)
+            .unwrap()
             .match_shorter_suffix(false)
-            .build(types);
-        let dict_pma = DoubleArrayAhoCorasick::new(dict);
+            .build(types)
+            .unwrap();
+        let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
         Self {
             word_pma,
             type_pma,
@@ -264,7 +268,11 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict_partial_with_score(&self, mut sentence: Sentence, range: Range<usize>) -> Sentence {
+    pub fn predict_partial_with_score(
+        &self,
+        mut sentence: Sentence,
+        range: Range<usize>,
+    ) -> Sentence {
         let mut ys = vec![ScoreValue::default(); range.len()];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
         let mut scores = sentence
@@ -496,7 +504,10 @@ impl MultithreadPredictor {
         let mut boundaries = vec![BoundaryType::Unknown; sentence.boundaries.len()];
         for _ in 0..n_chunks {
             let (ys, range) = self.result_rx.recv().unwrap();
-            for (&y, (b, s)) in ys.iter().zip(boundaries[range.clone()].iter_mut().zip(&mut scores[range])) {
+            for (&y, (b, s)) in ys
+                .iter()
+                .zip(boundaries[range.clone()].iter_mut().zip(&mut scores[range]))
+            {
                 if y >= ScoreValue::default() {
                     *b = BoundaryType::WordBoundary;
                 } else {

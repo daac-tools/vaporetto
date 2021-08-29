@@ -62,7 +62,7 @@ impl FeatureExtractor {
         Ok(Self {
             char_ngram_size,
             type_ngram_size,
-            dict_ac: DoubleArrayAhoCorasick::new(dictionary),
+            dict_ac: DoubleArrayAhoCorasick::new(dictionary).unwrap(),
             dict_word_size,
         })
     }

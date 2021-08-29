@@ -134,10 +134,7 @@ where
         while let Some((idx, word)) = stack.pop() {
             let state = &self.states[idx];
             if state.is_branch {
-                result.push((
-                    word.clone(),
-                    &self.entries[state.outputs[0] as usize],
-                ));
+                result.push((word.clone(), &self.entries[state.outputs[0] as usize]));
             }
             for &(c, next_idx) in state.gotos.iter().rev() {
                 let mut word = word.clone();
@@ -169,7 +166,7 @@ where
                 let v = rdr.read_u32::<LittleEndian>()?;
                 gotos.push((k, v));
             }
-            gotos.sort();
+            gotos.sort_unstable();
             let n_outputs = rdr.read_u32::<LittleEndian>()? as usize;
             let mut outputs = Vec::with_capacity(n_outputs);
             for _ in 0..n_outputs {
