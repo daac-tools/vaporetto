@@ -248,11 +248,11 @@ impl Predictor {
         let mut ys = vec![ScoreValue::default(); range.len()];
         self.predict_partial_impl(&sentence, range.clone(), &mut ys);
         for (y, b) in ys.into_iter().zip(sentence.boundaries[range].iter_mut()) {
-            if y >= ScoreValue::default() {
-                *b = BoundaryType::WordBoundary;
+            *b = if y >= ScoreValue::default() {
+                BoundaryType::WordBoundary
             } else {
-                *b = BoundaryType::NotWordBoundary;
-            }
+                BoundaryType::NotWordBoundary
+            };
         }
         sentence
     }
@@ -284,11 +284,11 @@ impl Predictor {
                 .iter_mut()
                 .zip(scores[range].iter_mut()),
         ) {
-            if y >= ScoreValue::default() {
-                *b = BoundaryType::WordBoundary;
+            *b = if y >= ScoreValue::default() {
+                BoundaryType::WordBoundary
             } else {
-                *b = BoundaryType::NotWordBoundary;
-            }
+                BoundaryType::NotWordBoundary
+            };
             #[cfg(not(feature = "model-quantize"))]
             {
                 *s = y;
@@ -445,11 +445,9 @@ impl MultithreadPredictor {
         let mut n_chunks = 0;
         let mut ys_pool = self.ys_pool.borrow_mut();
         for start in (0..sentence.boundaries.len()).step_by(self.chunk_size) {
-            let ys = if let Some(ys) = ys_pool.pop() {
-                ys
-            } else {
-                vec![ScoreValue::default(); self.chunk_size]
-            };
+            let ys = ys_pool
+                .pop()
+                .unwrap_or_else(|| vec![ScoreValue::default(); self.chunk_size]);
             let sentence = Arc::clone(&sentence);
             let end = std::cmp::min(start + self.chunk_size, sentence.boundaries.len());
             self.task_tx.send((sentence, start..end, ys)).unwrap();
@@ -459,11 +457,11 @@ impl MultithreadPredictor {
         for _ in 0..n_chunks {
             let (ys, range) = self.result_rx.recv().unwrap();
             for (&y, b) in ys.iter().zip(&mut boundaries[range]) {
-                if y >= ScoreValue::default() {
-                    *b = BoundaryType::WordBoundary;
+                *b = if y >= ScoreValue::default() {
+                    BoundaryType::WordBoundary
                 } else {
-                    *b = BoundaryType::NotWordBoundary;
-                }
+                    BoundaryType::NotWordBoundary
+                };
             }
             ys_pool.push(ys);
         }
@@ -491,11 +489,9 @@ impl MultithreadPredictor {
         let mut n_chunks = 0;
         let mut ys_pool = self.ys_pool.borrow_mut();
         for start in (0..sentence.boundaries.len()).step_by(self.chunk_size) {
-            let ys = if let Some(ys) = ys_pool.pop() {
-                ys
-            } else {
-                vec![ScoreValue::default(); self.chunk_size]
-            };
+            let ys = ys_pool
+                .pop()
+                .unwrap_or_else(|| vec![ScoreValue::default(); self.chunk_size]);
             let sentence = Arc::clone(&sentence);
             let end = std::cmp::min(start + self.chunk_size, sentence.boundaries.len());
             self.task_tx.send((sentence, start..end, ys)).unwrap();
@@ -508,11 +504,11 @@ impl MultithreadPredictor {
                 .iter()
                 .zip(boundaries[range.clone()].iter_mut().zip(&mut scores[range]))
             {
-                if y >= ScoreValue::default() {
-                    *b = BoundaryType::WordBoundary;
+                *b = if y >= ScoreValue::default() {
+                    BoundaryType::WordBoundary
                 } else {
-                    *b = BoundaryType::NotWordBoundary;
-                }
+                    BoundaryType::NotWordBoundary
+                };
                 #[cfg(not(feature = "model-quantize"))]
                 {
                     *s = y;

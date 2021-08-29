@@ -18,13 +18,11 @@ impl<'a> FeatureIDManager<'a> {
     }
 
     pub fn get_id(&mut self, feature: Feature<'a>) -> u32 {
-        if let Some(&id) = self.map.get(&feature) {
-            id
-        } else {
+        self.map.get(&feature).copied().unwrap_or_else(|| {
             let new_id = self.map.len() as u32;
             self.map.insert(feature, new_id);
             new_id
-        }
+        })
     }
 }
 
@@ -49,13 +47,11 @@ impl LazyIndexSort {
     }
 
     pub fn get_id(&mut self, key: &[u8]) -> u64 {
-        if let Some(&id) = self.map.get(key) {
-            id
-        } else {
+        self.map.get(key).copied().unwrap_or_else(|| {
             let new_id = self.map.len() as u64;
             self.map.insert(key.into(), new_id);
             new_id
-        }
+        })
     }
 
     pub fn sort(&mut self) -> Vec<usize> {

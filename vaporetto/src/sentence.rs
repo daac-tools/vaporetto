@@ -48,15 +48,15 @@ impl CharacterType {
             0x41..=0x5A | 0x61..=0x7A | 0xFF21..=0xFF3A | 0xFF41..=0xFF5A => Self::Roman,
             0x3040..=0x3096 => Self::Hiragana,
             0x30A0..=0x30FA | 0x30FC..=0x30FF | 0xFF66..=0xFF9F => Self::Katakana,
-            0x3400..=0x4DBF      // CJK Unified Ideographs Extension A
-            | 0x4E00..=0x9FFF    // CJK Unified Ideographs
-            | 0xF900..=0xFAFF    // CJK Compatibility Ideographs
-            | 0x20000..=0x2A6DF  // CJK Unified Ideographs Extension B
-            | 0x2A700..=0x2B73F  // CJK Unified Ideographs Extension C
-            | 0x2B740..=0x2B81F  // CJK Unified Ideographs Extension D
-            | 0x2B820..=0x2CEAF  // CJK Unified Ideographs Extension E
-            | 0x2F800..=0x2FA1F  // CJK Compatibility Ideographs Supplement
-            => Self::Kanji,
+            0x3400..=0x4DBF          // CJK Unified Ideographs Extension A
+                | 0x4E00..=0x9FFF    // CJK Unified Ideographs
+                | 0xF900..=0xFAFF    // CJK Compatibility Ideographs
+                | 0x20000..=0x2A6DF  // CJK Unified Ideographs Extension B
+                | 0x2A700..=0x2B73F  // CJK Unified Ideographs Extension C
+                | 0x2B740..=0x2B81F  // CJK Unified Ideographs Extension D
+                | 0x2B820..=0x2CEAF  // CJK Unified Ideographs Extension E
+                | 0x2F800..=0x2FA1F  // CJK Compatibility Ideographs Supplement
+                => Self::Kanji,
             _ => Self::Other,
         }
     }
@@ -236,11 +236,11 @@ impl Sentence {
                 }
                 (_, _) => {
                     if !chars.is_empty() {
-                        if prev_boundary {
-                            boundaries.push(BoundaryType::WordBoundary);
+                        boundaries.push(if prev_boundary {
+                            BoundaryType::WordBoundary
                         } else {
-                            boundaries.push(BoundaryType::NotWordBoundary);
-                        }
+                            BoundaryType::NotWordBoundary
+                        });
                     }
                     prev_boundary = false;
                     escape = false;
@@ -442,17 +442,11 @@ impl Sentence {
         let mut result = String::with_capacity(self.text.len() + chars.len() - 1);
         result.push(chars[0]);
         for (&c, b) in chars[1..].iter().zip(&self.boundaries) {
-            match b {
-                BoundaryType::WordBoundary => {
-                    result.push('|');
-                }
-                BoundaryType::NotWordBoundary => {
-                    result.push('-');
-                }
-                BoundaryType::Unknown => {
-                    result.push(' ');
-                }
-            }
+            result.push(match b {
+                BoundaryType::WordBoundary => '|',
+                BoundaryType::NotWordBoundary => '-',
+                BoundaryType::Unknown => ' ',
+            });
             result.push(c);
         }
         result
