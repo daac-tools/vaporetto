@@ -2,7 +2,16 @@
 name = "vaporetto_rules"
 version = "0.1.0"
 edition = "2018"
+authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
+description = "Rule-base filters for Vaporetto"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/legalforce-research/vaporetto"
+repository = "https://github.com/legalforce-research/vaporetto"
+readme = "README.md"
+keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
+categories = ["text-processing"]
+autotests = false
 
 [dependencies]
 unicode-segmentation = "1.8.0"  # MIT OT Apache-2.0
-vaporetto = { path = "../vaporetto" }  # MIT OT Apache-2.0
+vaporetto = { path = "../vaporetto", version = "0.1" }  # MIT OT Apache-2.0
