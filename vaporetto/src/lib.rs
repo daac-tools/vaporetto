@@ -5,6 +5,7 @@
 //! Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 //!
 //! ## Examples
+//!
 //! ```no_run
 //! use std::fs::File;
 //! use std::io::{prelude::*, stdin, BufReader};

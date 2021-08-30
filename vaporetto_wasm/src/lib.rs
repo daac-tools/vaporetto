@@ -2,11 +2,13 @@ use std::io::Cursor;
 
 use js_sys::{Array, Object};
 use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
+use vaporetto_rules::{SentenceFilter, sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter}};
 use wasm_bindgen::{prelude::*, JsValue};
 
 #[wasm_bindgen]
 pub struct Vaporetto {
     predictor: Predictor,
+    post_filters: Vec<Box<dyn SentenceFilter>>
 }
 
 #[wasm_bindgen]
@@ -16,7 +18,11 @@ impl Vaporetto {
         let mut f = Cursor::new(include_bytes!("../../model/kftt.model"));
         let model = Model::read(&mut f).unwrap();
         let predictor = Predictor::new(model);
-        Self { predictor }
+        let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
+            Box::new(ConcatGraphemeClustersFilter::new()),
+            Box::new(KyteaWsConstFilter::new(CharacterType::Digit)),
+        ];
+        Self { predictor, post_filters }
     }
 
     #[wasm_bindgen]
@@ -30,8 +36,7 @@ impl Vaporetto {
             return JsValue::NULL.into();
         }
         let s = self.predictor.predict_partial_with_score(s, start..end);
-        let s = vaporetto_rules::concat_grapheme_clusters(s);
-        let s = vaporetto_rules::concat_cons_char_types(s, CharacterType::Digit);
+        let s = self.post_filters.iter().fold(s, |s, filter| filter.filter(s));
 
         let result = Array::new();
         for (&score, &b) in s.boundary_scores().unwrap()[start..end]
