@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_rules"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2018"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Rule-base filters for Vaporetto"
