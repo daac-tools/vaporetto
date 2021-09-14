@@ -382,9 +382,9 @@ impl Sentence {
     /// ```
     pub fn from_partial_annotation<S>(labeled_text: S) -> Result<Self>
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
-        let labeled_text = labeled_text.into();
+        let labeled_text = labeled_text.as_ref();
 
         if labeled_text.is_empty() {
             return Err(anyhow!("`labeled_text` is empty"));
