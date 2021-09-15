@@ -1,7 +1,7 @@
-use crate::da_ahocorasick::DoubleArrayAhoCorasick;
 use crate::sentence::{BoundaryType, Sentence};
 
 use anyhow::{anyhow, Result};
+use daachorse::DoubleArrayAhoCorasick;
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub enum FeatureContent<'a> {
@@ -94,7 +94,7 @@ impl FeatureExtractor {
                 });
             }
         }
-        for m in self.dict_ac.find_iter(&sentence.text) {
+        for m in self.dict_ac.find_overlapping_iter(&sentence.text) {
             let start = sentence.str_to_char_pos[m.start()];
             let end = sentence.str_to_char_pos[m.end()];
             let feature = FeatureContent::DictionaryWord(self.dict_word_size[m.pattern()]);

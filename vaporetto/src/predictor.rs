@@ -12,7 +12,7 @@ use fst::raw::Fst;
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::da_ahocorasick::{DoubleArrayAhoCorasick, DoubleArrayAhoCorasickBuilder};
+use daachorse::DoubleArrayAhoCorasick;
 use crate::model::{Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 
@@ -71,16 +71,8 @@ impl Predictor {
             .map(|ws| [ws[0] as i32, ws[1] as i32, ws[2] as i32])
             .collect();
 
-        let word_pma = DoubleArrayAhoCorasickBuilder::new(65536, 65536)
-            .unwrap()
-            .match_shorter_suffix(false)
-            .build(words)
-            .unwrap();
-        let type_pma = DoubleArrayAhoCorasickBuilder::new(65536, 65536)
-            .unwrap()
-            .match_shorter_suffix(false)
-            .build(types)
-            .unwrap();
+        let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
+        let type_pma = DoubleArrayAhoCorasick::new(types).unwrap();
         let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
         Self {
             word_pma,
@@ -137,7 +129,7 @@ impl Predictor {
         let text_end = sentence.char_to_str_pos[char_end];
         let text = &sentence.text[text_start..text_end];
         let padding = start - char_start + 1;
-        for m in self.word_pma.find_iter(&text) {
+        for m in self.word_pma.find_overlapping_no_suffix_iter(&text) {
             let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
             let offset = m_end as isize - self.char_window_size as isize - padding as isize;
             let weights = &self.word_weights[m.pattern()];
@@ -165,7 +157,7 @@ impl Predictor {
         );
         let char_type = &sentence.char_type[type_start..type_end];
         let padding = start - type_start + 1;
-        for m in self.type_pma.find_iter(&char_type) {
+        for m in self.type_pma.find_overlapping_no_suffix_iter(&char_type) {
             let offset = m.end() as isize - self.type_window_size as isize - padding as isize;
             let weights = &self.type_weights[m.pattern()];
             if offset >= 0 {
@@ -194,7 +186,7 @@ impl Predictor {
         let text_end = sentence.char_to_str_pos[char_end];
         let text = &sentence.text[text_start..text_end];
         let padding = start - char_start + 1;
-        for m in self.dict_pma.find_iter(&text) {
+        for m in self.dict_pma.find_overlapping_iter(&text) {
             let m_start = sentence.str_to_char_pos[m.start() + text_start] - char_start;
             let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
             let idx = if self.dict_word_wise {
