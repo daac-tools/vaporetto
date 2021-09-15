@@ -17,7 +17,7 @@ struct Opt {
     #[structopt(long, default_value = "0")]
     n_threads: usize,
 
-    /// Number of threads
+    /// Chunk size of each thread
     #[structopt(long, default_value = "10")]
     mt_chunk_size: usize,
 
