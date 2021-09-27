@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let duration = start.elapsed();
     eprintln!("Elapsed: {} [sec]", duration.as_secs_f64());
     eprintln!(
-        "Speed: {} [boundarie/sec]",
+        "Speed: {} [boundaries/sec]",
         n_boundaries as f64 / duration.as_secs_f64()
     );
 
