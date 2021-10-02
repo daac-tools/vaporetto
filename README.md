@@ -50,3 +50,23 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
+
+## References
+
+* Graham Neubig, Yosuke Nakata, and Shinsuke Mori. 2011. Pointwise prediction for
+  robust, adaptable Japanese morphological analysis. In Proceedings of the 49th
+  Annual Meeting of the Association for Computational Linguistics: Human Language
+  Technologies: short papers - Volume 2 (HLT ‘11). Association for Computational
+  Linguistics, USA, 529–533. https://aclanthology.org/P11-2093
+
+* 森 信介, 中田 陽介, Neubig Graham, 河原 達也, 点予測による形態素解析, 自然言語処理, 2011, 18 巻,
+  4 号, p. 367-381, 公開日 2011/12/28, Online ISSN 2185-8314, Print ISSN 1340-7619,
+  https://doi.org/10.5715/jnlp.18.367
+
+* Alfred V. Aho and Margaret J. Corasick. 1975. Efficient string matching: an aid to
+  bibliographic search. Commun. ACM 18, 6 (June 1975), 333–340.
+  DOI:https://doi.org/10.1145/360825.360855
+
+* Jun-ichi Aoe. 1989. An Efficient Digital Search Algorithm by Using a Double-Array
+  Structure. IEEE Trans. Softw. Eng. 15, 9 (September 1989), 1066–1077.
+  DOI:https://doi.org/10.1109/32.31365
