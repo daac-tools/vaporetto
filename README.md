@@ -5,6 +5,8 @@ Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
 
+[Technical details](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (Japanese)
+
 ## Overview
 
 This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
