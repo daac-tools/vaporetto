@@ -39,7 +39,7 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 * Models:
   * KyTea and Vaporetto: Compact LR model (jp-0.4.7-6)
   * MeCab, Kuromoji, and Lindera: IPAdic
-  * Sudachi and Sudachi: system_core.dic (v20210802)
+  * Sudachi and Sudachi.rs: system_core.dic (v20210802)
 
 ### Results
 
