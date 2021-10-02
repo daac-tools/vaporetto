@@ -31,6 +31,48 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 % cargo run --release --bin convert_kytea_model -- --model-in ./jp-0.4.7-5.mod --model-out ./kytea.model
 ```
 
+## Speed Comparison of Various Tokenizers
+
+### Experimental Setup
+
+* Document: Japanese training data of Kyoto Free Translation Task
+* Models:
+  * KyTea and Vaporetto: Compact LR model (jp-0.4.7-6)
+  * MeCab, Kuromoji, and Lindera: IPAdic
+  * Sudachi and Sudachi: system_core.dic (v20210802)
+
+### Results
+
+* VM instance on Google Cloud Platform (c2-standard-16, Debian)
+
+  | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
+  | -------------------------- | ---------------------:|-------|
+  | KyTea (0.4.7)              |                 0.793 | 0.005 |
+  | Vaporetto (0.1.5)          |             **3.591** | 0.067 |
+  |                            |                       |       |
+  | MeCab (2020-09-14)         |                 2.778 | 0.025 |
+  |                            |                       |       |
+  | Kuromoji (Atilika's 0.9.0) |                 0.443 | 0.013 |
+  | Lindera (0.8.0)            |                 1.017 | 0.014 |
+  |                            |                       |       |
+  | Sudachi (0.5.2)            |                 0.257 | 0.007 |
+  | Sudachi.rs (2021-10-01)    |                 0.239 | 0.002 |
+
+* MacBook Pro (2017, Processor: 2.3 GHz Intel Core i5, Memory: 8 GB 2133 MHz LPDDR3)
+
+  | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
+  | -------------------------- | ---------------------:|-------|
+  | KyTea (0.4.7)              |                 0.500 | 0.008 |
+  | Vaporetto (0.1.5)          |             **2.773** | 0.103 |
+  |                            |                       |       |
+  | MeCab (2020-09-14)         |                 1.413 | 0.018 |
+  |                            |                       |       |
+  | Kuromoji (Atilika's 0.9.0) |                 1.219 | 0.013 |
+  | Lindera (0.8.0)            |                 0.547 | 0.014 |
+  |                            |                       |       |
+  | Sudachi (0.5.2)            |                 0.445 | 0.026 |
+  | Sudachi.rs (2021-10-01)    |                 0.147 | 0.002 |
+
 ## Disclaimer
 
 This software is developed by LegalForce, Inc.,
