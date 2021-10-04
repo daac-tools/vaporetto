@@ -1,0 +1,114 @@
+--- a/kytea/src/lib/kytea.cpp
++++ b/kytea/src/lib/kytea.cpp
+@@ -19,6 +19,7 @@
+ #include <cmath>
+ #include <sstream>
+ #include <iostream>
++#include <chrono>
+ #include <kytea/config.h>
+ #include <kytea/kytea.h>
+ #include <kytea/dictionary.h>
+@@ -1206,6 +1207,8 @@ void Kytea::analyze() {
+     for(int i = 0; i < config_->getNumTags(); i++)
+         out->setDoTag(i,config_->getDoTag(i));
+ 
++    chrono::steady_clock::time_point begin = chrono::steady_clock::now();
++
+     KyteaSentence* next;
+     while((next = in->readSentence()) != 0) {
+         if(config_->getDoWS())
+@@ -1218,6 +1221,9 @@ void Kytea::analyze() {
+         delete next;
+     }
+ 
++    chrono::steady_clock::time_point end = chrono::steady_clock::now();
++    cerr << "Elapsed-kytea: " << (double) chrono::duration_cast<chrono::milliseconds>(end - begin).count() / 1000 << " [sec]" << endl;
++
+     delete in;
+     delete out;
+     if(inStr) delete inStr;
+--- a/mecab/mecab/src/tagger.cpp
++++ b/mecab/mecab/src/tagger.cpp
+@@ -6,6 +6,7 @@
+ #include <cstring>
+ #include <iostream>
+ #include <iterator>
++#include <chrono>
+ #include "common.h"
+ #include "connector.h"
+ #include "mecab.h"
+@@ -1229,6 +1230,8 @@ int mecab_do(int argc, char **argv) {
+     WHAT_ERROR("cannot create tagger");
+   }
+ 
++  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
++
+   for (size_t i = 0; i < rest.size(); ++i) {
+     MeCab::istream_wrapper ifs(rest[i].c_str());
+     if (!*ifs) {
+@@ -1255,6 +1258,8 @@ int mecab_do(int argc, char **argv) {
+         std::strncpy(ibuf, sentence.c_str(), ibufsize);
+       }
+       if (ifs->eof() && !ibuf[0]) {
++        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
++        std::cerr << "Elapsed-mecab: " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() / 1000 << " [sec]" << std::endl;
+         return false;
+       }
+       if (ifs->fail()) {
+--- a/lindera/lindera-cli/src/main.rs
++++ b/lindera/lindera-cli/src/main.rs
+@@ -2,6 +2,7 @@ use std::fs;
+ use std::io;
+ use std::io::{BufRead, BufReader};
+ use std::path::Path;
++use std::time::Instant;
+ 
+ use clap::{crate_authors, crate_description, crate_version, App, AppSettings, Arg};
+ 
+@@ -123,6 +124,8 @@ fn main() -> LinderaResult<()> {
+         Box::new(BufReader::new(io::stdin()))
+     };
+ 
++    let start = Instant::now();
++
+     loop {
+         // read the text to be tokenized from stdin
+         let mut text = String::new();
+@@ -145,5 +148,8 @@ fn main() -> LinderaResult<()> {
+         };
+     }
+ 
++    let duration = start.elapsed();
++    eprintln!("Elapsed-lindera: {} [sec]", duration.as_secs_f64());
++
+     Ok(())
+ }
+--- a/sudachi.rs/sudachi-cli/src/main.rs
++++ b/sudachi.rs/sudachi-cli/src/main.rs
+@@ -18,6 +18,7 @@ use std::fs::File;
+ use std::io::{self, BufRead, BufReader, BufWriter, Write};
+ use std::path::PathBuf;
+ use std::process;
++use std::time::Instant;
+ 
+ use structopt::StructOpt;
+ 
+@@ -122,6 +123,8 @@ fn main() {
+ 
+     let splitter = SentenceSplitter::with_limit(32 * 1024);
+ 
++    let start = Instant::now();
++
+     // tokenize and output results
+     for line in reader.lines() {
+         let input = line.expect("Failed to read line");
+@@ -139,6 +142,9 @@ fn main() {
+                 .expect("Failed to write output");
+         }
+     }
++
++    let duration = start.elapsed();
++    eprintln!("Elapsed-sudachi.rs: {} [sec]", duration.as_secs_f64());
+ }
+ 
+ /// Format and write morphemes into writer
