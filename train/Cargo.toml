@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-structopt = "0.3"  # MIT OT Apache-2.0
-vaporetto = { path = "../vaporetto", features = ["train"] }  # MIT OT Apache-2.0
+structopt = "0.3"  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", features = ["train"] }  # MIT or Apache-2.0
