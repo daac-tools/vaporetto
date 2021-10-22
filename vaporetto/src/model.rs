@@ -229,7 +229,13 @@ impl Model {
         type_window_size: usize,
         dict_word_max_size: usize,
     ) -> Self {
-        let bias = model.label_bias(BoundaryType::WordBoundary as i32);
+        let wb_idx = model
+            .labels()
+            .iter()
+            .position(|&cls| BoundaryType::WordBoundary as i32 == cls)
+            .unwrap() as i32;
+
+        let bias = model.label_bias(wb_idx);
         let mut word_sorter = LazyIndexSort::new();
         let mut type_sorter = LazyIndexSort::new();
         let mut word_weights_tmp = vec![];
@@ -243,9 +249,7 @@ impl Model {
         let mut weight_max = bias.abs();
         #[cfg(feature = "model-quantize")]
         for fid in 0..model.num_features() {
-            let weight = model
-                .feature_coefficient(fid as i32, BoundaryType::WordBoundary as i32)
-                .abs();
+            let weight = model.feature_coefficient(fid as i32, wb_idx).abs();
             if weight > weight_max {
                 weight_max = weight;
             }
@@ -257,8 +261,7 @@ impl Model {
         let bias = (bias / quantize_multiplier) as i16;
 
         for (feature, fid) in fid_manager.map {
-            let weight =
-                model.feature_coefficient(fid as i32 + 1, BoundaryType::WordBoundary as i32);
+            let weight = model.feature_coefficient(fid as i32 + 1, wb_idx);
             if weight > -EPSILON && weight < EPSILON {
                 continue;
             }
