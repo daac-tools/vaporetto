@@ -12,9 +12,9 @@ use fst::raw::Fst;
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
-use daachorse::DoubleArrayAhoCorasick;
 use crate::model::{Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
+use daachorse::DoubleArrayAhoCorasick;
 
 /// Predictor.
 pub struct Predictor {

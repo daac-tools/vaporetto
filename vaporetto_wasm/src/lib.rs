@@ -2,13 +2,16 @@ use std::io::Cursor;
 
 use js_sys::{Array, Object};
 use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
-use vaporetto_rules::{SentenceFilter, sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter}};
+use vaporetto_rules::{
+    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
+    SentenceFilter,
+};
 use wasm_bindgen::{prelude::*, JsValue};
 
 #[wasm_bindgen]
 pub struct Vaporetto {
     predictor: Predictor,
-    post_filters: Vec<Box<dyn SentenceFilter>>
+    post_filters: Vec<Box<dyn SentenceFilter>>,
 }
 
 #[wasm_bindgen]
@@ -22,7 +25,10 @@ impl Vaporetto {
             Box::new(ConcatGraphemeClustersFilter::new()),
             Box::new(KyteaWsConstFilter::new(CharacterType::Digit)),
         ];
-        Self { predictor, post_filters }
+        Self {
+            predictor,
+            post_filters,
+        }
     }
 
     #[wasm_bindgen]
@@ -36,7 +42,10 @@ impl Vaporetto {
             return JsValue::NULL.into();
         }
         let s = self.predictor.predict_partial_with_score(s, start..end);
-        let s = self.post_filters.iter().fold(s, |s, filter| filter.filter(s));
+        let s = self
+            .post_filters
+            .iter()
+            .fold(s, |s, filter| filter.filter(s));
 
         let result = Array::new();
         for (&score, &b) in s.boundary_scores().unwrap()[start..end]

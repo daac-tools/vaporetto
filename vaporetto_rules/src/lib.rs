@@ -62,7 +62,10 @@ pub trait SentenceFilter {
     fn filter(&self, sentence: Sentence) -> Sentence;
 }
 
-pub trait StringFilter<S> where S: AsRef<str> {
+pub trait StringFilter<S>
+where
+    S: AsRef<str>,
+{
     /// Filter a specified string using rules.
     ///
     /// # Arguments:

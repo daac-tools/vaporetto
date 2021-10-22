@@ -20,7 +20,10 @@ impl Default for KyteaFullwidthFilter {
     }
 }
 
-impl<S> StringFilter<S> for KyteaFullwidthFilter where S: AsRef<str> {
+impl<S> StringFilter<S> for KyteaFullwidthFilter
+where
+    S: AsRef<str>,
+{
     /// Replace alphanumerics and symbols to full-width characters.
     ///
     /// # Arguments:
@@ -30,8 +33,7 @@ impl<S> StringFilter<S> for KyteaFullwidthFilter where S: AsRef<str> {
     /// # Returns
     ///
     /// A processed text.
-    fn filter(&self, string: S) -> String
-    {
+    fn filter(&self, string: S) -> String {
         let mut chars: Vec<_> = string.as_ref().chars().collect();
         for c in &mut chars {
             *c = match *c {
