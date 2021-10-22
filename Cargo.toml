@@ -5,6 +5,7 @@ members = [
     "vaporetto_rules",
     "predict",
     "train",
+    "evaluate",
     "convert_kytea_model",
     "vaporetto_wasm",
 ]
