@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 use fst::raw::Fst;
@@ -7,6 +8,40 @@ use crate::feature::{ExampleGenerator, FeatureExtractor};
 use crate::model::Model;
 use crate::sentence::Sentence;
 use crate::utils::FeatureIDManager;
+
+/// Solver type.
+#[derive(Clone, Copy, Debug)]
+pub enum SolverType {
+    L2RegularizedL2LossSVC = 1,
+    L1RegularizedL2LossSVC = 5,
+    L1RegularizedLogistic = 6,
+    L2RegularizedLogisticDual = 7,
+}
+
+impl FromStr for SolverType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Self::L2RegularizedL2LossSVC),
+            "5" => Ok(Self::L1RegularizedL2LossSVC),
+            "6" => Ok(Self::L1RegularizedLogistic),
+            "7" => Ok(Self::L2RegularizedLogisticDual),
+            _ => Err("Unsupported solver type."),
+        }
+    }
+}
+
+impl Into<liblinear::SolverType> for SolverType {
+    fn into(self) -> liblinear::SolverType {
+        match self {
+            Self::L2RegularizedL2LossSVC => liblinear::SolverType::L2R_L2LOSS_SVC,
+            Self::L1RegularizedL2LossSVC => liblinear::SolverType::L1R_L2LOSS_SVC,
+            Self::L1RegularizedLogistic => liblinear::SolverType::L1R_LR,
+            Self::L2RegularizedLogisticDual => liblinear::SolverType::L2R_LR_DUAL,
+        }
+    }
+}
 
 /// Dataset manager.
 #[cfg_attr(docsrs, doc(cfg(feature = "train")))]
@@ -169,11 +204,12 @@ impl Trainer {
     /// # Arguments
     ///
     /// * `dataset` - A dataset.
+    /// * `solver` - Solver type.
     ///
     /// # Returns
     ///
     /// A trained model.
-    pub fn train(&self, dataset: Dataset) -> Result<Model> {
+    pub fn train(&self, dataset: Dataset, solver: SolverType) -> Result<Model> {
         let mut builder = liblinear::Builder::new();
         let training_input =
             liblinear::util::TrainingInput::from_sparse_features(dataset.ys, dataset.xs)
@@ -181,7 +217,7 @@ impl Trainer {
         builder.problem().input_data(training_input).bias(self.bias);
         builder
             .parameters()
-            .solver_type(liblinear::SolverType::L1R_L2LOSS_SVC)
+            .solver_type(solver.into())
             .stopping_criterion(self.epsilon)
             .constraints_violation_cost(self.cost);
         let model = builder.build_model().map_err(|e| anyhow!(e.to_string()))?;

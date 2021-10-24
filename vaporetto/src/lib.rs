@@ -49,7 +49,7 @@ pub use sentence::{BoundaryType, CharacterType, Sentence};
 pub use predictor::MultithreadPredictor;
 
 #[cfg(feature = "train")]
-pub use trainer::{Dataset, Trainer};
+pub use trainer::{Dataset, SolverType, Trainer};
 
 #[cfg(feature = "kytea")]
 pub use kytea_model::KyteaModel;

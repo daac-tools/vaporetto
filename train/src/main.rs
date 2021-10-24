@@ -4,7 +4,7 @@ use std::io::{prelude::*, stderr, BufReader, BufWriter};
 use std::path::PathBuf;
 
 use structopt::{clap::ArgGroup, StructOpt};
-use vaporetto::{Dataset, Sentence, Trainer};
+use vaporetto::{Dataset, Sentence, SolverType, Trainer};
 
 #[derive(StructOpt, Debug)]
 #[structopt(
@@ -60,6 +60,10 @@ struct Opt {
     /// Whether to use a bias value in classifier training
     #[structopt(long)]
     no_bias: bool,
+
+    /// The solver. {1, 5, 6, 7} (see LIBLINEAR documentation for more details)
+    #[structopt(long, default_value = "1")]
+    solver: SolverType,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -126,7 +130,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Start training...");
     let trainer = Trainer::new(opt.eps, opt.cost, if opt.no_bias { 0. } else { 1. });
-    let model = trainer.train(dataset)?;
+    let model = trainer.train(dataset, opt.solver)?;
     eprintln!("Finish training.");
 
     let mut f = BufWriter::new(File::create(opt.model)?);
