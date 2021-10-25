@@ -12,9 +12,28 @@ use crate::utils::FeatureIDManager;
 /// Solver type.
 #[derive(Clone, Copy, Debug)]
 pub enum SolverType {
-    L2RegularizedL2LossSVC = 1,
+    /// L2-regularized logistic regression (primal).
+    L2RegularizedLogistic = 0,
+
+    /// L2-regularized L2-loss support vector classification (dual).
+    L2RegularizedL2LossSVCDual = 1,
+
+    /// L2-regularized L2-loss support vector classification (primal).
+    L2RegularizedL2LossSVC = 2,
+
+    /// L2-regularized L1-loss support vector classification (dual)
+    L2RegularizedL1LossSVCDual = 3,
+
+    /// support vector classification by Crammer and Singer
+    CrammerSingerSVC = 4,
+
+    /// L1-regularized L2-loss support vector classification
     L1RegularizedL2LossSVC = 5,
+
+    /// L1-regularized logistic regression
     L1RegularizedLogistic = 6,
+
+    /// L2-regularized logistic regression (dual).
     L2RegularizedLogisticDual = 7,
 }
 
@@ -23,7 +42,11 @@ impl FromStr for SolverType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "1" => Ok(Self::L2RegularizedL2LossSVC),
+            "0" => Ok(Self::L2RegularizedLogistic),
+            "1" => Ok(Self::L2RegularizedL2LossSVCDual),
+            "2" => Ok(Self::L2RegularizedL2LossSVC),
+            "3" => Ok(Self::L2RegularizedL1LossSVCDual),
+            "4" => Ok(Self::CrammerSingerSVC),
             "5" => Ok(Self::L1RegularizedL2LossSVC),
             "6" => Ok(Self::L1RegularizedLogistic),
             "7" => Ok(Self::L2RegularizedLogisticDual),
@@ -32,13 +55,17 @@ impl FromStr for SolverType {
     }
 }
 
-impl Into<liblinear::SolverType> for SolverType {
-    fn into(self) -> liblinear::SolverType {
-        match self {
-            Self::L2RegularizedL2LossSVC => liblinear::SolverType::L2R_L2LOSS_SVC,
-            Self::L1RegularizedL2LossSVC => liblinear::SolverType::L1R_L2LOSS_SVC,
-            Self::L1RegularizedLogistic => liblinear::SolverType::L1R_LR,
-            Self::L2RegularizedLogisticDual => liblinear::SolverType::L2R_LR_DUAL,
+impl From<SolverType> for liblinear::SolverType {
+    fn from(solver: SolverType) -> Self {
+        match solver {
+            SolverType::L2RegularizedLogistic => Self::L2R_LR,
+            SolverType::L2RegularizedL2LossSVCDual => Self::L2R_L2LOSS_SVC_DUAL,
+            SolverType::L2RegularizedL2LossSVC => Self::L2R_L2LOSS_SVC,
+            SolverType::L2RegularizedL1LossSVCDual => Self::L2R_L1LOSS_SVC_DUAL,
+            SolverType::CrammerSingerSVC => Self::MCSVM_CS,
+            SolverType::L1RegularizedL2LossSVC => Self::L1R_L2LOSS_SVC,
+            SolverType::L1RegularizedLogistic => Self::L1R_LR,
+            SolverType::L2RegularizedLogisticDual => Self::L2R_LR_DUAL,
         }
     }
 }

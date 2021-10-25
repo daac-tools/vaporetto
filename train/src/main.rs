@@ -61,7 +61,7 @@ struct Opt {
     #[structopt(long)]
     no_bias: bool,
 
-    /// The solver. {1, 5, 6, 7} (see LIBLINEAR documentation for more details)
+    /// The solver. {0, 1, 2, 3, 4, 5, 6, 7} (see LIBLINEAR documentation for more details)
     #[structopt(long, default_value = "1")]
     solver: SolverType,
 }
