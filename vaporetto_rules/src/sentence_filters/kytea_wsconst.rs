@@ -17,7 +17,7 @@ impl KyteaWsConstFilter {
     /// # Returns
     ///
     /// A new KyteaWsConstFilter.
-    pub fn new(char_type: CharacterType) -> Self {
+    pub const fn new(char_type: CharacterType) -> Self {
         Self { char_type }
     }
 }
