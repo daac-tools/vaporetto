@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Range;
 
 #[cfg(feature = "multithreading")]
@@ -6,8 +7,6 @@ use std::cell::RefCell;
 use std::sync::Arc;
 #[cfg(feature = "multithreading")]
 use std::thread;
-
-use fst::raw::Fst;
 
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
@@ -45,22 +44,9 @@ impl Predictor {
     ///
     /// A new predictor.
     pub fn new(model: Model) -> Self {
-        let mut words = Vec::with_capacity(model.word_fst.len());
-        for i in 0..model.word_fst.len() as u64 {
-            words.push(model.word_fst.get_key(i).unwrap())
-        }
-        let mut types = Vec::with_capacity(model.type_fst.len());
-        for i in 0..model.type_fst.len() as u64 {
-            types.push(model.type_fst.get_key(i).unwrap())
-        }
-        let mut dict = Vec::with_capacity(model.dict_fst.len());
-        for i in 0..model.dict_fst.len() as u64 {
-            dict.push(model.dict_fst.get_key(i).unwrap())
-        }
-
         let bias = model.bias;
-        let word_weights = Self::merge_weights(&model.word_fst, &model.word_weights);
-        let type_weights = Self::merge_weights(&model.type_fst, &model.type_weights);
+        let word_weights = Self::merge_weights(&model.words, &model.word_weights);
+        let type_weights = Self::merge_weights(&model.types, &model.type_weights);
         let dict_weights = model.dict_weights;
 
         #[cfg(feature = "model-quantize")]
@@ -71,9 +57,9 @@ impl Predictor {
             .map(|ws| [ws[0] as i32, ws[1] as i32, ws[2] as i32])
             .collect();
 
-        let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
-        let type_pma = DoubleArrayAhoCorasick::new(types).unwrap();
-        let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
+        let word_pma = DoubleArrayAhoCorasick::new(model.words).unwrap();
+        let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
+        let dict_pma = DoubleArrayAhoCorasick::new(model.dict).unwrap();
         Self {
             word_pma,
             type_pma,
@@ -92,14 +78,18 @@ impl Predictor {
         }
     }
 
-    fn merge_weights(fst: &Fst<Vec<u8>>, weights: &[Vec<i16>]) -> Vec<Vec<i32>> {
+    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<i16>]) -> Vec<Vec<i32>> {
         let mut result = vec![];
-        for i in 0..fst.len() as u64 {
-            let seq = fst.get_key(i).unwrap();
+        let word_ids = words
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, w)| (w, i))
+            .collect::<HashMap<Vec<u8>, usize>>();
+        for seq in words {
             let mut new_weights: Option<Vec<_>> = None;
             for st in (0..seq.len()).rev() {
-                if let Some(idx) = fst.get(&seq[st..]) {
-                    let idx = idx.value() as usize;
+                if let Some(&idx) = word_ids.get(&seq[st..]) {
                     if let Some(new_weights) = new_weights.as_mut() {
                         for (w_new, w) in new_weights.iter_mut().zip(&weights[idx]) {
                             *w_new += *w as ScoreValue;

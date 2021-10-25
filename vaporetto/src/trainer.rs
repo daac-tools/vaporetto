@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use fst::raw::Fst;
 
 use crate::feature::{ExampleGenerator, FeatureExtractor};
 use crate::model::Model;
@@ -73,7 +72,7 @@ impl From<SolverType> for liblinear::SolverType {
 /// Dataset manager.
 #[cfg_attr(docsrs, doc(cfg(feature = "train")))]
 pub struct Dataset<'a> {
-    dictionary_fst: Fst<Vec<u8>>,
+    dictionary: Vec<Vec<u8>>,
     feature_extractor: FeatureExtractor,
     example_generator: ExampleGenerator,
     char_window_size: usize,
@@ -93,7 +92,7 @@ impl<'a> Dataset<'a> {
     /// * `char_window_size` - The character window size.
     /// * `type_ngram_size` - The character type n-gram length.
     /// * `type_window_size` - The character type window size.
-    /// * `dictionary` - A word dictionary (must be alphabetical ascending order).
+    /// * `dictionary` - A word dictionary.
     /// * `dict_word_max_size` - Dictionary words greater than this value will be grouped together.
     ///
     /// # Returns
@@ -116,13 +115,11 @@ impl<'a> Dataset<'a> {
         P: AsRef<[u8]> + AsRef<str>,
     {
         Ok(Self {
-            dictionary_fst: Fst::from_iter_map(
-                dictionary
-                    .as_ref()
-                    .iter()
-                    .enumerate()
-                    .map(|(i, word)| (word, i as u64)),
-            )?,
+            dictionary: dictionary
+                .as_ref()
+                .iter()
+                .map(|word| (word.as_ref() as &[u8]).to_vec())
+                .collect(),
             feature_extractor: FeatureExtractor::new(
                 char_ngram_size,
                 type_ngram_size,
@@ -252,7 +249,7 @@ impl Trainer {
         Ok(Model::from_liblinear_model(
             model,
             dataset.fid_manager,
-            dataset.dictionary_fst,
+            dataset.dictionary,
             dataset.char_window_size,
             dataset.type_window_size,
             dataset.dict_word_max_size,

@@ -1,5 +1,5 @@
 #[cfg(feature = "train")]
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 #[cfg(feature = "train")]
 use crate::feature::Feature;
@@ -34,33 +34,24 @@ impl<'a> Default for FeatureIDManager<'a> {
 }
 
 #[cfg(feature = "train")]
-pub struct LazyIndexSort {
-    pub(crate) map: BTreeMap<Vec<u8>, u64>,
+pub struct StringIdManager {
+    pub(crate) map: HashMap<Vec<u8>, usize>,
 }
 
 #[cfg(feature = "train")]
-impl LazyIndexSort {
+impl StringIdManager {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: HashMap::new(),
         }
     }
 
-    pub fn get_id(&mut self, key: &[u8]) -> u64 {
+    pub fn get_id(&mut self, key: &[u8]) -> usize {
         self.map.get(key).copied().unwrap_or_else(|| {
-            let new_id = self.map.len() as u64;
+            let new_id = self.map.len();
             self.map.insert(key.into(), new_id);
             new_id
         })
-    }
-
-    pub fn sort(&mut self) -> Vec<usize> {
-        let mut result = Vec::with_capacity(self.map.len());
-        for (new_id, (_, id)) in self.map.iter_mut().enumerate() {
-            result.push(*id as usize);
-            *id = new_id as u64;
-        }
-        result
     }
 }
 

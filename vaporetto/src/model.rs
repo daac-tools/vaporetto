@@ -2,14 +2,13 @@ use std::io::{Read, Write};
 
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use fst::raw::Fst;
 
 #[cfg(feature = "train")]
 use crate::feature::FeatureContent;
 #[cfg(feature = "train")]
 use crate::sentence::BoundaryType;
 #[cfg(feature = "train")]
-use crate::utils::{FeatureIDManager, LazyIndexSort};
+use crate::utils::{FeatureIDManager, StringIdManager};
 #[cfg(feature = "train")]
 use liblinear::LibLinearModel;
 #[cfg(feature = "train")]
@@ -26,9 +25,9 @@ pub type ScoreValue = i32;
 
 /// Model data.
 pub struct Model {
-    pub(crate) word_fst: Fst<Vec<u8>>,
-    pub(crate) type_fst: Fst<Vec<u8>>,
-    pub(crate) dict_fst: Fst<Vec<u8>>,
+    pub(crate) words: Vec<Vec<u8>>,
+    pub(crate) types: Vec<Vec<u8>>,
+    pub(crate) dict: Vec<Vec<u8>>,
 
     pub(crate) word_weights: Vec<Vec<WeightValue>>,
     pub(crate) type_weights: Vec<Vec<WeightValue>>,
@@ -55,15 +54,23 @@ impl Model {
     ///
     /// When `wtr` generates an error, it will be returned as is.
     pub fn write<W: Write>(&self, wtr: &mut W) -> Result<()> {
-        wtr.write_u64::<BigEndian>(self.word_fst.as_bytes().len() as u64)?;
-        wtr.write_all(self.word_fst.as_bytes())?;
+        wtr.write_u64::<BigEndian>(self.words.len() as u64)?;
+        for word in &self.words {
+            wtr.write_u64::<BigEndian>(word.len() as u64)?;
+            wtr.write_all(word)?;
+        }
 
-        wtr.write_u64::<BigEndian>(self.type_fst.as_bytes().len() as u64)?;
-        wtr.write_all(self.type_fst.as_bytes())?;
+        wtr.write_u64::<BigEndian>(self.types.len() as u64)?;
+        for word in &self.types {
+            wtr.write_u64::<BigEndian>(word.len() as u64)?;
+            wtr.write_all(word)?;
+        }
 
-        wtr.write_u64::<BigEndian>(self.dict_fst.as_bytes().len() as u64)?;
-        wtr.write_all(self.dict_fst.as_bytes())?;
-
+        wtr.write_u64::<BigEndian>(self.dict.len() as u64)?;
+        for word in &self.dict {
+            wtr.write_u64::<BigEndian>(word.len() as u64)?;
+            wtr.write_all(word)?;
+        }
         #[cfg(feature = "model-quantize")]
         wtr.write_f64::<BigEndian>(self.quantize_multiplier)?;
 
@@ -126,20 +133,32 @@ impl Model {
     ///
     /// When `rdr` generates an error, it will be returned as is.
     pub fn read<R: Read>(rdr: &mut R) -> Result<Self> {
-        let word_fst_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut word_fst_bytes = vec![0; word_fst_size];
-        rdr.read_exact(&mut word_fst_bytes)?;
-        let word_fst = Fst::new(word_fst_bytes)?;
+        let words_size = rdr.read_u64::<BigEndian>()? as usize;
+        let mut words = Vec::with_capacity(words_size);
+        for _ in 0..words_size {
+            let word_size = rdr.read_u64::<BigEndian>()? as usize;
+            let mut word_bytes = vec![0; word_size];
+            rdr.read_exact(&mut word_bytes)?;
+            words.push(word_bytes);
+        }
 
-        let type_fst_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut type_fst_bytes = vec![0; type_fst_size];
-        rdr.read_exact(&mut type_fst_bytes)?;
-        let type_fst = Fst::new(type_fst_bytes)?;
+        let types_size = rdr.read_u64::<BigEndian>()? as usize;
+        let mut types = Vec::with_capacity(types_size);
+        for _ in 0..types_size {
+            let word_size = rdr.read_u64::<BigEndian>()? as usize;
+            let mut word_bytes = vec![0; word_size];
+            rdr.read_exact(&mut word_bytes)?;
+            types.push(word_bytes);
+        }
 
-        let dict_fst_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut dict_fst_bytes = vec![0; dict_fst_size];
-        rdr.read_exact(&mut dict_fst_bytes)?;
-        let dict_fst = Fst::new(dict_fst_bytes)?;
+        let dict_size = rdr.read_u64::<BigEndian>()? as usize;
+        let mut dict = Vec::with_capacity(dict_size);
+        for _ in 0..dict_size {
+            let word_size = rdr.read_u64::<BigEndian>()? as usize;
+            let mut word_bytes = vec![0; word_size];
+            rdr.read_exact(&mut word_bytes)?;
+            dict.push(word_bytes);
+        }
 
         #[cfg(feature = "model-quantize")]
         let quantize_multiplier = rdr.read_f64::<BigEndian>()?;
@@ -203,9 +222,9 @@ impl Model {
         let type_window_size = rdr.read_u64::<BigEndian>()? as usize;
 
         Ok(Self {
-            word_fst,
-            type_fst,
-            dict_fst,
+            words,
+            types,
+            dict,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier,
@@ -224,7 +243,7 @@ impl Model {
     pub(crate) fn from_liblinear_model(
         model: impl LibLinearModel,
         fid_manager: FeatureIDManager,
-        dict_fst: Fst<Vec<u8>>,
+        dict: Vec<Vec<u8>>,
         char_window_size: usize,
         type_window_size: usize,
         dict_word_max_size: usize,
@@ -236,14 +255,15 @@ impl Model {
             .unwrap() as i32;
 
         let bias = model.label_bias(wb_idx);
-        let mut word_sorter = LazyIndexSort::new();
-        let mut type_sorter = LazyIndexSort::new();
-        let mut word_weights_tmp = vec![];
-        let mut type_weights_tmp = vec![];
-
+        let mut words = vec![];
+        let mut types = vec![];
+        let mut word_weights = vec![];
+        let mut type_weights = vec![];
         let mut dict_weights: Vec<[_; 3]> = (0..dict_word_max_size)
             .map(|_| [ScoreValue::default(); 3])
             .collect();
+        let mut word_ids = StringIdManager::new();
+        let mut type_ids = StringIdManager::new();
 
         #[cfg(feature = "model-quantize")]
         let mut weight_max = bias.abs();
@@ -268,44 +288,43 @@ impl Model {
             #[cfg(not(feature = "model-quantize"))]
             match feature.feature {
                 FeatureContent::CharacterNgram(word) => {
-                    let id = word_sorter.get_id(word.as_bytes()) as usize;
-                    if id == word_weights_tmp.len() {
-                        word_weights_tmp
+                    let id = word_ids.get_id(word.as_bytes());
+                    if id == word_weights.len() {
+                        words.push(word);
+                        word_weights
                             .push(vec![0.; char_window_size * 2 - word.chars().count() + 1]);
                     }
-                    word_weights_tmp[id][feature.rel_position] = weight;
+                    word_weights[id][feature.rel_position] = weight;
                 }
                 FeatureContent::CharacterTypeNgram(types) => {
                     let types_u8: Vec<u8> = types.iter().map(|&t| t as u8).collect();
-                    let id = type_sorter.get_id(&types_u8) as usize;
-                    if id == type_weights_tmp.len() {
-                        type_weights_tmp.push(vec![0.; type_window_size * 2 - types.len() + 1]);
+                    let id = type_ids.get_id(&types_u8);
+                    if id == type_weights.len() {
+                        type_weights.push(vec![0.; type_window_size * 2 - word.len() + 1]);
                     }
-                    type_weights_tmp[id][feature.rel_position] = weight;
+                    type_weights[id][feature.rel_position] = weight;
                 }
                 FeatureContent::DictionaryWord(size) => {
-                    dict_weights[size][feature.rel_position] = weight;
+                    dict_weights[size - 1][feature.rel_position] = weight;
                 }
             };
             #[cfg(feature = "model-quantize")]
             match feature.feature {
                 FeatureContent::CharacterNgram(word) => {
-                    let id = word_sorter.get_id(word.as_bytes()) as usize;
-                    if id == word_weights_tmp.len() {
-                        word_weights_tmp
-                            .push(vec![0; char_window_size * 2 - word.chars().count() + 1]);
+                    let id = word_ids.get_id(word.as_bytes());
+                    if id == word_weights.len() {
+                        words.push(word.as_bytes().to_vec());
+                        word_weights.push(vec![0; char_window_size * 2 - word.chars().count() + 1]);
                     }
-                    word_weights_tmp[id][feature.rel_position] =
-                        (weight / quantize_multiplier) as i16;
+                    word_weights[id][feature.rel_position] = (weight / quantize_multiplier) as i16;
                 }
-                FeatureContent::CharacterTypeNgram(types) => {
-                    let types_u8: Vec<u8> = types.iter().map(|&t| t as u8).collect();
-                    let id = type_sorter.get_id(&types_u8) as usize;
-                    if id == type_weights_tmp.len() {
-                        type_weights_tmp.push(vec![0; type_window_size * 2 - types.len() + 1]);
+                FeatureContent::CharacterTypeNgram(word) => {
+                    let id = type_ids.get_id(word) as usize;
+                    if id == type_weights.len() {
+                        types.push(word.to_vec());
+                        type_weights.push(vec![0; type_window_size * 2 - word.len() + 1]);
                     }
-                    type_weights_tmp[id][feature.rel_position] =
-                        (weight / quantize_multiplier) as i16;
+                    type_weights[id][feature.rel_position] = (weight / quantize_multiplier) as i16;
                 }
                 FeatureContent::DictionaryWord(size) => {
                     dict_weights[size - 1][feature.rel_position] =
@@ -313,22 +332,10 @@ impl Model {
                 }
             };
         }
-        let word_id_sort_map = word_sorter.sort();
-        let type_id_sort_map = type_sorter.sort();
-        let mut word_weights = vec![];
-        let mut type_weights = vec![];
-        for id in word_id_sort_map {
-            word_weights.push(word_weights_tmp[id].clone());
-        }
-        for id in type_id_sort_map {
-            type_weights.push(type_weights_tmp[id].clone());
-        }
-        let word_fst = Fst::from_iter_map(word_sorter.map).unwrap();
-        let type_fst = Fst::from_iter_map(type_sorter.map).unwrap();
         Self {
-            word_fst,
-            type_fst,
-            dict_fst,
+            words,
+            types,
+            dict,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier,
