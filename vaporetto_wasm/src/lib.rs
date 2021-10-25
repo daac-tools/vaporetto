@@ -18,7 +18,7 @@ pub struct Vaporetto {
 impl Vaporetto {
     #[wasm_bindgen]
     pub fn new() -> Self {
-        let mut f = Cursor::new(include_bytes!("../../model/kftt.model"));
+        let mut f = zstd::Decoder::new(Cursor::new(include_bytes!("../../model/kftt.model"))).unwrap();
         let model = Model::read(&mut f).unwrap();
         let predictor = Predictor::new(model);
         let post_filters: Vec<Box<dyn SentenceFilter>> = vec![

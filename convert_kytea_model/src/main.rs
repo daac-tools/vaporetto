@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use std::fs;
-use std::io::{BufReader, BufWriter};
+use std::io::BufReader;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
@@ -30,8 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Saving model file...");
     let model = Model::try_from(model)?;
-    let mut f = BufWriter::new(fs::File::create(opt.model_out)?);
+    let mut f = zstd::Encoder::new(fs::File::create(opt.model_out)?, 19)?;
     model.write(&mut f)?;
+    f.finish()?;
 
     Ok(())
 }

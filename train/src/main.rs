@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs::File;
-use std::io::{prelude::*, stderr, BufReader, BufWriter};
+use std::io::{prelude::*, stderr, BufReader};
 use std::path::PathBuf;
 
 use structopt::{clap::ArgGroup, StructOpt};
@@ -133,8 +133,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = trainer.train(dataset, opt.solver)?;
     eprintln!("Finish training.");
 
-    let mut f = BufWriter::new(File::create(opt.model)?);
+    let mut f = zstd::Encoder::new(File::create(opt.model)?, 19)?;
     model.write(&mut f)?;
+    f.finish()?;
 
     Ok(())
 }

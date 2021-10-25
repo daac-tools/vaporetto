@@ -6,3 +6,4 @@ edition = "2018"
 [dependencies]
 structopt = "0.3"  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto", features = ["multithreading"] }  # MIT or Apache-2.0
+zstd = "0.9"  # MIT
