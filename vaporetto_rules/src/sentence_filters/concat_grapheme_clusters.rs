@@ -12,7 +12,7 @@ impl ConcatGraphemeClustersFilter {
     /// # Returns
     ///
     /// A new ConcatGraphemeClustersFilter.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {}
     }
 }

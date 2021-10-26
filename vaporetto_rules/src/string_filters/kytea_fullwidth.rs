@@ -9,7 +9,7 @@ impl KyteaFullwidthFilter {
     /// # Returns
     ///
     /// A new KyteaFullwidthFilter.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {}
     }
 }

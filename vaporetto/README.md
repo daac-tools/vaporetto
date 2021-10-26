@@ -10,7 +10,7 @@ use std::io::{prelude::*, stdin, BufReader};
 
 use vaporetto::{Model, Predictor, Sentence};
 
-let mut f = BufReader::new(File::open("model.bin").unwrap());
+let mut f = BufReader::new(File::open("model.raw").unwrap());
 let model = Model::read(&mut f).unwrap();
 let predictor = Predictor::new(model);
 

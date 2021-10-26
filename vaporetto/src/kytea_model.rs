@@ -3,7 +3,6 @@ use std::io::BufRead;
 
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
-use fst::raw::Fst;
 
 use crate::model::Model;
 
@@ -410,31 +409,29 @@ impl TryFrom<KyteaModel> for Model {
             .type_dict
             .ok_or_else(|| anyhow!("no type dictionary."))?;
 
-        let mut word_map: Vec<(String, u64)> = vec![];
+        let mut words: Vec<Vec<u8>> = vec![];
         let mut word_weights = vec![];
-        for (i, (word, v)) in char_dict.dump_items().into_iter().enumerate() {
+        for (word, v) in char_dict.dump_items() {
             let weight_size = config.char_w as usize * 2 - word.len() + 1;
-            word_map.push((word.into_iter().collect(), i as u64));
+            words.push(word.into_iter().collect::<String>().as_bytes().to_vec());
             word_weights.push(v[..weight_size].to_vec());
         }
-        let word_fst = Fst::from_iter_map(word_map)?;
 
-        let mut type_map: Vec<(String, u64)> = vec![];
+        let mut types: Vec<Vec<u8>> = vec![];
         let mut type_weights = vec![];
-        for (i, (word, v)) in type_dict.dump_items().into_iter().enumerate() {
+        for (word, v) in type_dict.dump_items() {
             let weight_size = config.type_w as usize * 2 - word.len() + 1;
-            type_map.push((word.into_iter().collect(), i as u64));
+            types.push(word.into_iter().collect::<String>().as_bytes().to_vec());
             type_weights.push(v[..weight_size].to_vec());
         }
-        let type_fst = Fst::from_iter_map(type_map)?;
 
-        let mut dict_map: Vec<(String, u64)> = vec![];
+        let mut dict: Vec<Vec<u8>> = vec![];
         let mut dict_weights = vec![];
-        if let Some(dict) = model.dict {
-            for (i, (w, data)) in dict.dump_items().into_iter().enumerate() {
+        if let Some(kytea_dict) = model.dict {
+            for (w, data) in kytea_dict.dump_items() {
                 let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
                 let mut weights = [0i32; 3];
-                for j in 0..dict.n_dicts as usize {
+                for j in 0..kytea_dict.n_dicts as usize {
                     if data.in_dict >> j & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * word_len;
                         weights[0] += feature_lookup.dict_vec[offset] as i32;
@@ -443,32 +440,21 @@ impl TryFrom<KyteaModel> for Model {
                     }
                 }
                 dict_weights.push(weights);
-                dict_map.push((w.into_iter().collect(), i as u64));
+                dict.push(w.into_iter().collect::<String>().as_bytes().to_vec());
             }
         }
-        let dict_fst = Fst::from_iter_map(dict_map)?;
 
         Ok(Self {
-            word_fst,
-            type_fst,
-            dict_fst,
-
-            #[cfg(not(feature = "model-quantize"))]
-            word_weights,
-            #[cfg(not(feature = "model-quantize"))]
-            type_weights,
-            #[cfg(not(feature = "model-quantize"))]
-            dict_weights,
+            words,
+            types,
+            dict,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier,
-            #[cfg(feature = "model-quantize")]
-            word_weights,
-            #[cfg(feature = "model-quantize")]
-            type_weights,
-            #[cfg(feature = "model-quantize")]
-            dict_weights,
 
+            word_weights,
+            type_weights,
+            dict_weights,
             dict_word_wise: true,
             bias,
             char_window_size: config.char_w as usize,

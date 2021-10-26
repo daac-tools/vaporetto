@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{prelude::*, stdin, BufReader};
+use std::io::{prelude::*, stdin};
 use std::path::PathBuf;
 
 use structopt::StructOpt;
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
     eprintln!("Loading model file...");
-    let mut f = BufReader::new(File::open(opt.model).unwrap());
+    let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
     let predictor = Predictor::new(model);
 

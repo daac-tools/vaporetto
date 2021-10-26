@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use js_sys::{Array, Object};
 use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
@@ -18,8 +18,11 @@ pub struct Vaporetto {
 impl Vaporetto {
     #[wasm_bindgen]
     pub fn new() -> Self {
-        let mut f = Cursor::new(include_bytes!("../../model/kftt.model"));
-        let model = Model::read(&mut f).unwrap();
+        let mut f = Cursor::new(include_bytes!("../../model/model.zstd"));
+        let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
+        let mut buff = vec![];
+        decoder.read_to_end(&mut buff).unwrap();
+        let model = Model::read(&mut buff.as_slice()).unwrap();
         let predictor = Predictor::new(model);
         let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
             Box::new(ConcatGraphemeClustersFilter::new()),

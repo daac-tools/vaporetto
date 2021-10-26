@@ -16,7 +16,6 @@ autotests = false
 anyhow = "1.0"  # MIT or Apache-2.0
 byteorder = "1.4"  # Unlicense or MIT
 daachorse = "0.2.0"  # MIT or Apache-2.0
-fst = "0.4"  # Unlicense or MIT
 
 crossbeam-channel = { version = "0.5", optional = true }  # MIT or Apache-2.0
 liblinear = { version = "1", optional = true }  # MIT
