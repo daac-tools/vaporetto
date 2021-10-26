@@ -18,7 +18,7 @@ pub struct Vaporetto {
 impl Vaporetto {
     #[wasm_bindgen]
     pub fn new() -> Self {
-        let mut f = Cursor::new(include_bytes!("../../model/model.bin"));
+        let mut f = Cursor::new(include_bytes!("../../model/model.zstd"));
         let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();
