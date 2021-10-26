@@ -62,16 +62,16 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 
   | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
   | -------------------------- | ---------------------:|-------|
-  | KyTea (0.4.7)              |                 0.500 | 0.008 |
-  | Vaporetto (0.1.5)          |             **2.773** | 0.103 |
+  | KyTea (0.4.7)              |                 0.490 | 0.003 |
+  | Vaporetto (0.1.6)          |             **3.016** | 0.113 |
   |                            |                       |       |
-  | MeCab (2020-09-14)         |                 1.413 | 0.018 |
+  | MeCab (2020-09-14)         |                 1.418 | 0.007 |
   |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 1.219 | 0.013 |
-  | Lindera (0.8.0)            |                 0.547 | 0.014 |
+  | Kuromoji (Atilika's 0.9.0) |                 1.197 | 0.034 |
+  | Lindera (0.8.0)            |                 0.542 | 0.010 |
   |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.445 | 0.026 |
-  | Sudachi.rs (2021-10-01)    |                 0.147 | 0.002 |
+  | Sudachi (0.5.2)            |                 0.439 | 0.026 |
+  | Sudachi.rs (0.6.0-rc1)     |                 0.427 | 0.009 |
 
 ## Disclaimer
 
