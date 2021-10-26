@@ -1,10 +1,19 @@
 #!/bin/bash
 
-set -ux
+set -eux
+
+which patch
+which cargo
+which autoreconf
+which libtool
+which make
+which mvn
+
+set +e
 
 patch -p1 -N < ./elapsed_time.patch
 
-set -eux
+set -e
 
 pushd ..
 cargo build --release
