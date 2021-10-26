@@ -11,4 +11,4 @@ js-sys = "0.3.52"  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
 wasm-bindgen = "0.2.75"  # MIT or Apache-2.0
-ruzstd = { git = "https://github.com/KillingSpark/zstd-rs.git", tag = "v0.2.4" }  # MIT
+ruzstd = "0.2.4"  # MIT
