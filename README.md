@@ -47,7 +47,7 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 
   | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
   | -------------------------- | ---------------------:|-------|
-  | KyTea (0.4.7)              |                 0.777 | 0.020 |
+  | KyTea (2020-04-03)         |                 0.777 | 0.020 |
   | Vaporetto (0.1.6)          |             **4.426** | 0.182 |
   |                            |                       |       |
   | MeCab (2020-09-14)         |                 2.736 | 0.041 |
@@ -62,7 +62,7 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 
   | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
   | -------------------------- | ---------------------:|-------|
-  | KyTea (0.4.7)              |                 0.490 | 0.003 |
+  | KyTea (2020-04-03)         |                 0.490 | 0.003 |
   | Vaporetto (0.1.6)          |             **3.016** | 0.113 |
   |                            |                       |       |
   | MeCab (2020-09-14)         |                 1.418 | 0.007 |
