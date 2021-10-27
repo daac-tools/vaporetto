@@ -47,31 +47,31 @@ The following examples use [KFTT](http://www.phontron.com/kftt/) for training an
 
   | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
   | -------------------------- | ---------------------:|-------|
-  | KyTea (0.4.7)              |                 0.793 | 0.005 |
-  | Vaporetto (0.1.5)          |             **3.591** | 0.067 |
+  | KyTea (2020-04-03)         |                 0.777 | 0.020 |
+  | Vaporetto (0.1.6)          |             **4.426** | 0.182 |
   |                            |                       |       |
-  | MeCab (2020-09-14)         |                 2.778 | 0.025 |
+  | MeCab (2020-09-14)         |                 2.736 | 0.041 |
   |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 0.443 | 0.013 |
-  | Lindera (0.8.0)            |                 1.017 | 0.014 |
+  | Kuromoji (Atilika's 0.9.0) |                 0.423 | 0.013 |
+  | Lindera (0.8.0)            |                 1.002 | 0.014 |
   |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.257 | 0.007 |
-  | Sudachi.rs (2021-10-01)    |                 0.239 | 0.002 |
+  | Sudachi (0.5.2)            |                 0.251 | 0.012 |
+  | Sudachi.rs (0.6.0-rc1)     |                 0.644 | 0.012 |
 
 * MacBook Pro (2017, Processor: 2.3 GHz Intel Core i5, Memory: 8 GB 2133 MHz LPDDR3)
 
   | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
   | -------------------------- | ---------------------:|-------|
-  | KyTea (0.4.7)              |                 0.500 | 0.008 |
-  | Vaporetto (0.1.5)          |             **2.773** | 0.103 |
+  | KyTea (2020-04-03)         |                 0.490 | 0.003 |
+  | Vaporetto (0.1.6)          |             **3.016** | 0.113 |
   |                            |                       |       |
-  | MeCab (2020-09-14)         |                 1.413 | 0.018 |
+  | MeCab (2020-09-14)         |                 1.418 | 0.007 |
   |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 1.219 | 0.013 |
-  | Lindera (0.8.0)            |                 0.547 | 0.014 |
+  | Kuromoji (Atilika's 0.9.0) |                 1.197 | 0.034 |
+  | Lindera (0.8.0)            |                 0.542 | 0.010 |
   |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.445 | 0.026 |
-  | Sudachi.rs (2021-10-01)    |                 0.147 | 0.002 |
+  | Sudachi (0.5.2)            |                 0.439 | 0.026 |
+  | Sudachi.rs (0.6.0-rc1)     |                 0.427 | 0.009 |
 
 ## Disclaimer
 

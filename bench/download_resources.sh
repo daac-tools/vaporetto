@@ -1,5 +1,12 @@
 #!/bin/bash
 
+set -eux
+
+which wget
+which gunzip
+which unzip
+which tar
+
 pushd ./kytea
 wget "http://www.phontron.com/kytea/download/model/jp-0.4.7-6.mod.gz"
 gunzip "./jp-0.4.7-6.mod.gz"
