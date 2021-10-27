@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
 use anyhow::Result;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use serde::{Serialize, Deserialize};
 
 #[cfg(feature = "train")]
 use crate::feature::FeatureContent;
@@ -24,6 +24,7 @@ pub type ScoreValue = f64;
 pub type ScoreValue = i32;
 
 /// Model data.
+#[derive(Serialize, Deserialize)]
 pub struct Model {
     pub(crate) words: Vec<Vec<u8>>,
     pub(crate) types: Vec<Vec<u8>>,
@@ -53,69 +54,8 @@ impl Model {
     /// # Errors
     ///
     /// When `wtr` generates an error, it will be returned as is.
-    pub fn write<W: Write>(&self, wtr: &mut W) -> Result<()> {
-        wtr.write_u64::<BigEndian>(self.words.len() as u64)?;
-        for word in &self.words {
-            wtr.write_u64::<BigEndian>(word.len() as u64)?;
-            wtr.write_all(word)?;
-        }
-
-        wtr.write_u64::<BigEndian>(self.types.len() as u64)?;
-        for word in &self.types {
-            wtr.write_u64::<BigEndian>(word.len() as u64)?;
-            wtr.write_all(word)?;
-        }
-
-        wtr.write_u64::<BigEndian>(self.dict.len() as u64)?;
-        for word in &self.dict {
-            wtr.write_u64::<BigEndian>(word.len() as u64)?;
-            wtr.write_all(word)?;
-        }
-        #[cfg(feature = "model-quantize")]
-        wtr.write_f64::<BigEndian>(self.quantize_multiplier)?;
-
-        wtr.write_u64::<BigEndian>(self.word_weights.len() as u64)?;
-        for ws in &self.word_weights {
-            wtr.write_u64::<BigEndian>(ws.len() as u64)?;
-            for &w in ws {
-                #[cfg(not(feature = "model-quantize"))]
-                wtr.write_f64::<BigEndian>(w)?;
-                #[cfg(feature = "model-quantize")]
-                wtr.write_i16::<BigEndian>(w)?;
-            }
-        }
-
-        wtr.write_u64::<BigEndian>(self.type_weights.len() as u64)?;
-        for ws in &self.type_weights {
-            wtr.write_u64::<BigEndian>(ws.len() as u64)?;
-            for &w in ws {
-                #[cfg(not(feature = "model-quantize"))]
-                wtr.write_f64::<BigEndian>(w)?;
-                #[cfg(feature = "model-quantize")]
-                wtr.write_i16::<BigEndian>(w)?;
-            }
-        }
-
-        wtr.write_u64::<BigEndian>(self.dict_weights.len() as u64)?;
-        for ws in &self.dict_weights {
-            for &w in ws {
-                #[cfg(not(feature = "model-quantize"))]
-                wtr.write_f64::<BigEndian>(w)?;
-                #[cfg(feature = "model-quantize")]
-                wtr.write_i32::<BigEndian>(w)?;
-            }
-        }
-
-        wtr.write_u8(self.dict_word_wise as u8)?;
-
-        #[cfg(not(feature = "model-quantize"))]
-        wtr.write_f64::<BigEndian>(self.bias)?;
-        #[cfg(feature = "model-quantize")]
-        wtr.write_i16::<BigEndian>(self.bias)?;
-
-        wtr.write_u64::<BigEndian>(self.char_window_size as u64)?;
-        wtr.write_u64::<BigEndian>(self.type_window_size as u64)?;
-
+    pub fn write<W>(&self, wtr: &mut W) -> Result<()> where W: Write {
+        bincode::serialize_into(wtr, self)?;
         Ok(())
     }
 
@@ -132,111 +72,8 @@ impl Model {
     /// # Errors
     ///
     /// When `rdr` generates an error, it will be returned as is.
-    pub fn read<R: Read>(rdr: &mut R) -> Result<Self> {
-        let words_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut words = Vec::with_capacity(words_size);
-        for _ in 0..words_size {
-            let word_size = rdr.read_u64::<BigEndian>()? as usize;
-            let mut word_bytes = vec![0; word_size];
-            rdr.read_exact(&mut word_bytes)?;
-            words.push(word_bytes);
-        }
-
-        let types_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut types = Vec::with_capacity(types_size);
-        for _ in 0..types_size {
-            let word_size = rdr.read_u64::<BigEndian>()? as usize;
-            let mut word_bytes = vec![0; word_size];
-            rdr.read_exact(&mut word_bytes)?;
-            types.push(word_bytes);
-        }
-
-        let dict_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut dict = Vec::with_capacity(dict_size);
-        for _ in 0..dict_size {
-            let word_size = rdr.read_u64::<BigEndian>()? as usize;
-            let mut word_bytes = vec![0; word_size];
-            rdr.read_exact(&mut word_bytes)?;
-            dict.push(word_bytes);
-        }
-
-        #[cfg(feature = "model-quantize")]
-        let quantize_multiplier = rdr.read_f64::<BigEndian>()?;
-
-        let word_weights_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut word_weights = Vec::with_capacity(word_weights_size);
-        for _ in 0..word_weights_size {
-            let weight_size = rdr.read_u64::<BigEndian>()? as usize;
-            let mut weights = Vec::with_capacity(weight_size);
-            for _ in 0..weight_size {
-                #[cfg(not(feature = "model-quantize"))]
-                let weight = rdr.read_f64::<BigEndian>()?;
-                #[cfg(feature = "model-quantize")]
-                let weight = rdr.read_i16::<BigEndian>()?;
-                weights.push(weight);
-            }
-            word_weights.push(weights);
-        }
-
-        let type_weights_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut type_weights = Vec::with_capacity(type_weights_size);
-        for _ in 0..type_weights_size {
-            let weight_size = rdr.read_u64::<BigEndian>()? as usize;
-            let mut weights = Vec::with_capacity(weight_size);
-            for _ in 0..weight_size {
-                #[cfg(not(feature = "model-quantize"))]
-                let weight = rdr.read_f64::<BigEndian>()?;
-                #[cfg(feature = "model-quantize")]
-                let weight = rdr.read_i16::<BigEndian>()?;
-                weights.push(weight);
-            }
-            type_weights.push(weights);
-        }
-
-        let dict_weights_size = rdr.read_u64::<BigEndian>()? as usize;
-        let mut dict_weights = Vec::with_capacity(dict_weights_size);
-        for _ in 0..dict_weights_size {
-            #[cfg(not(feature = "model-quantize"))]
-            let mut weights = [0.; 3];
-            #[cfg(feature = "model-quantize")]
-            let mut weights = [0; 3];
-            #[cfg(not(feature = "model-quantize"))]
-            for weight in &mut weights {
-                *weight = rdr.read_f64::<BigEndian>()?;
-            }
-            #[cfg(feature = "model-quantize")]
-            for weight in &mut weights {
-                *weight = rdr.read_i32::<BigEndian>()?;
-            }
-            dict_weights.push(weights);
-        }
-
-        let dict_word_wise = rdr.read_u8()? != 0;
-
-        #[cfg(not(feature = "model-quantize"))]
-        let bias = rdr.read_f64::<BigEndian>()?;
-        #[cfg(feature = "model-quantize")]
-        let bias = rdr.read_i16::<BigEndian>()?;
-
-        let char_window_size = rdr.read_u64::<BigEndian>()? as usize;
-        let type_window_size = rdr.read_u64::<BigEndian>()? as usize;
-
-        Ok(Self {
-            words,
-            types,
-            dict,
-
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier,
-
-            word_weights,
-            type_weights,
-            dict_weights,
-            dict_word_wise,
-            bias,
-            char_window_size,
-            type_window_size,
-        })
+    pub fn read<R>(rdr: &mut R) -> Result<Self> where R: Read {
+        Ok(bincode::deserialize_from(rdr)?)
     }
 
     #[cfg(feature = "train")]
