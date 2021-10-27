@@ -11,7 +11,7 @@ use std::thread;
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::model::{Model, ScoreValue};
+use crate::model::{Model, ScoreValue, WeightValue};
 use crate::sentence::{BoundaryType, Sentence};
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -78,7 +78,7 @@ impl Predictor {
         }
     }
 
-    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<i16>]) -> Vec<Vec<i32>> {
+    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<WeightValue>]) -> Vec<Vec<ScoreValue>> {
         let mut result = vec![];
         let word_ids = words
             .iter()
