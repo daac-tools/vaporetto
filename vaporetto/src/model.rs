@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
 use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "train")]
 use crate::feature::FeatureContent;
@@ -54,7 +54,10 @@ impl Model {
     /// # Errors
     ///
     /// When `wtr` generates an error, it will be returned as is.
-    pub fn write<W>(&self, wtr: &mut W) -> Result<()> where W: Write {
+    pub fn write<W>(&self, wtr: &mut W) -> Result<()>
+    where
+        W: Write,
+    {
         bincode::serialize_into(wtr, self)?;
         Ok(())
     }
@@ -72,7 +75,10 @@ impl Model {
     /// # Errors
     ///
     /// When `rdr` generates an error, it will be returned as is.
-    pub fn read<R>(rdr: &mut R) -> Result<Self> where R: Read {
+    pub fn read<R>(rdr: &mut R) -> Result<Self>
+    where
+        R: Read,
+    {
         Ok(bincode::deserialize_from(rdr)?)
     }
 
@@ -103,16 +109,16 @@ impl Model {
         let mut type_ids = StringIdManager::new();
 
         #[cfg(feature = "model-quantize")]
-        let mut weight_max = bias.abs();
-        #[cfg(feature = "model-quantize")]
-        for fid in 0..model.num_features() {
-            let weight = model.feature_coefficient(fid as i32, wb_idx).abs();
-            if weight > weight_max {
-                weight_max = weight;
+        let quantize_multiplier = {
+            let mut weight_max = bias.abs();
+            for fid in 0..model.num_features() {
+                let weight = model.feature_coefficient(fid as i32, wb_idx).abs();
+                if weight > weight_max {
+                    weight_max = weight;
+                }
             }
-        }
-        #[cfg(feature = "model-quantize")]
-        let quantize_multiplier = weight_max / 32767.;
+            weight_max / 32767.
+        };
 
         #[cfg(feature = "model-quantize")]
         let bias = (bias / quantize_multiplier) as i16;
@@ -122,50 +128,35 @@ impl Model {
             if weight > -EPSILON && weight < EPSILON {
                 continue;
             }
-            #[cfg(not(feature = "model-quantize"))]
-            match feature.feature {
-                FeatureContent::CharacterNgram(word) => {
-                    let id = word_ids.get_id(word.as_bytes());
-                    if id == word_weights.len() {
-                        words.push(word);
-                        word_weights
-                            .push(vec![0.; char_window_size * 2 - word.chars().count() + 1]);
-                    }
-                    word_weights[id][feature.rel_position] = weight;
-                }
-                FeatureContent::CharacterTypeNgram(types) => {
-                    let types_u8: Vec<u8> = types.iter().map(|&t| t as u8).collect();
-                    let id = type_ids.get_id(&types_u8);
-                    if id == type_weights.len() {
-                        type_weights.push(vec![0.; type_window_size * 2 - word.len() + 1]);
-                    }
-                    type_weights[id][feature.rel_position] = weight;
-                }
-                FeatureContent::DictionaryWord(size) => {
-                    dict_weights[size - 1][feature.rel_position] = weight;
-                }
-            };
+
             #[cfg(feature = "model-quantize")]
+            let weight = weight / quantize_multiplier;
+
             match feature.feature {
                 FeatureContent::CharacterNgram(word) => {
                     let id = word_ids.get_id(word.as_bytes());
                     if id == word_weights.len() {
                         words.push(word.as_bytes().to_vec());
-                        word_weights.push(vec![0; char_window_size * 2 - word.chars().count() + 1]);
+                        word_weights.push(vec![
+                            WeightValue::default();
+                            char_window_size * 2 - word.chars().count() + 1
+                        ]);
                     }
-                    word_weights[id][feature.rel_position] = (weight / quantize_multiplier) as i16;
+                    word_weights[id][feature.rel_position] = weight as WeightValue;
                 }
                 FeatureContent::CharacterTypeNgram(word) => {
                     let id = type_ids.get_id(word) as usize;
                     if id == type_weights.len() {
                         types.push(word.to_vec());
-                        type_weights.push(vec![0; type_window_size * 2 - word.len() + 1]);
+                        type_weights.push(vec![
+                            WeightValue::default();
+                            type_window_size * 2 - word.len() + 1
+                        ]);
                     }
-                    type_weights[id][feature.rel_position] = (weight / quantize_multiplier) as i16;
+                    type_weights[id][feature.rel_position] = weight as WeightValue;
                 }
                 FeatureContent::DictionaryWord(size) => {
-                    dict_weights[size - 1][feature.rel_position] =
-                        (weight / quantize_multiplier) as i32;
+                    dict_weights[size - 1][feature.rel_position] = weight as ScoreValue;
                 }
             };
         }

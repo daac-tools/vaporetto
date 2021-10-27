@@ -271,14 +271,11 @@ impl Predictor {
             } else {
                 BoundaryType::NotWordBoundary
             };
-            #[cfg(not(feature = "model-quantize"))]
-            {
-                *s = y;
-            }
+
             #[cfg(feature = "model-quantize")]
-            {
-                *s = y as f64 * self.quantize_multiplier;
-            }
+            let y = y as f64 * self.quantize_multiplier;
+
+            *s = y;
         }
         sentence.boundary_scores.replace(scores);
         sentence
@@ -491,14 +488,11 @@ impl MultithreadPredictor {
                 } else {
                     BoundaryType::NotWordBoundary
                 };
-                #[cfg(not(feature = "model-quantize"))]
-                {
-                    *s = y;
-                }
+
                 #[cfg(feature = "model-quantize")]
-                {
-                    *s = y as f64 * self.quantize_multiplier;
-                }
+                let y = y as f64 * self.quantize_multiplier;
+
+                *s = y;
             }
             ys_pool.push(ys);
         }
