@@ -14,18 +14,20 @@ autotests = false
 
 [dependencies]
 anyhow = "1.0"  # MIT or Apache-2.0
-byteorder = "1.4"  # Unlicense or MIT
+bincode = "1.3.3"  # MIT
 daachorse = "0.2.0"  # MIT or Apache-2.0
+serde = { version = "1.0", features = ["derive"] }  # MIT or Apache-2.0
 
+byteorder = { version = "1.4", optional = true }  # Unlicense or MIT
 crossbeam-channel = { version = "0.5", optional = true }  # MIT or Apache-2.0
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
 default = ["model-quantize"]
+kytea = ["byteorder"]
 model-quantize = []
 multithreading = ["crossbeam-channel"]
 train = ["liblinear"]
-kytea = []
 
 [package.metadata.docs.rs]
 all-features = true
