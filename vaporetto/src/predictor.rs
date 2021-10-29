@@ -120,7 +120,7 @@ impl Predictor {
             (new_dict, new_dict_weights)
         } else {
             // TODO
-            (new_dict, dict_weights)
+            (dict, dict_weights)
         }
     }
 
