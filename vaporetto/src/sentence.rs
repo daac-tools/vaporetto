@@ -325,28 +325,30 @@ impl Sentence {
     ///
     /// let s = Sentence::from_tokenized("How are you ?").unwrap();
     /// assert_eq!(vec![
-    ///     "How".to_string(),
-    ///     "are".to_string(),
-    ///     "you".to_string(),
-    ///     "?".to_string(),
+    ///     "How",
+    ///     "are",
+    ///     "you",
+    ///     "?",
     /// ], s.to_tokenized_vec().unwrap());
     /// ```
-    pub fn to_tokenized_vec(&self) -> Result<Vec<String>> {
-        let chars: Vec<char> = self.text.chars().collect();
+    pub fn to_tokenized_vec(&self) -> Result<Vec<&str>> {
         let mut result = vec![];
-        let mut word = chars[0].to_string();
-        for (&c, b) in chars[1..].iter().zip(&self.boundaries) {
+        let mut start = 0;
+        for (i, b) in self.boundaries.iter().enumerate() {
             match b {
                 BoundaryType::WordBoundary => {
-                    result.push(word.drain(..).collect());
+                    let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
+                    let word = unsafe { self.text.get_unchecked(start..end) };
+                    result.push(word);
+                    start = end;
                 }
                 BoundaryType::NotWordBoundary => (),
                 BoundaryType::Unknown => {
                     return Err(anyhow!("sentence contains an unknown boundary"));
                 }
             }
-            word.push(c);
         }
+        let word = unsafe { self.text.get_unchecked(start..) };
         result.push(word);
         Ok(result)
     }
@@ -803,8 +805,8 @@ mod tests {
 
     #[test]
     fn test_sentence_to_tokenized_vec_unknown() {
-        let s = Sentence::from_partial_annotation("火-星 猫|の|生-態");
-        let result = s.unwrap().to_tokenized_vec();
+        let s = Sentence::from_partial_annotation("火-星 猫|の|生-態").unwrap();
+        let result = s.to_tokenized_vec();
 
         assert!(result.is_err());
         assert_eq!(
@@ -815,11 +817,11 @@ mod tests {
 
     #[test]
     fn test_sentence_to_tokenized_vec() {
-        let s = Sentence::from_tokenized("Rust で 良い プログラミング 体験 を ！");
+        let s = Sentence::from_tokenized("Rust で 良い プログラミング 体験 を ！").unwrap();
 
         assert_eq!(
             vec!["Rust", "で", "良い", "プログラミング", "体験", "を", "！"],
-            s.unwrap().to_tokenized_vec().unwrap()
+            s.to_tokenized_vec().unwrap()
         );
     }
 
