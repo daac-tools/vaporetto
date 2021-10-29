@@ -11,7 +11,7 @@ use std::thread;
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::model::{Model, ScoreValue, WeightValue};
+use crate::model::{Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -45,9 +45,18 @@ impl Predictor {
     /// A new predictor.
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
-        let word_weights = Self::merge_weights(&model.words, &model.word_weights);
-        let type_weights = Self::merge_weights(&model.types, &model.type_weights);
+
+        let words = model.words;
+        let dict = model.dict;
         let dict_weights = model.dict_weights;
+
+        let mut word_weights: Vec<_> = model.word_weights.into_iter().map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect()).collect();
+        let type_weights: Vec<_> = model.type_weights.into_iter().map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect()).collect();
+
+        let (dict, dict_weights) = Self::merge_dict_weights(model.dict_word_wise, model.char_window_size, dict, dict_weights, &words, &mut word_weights);
+
+        let word_weights = Self::merge_weights(&words, &word_weights);
+        let type_weights = Self::merge_weights(&model.types, &type_weights);
 
         #[cfg(feature = "model-quantize")]
         let bias = bias as i32;
@@ -57,9 +66,9 @@ impl Predictor {
             .map(|ws| [ws[0] as i32, ws[1] as i32, ws[2] as i32])
             .collect();
 
-        let word_pma = DoubleArrayAhoCorasick::new(model.words).unwrap();
+        let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
         let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
-        let dict_pma = DoubleArrayAhoCorasick::new(model.dict).unwrap();
+        let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
         Self {
             word_pma,
             type_pma,
@@ -78,7 +87,44 @@ impl Predictor {
         }
     }
 
-    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<WeightValue>]) -> Vec<Vec<ScoreValue>> {
+    fn merge_dict_weights(
+        dict_word_wise: bool,
+        char_window_size: usize,
+        dict: Vec<Vec<u8>>,
+        dict_weights: Vec<[ScoreValue; 3]>,
+        words: &[Vec<u8>],
+        word_weights: &mut Vec<Vec<ScoreValue>>,
+    ) -> (Vec<Vec<u8>>, Vec<[ScoreValue; 3]>) {
+        let mut word_map = HashMap::new();
+        for (i, word) in words.iter().enumerate() {
+            word_map.insert(word, i);
+        }
+        let mut new_dict = vec![];
+        if dict_word_wise {
+            let mut new_dict_weights = vec![];
+            for (word, weight) in dict.into_iter().zip(dict_weights) {
+                if let Some(&idx) = word_map.get(&word) {
+                    let word_size = 2 * char_window_size - word_weights[idx].len() + 1;
+                    let start = char_window_size - word_size;
+                    let end = start + word_size;
+                    word_weights[idx][start] += weight[0];
+                    for i in start + 1..end {
+                        word_weights[idx][i] += weight[1];
+                    }
+                    word_weights[idx][end] += weight[2];
+                } else {
+                    new_dict.push(word);
+                    new_dict_weights.push(weight);
+                }
+            }
+            (new_dict, new_dict_weights)
+        } else {
+            // TODO
+            (new_dict, dict_weights)
+        }
+    }
+
+    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<ScoreValue>]) -> Vec<Vec<ScoreValue>> {
         let mut result = vec![];
         let word_ids = words
             .iter()
@@ -92,11 +138,10 @@ impl Predictor {
                 if let Some(&idx) = word_ids.get(&seq[st..]) {
                     if let Some(new_weights) = new_weights.as_mut() {
                         for (w_new, w) in new_weights.iter_mut().zip(&weights[idx]) {
-                            *w_new += *w as ScoreValue;
+                            *w_new += *w;
                         }
                     } else {
-                        new_weights
-                            .replace(weights[idx].iter().map(|&w| w as ScoreValue).collect());
+                        new_weights.replace(weights[idx].clone());
                     }
                 }
             }
