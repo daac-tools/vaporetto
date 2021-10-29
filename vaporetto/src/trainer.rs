@@ -177,7 +177,7 @@ impl<'a> Dataset<'a> {
 /// use std::fs::File;
 /// use std::io::{prelude::*, BufReader, BufWriter};
 ///
-/// use vaporetto::{Dataset, Sentence, Trainer};
+/// use vaporetto::{Dataset, Sentence, SolverType, Trainer};
 ///
 /// let mut train_sents = vec![];
 /// let f = BufReader::new(File::open("dataset-train.txt").unwrap());
@@ -192,7 +192,7 @@ impl<'a> Dataset<'a> {
 /// }
 ///
 /// let trainer = Trainer::new(0.01, 1., 1.);
-/// let model = trainer.train(dataset).unwrap();
+/// let model = trainer.train(dataset, SolverType::L1RegularizedL2LossSVC).unwrap();
 /// let mut f = BufWriter::new(File::create("model.bin").unwrap());
 /// model.write(&mut f).unwrap();
 /// ```
