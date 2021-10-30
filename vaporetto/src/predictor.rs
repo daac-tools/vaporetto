@@ -119,8 +119,23 @@ impl Predictor {
             }
             (new_dict, new_dict_weights)
         } else {
-            // TODO
-            (dict, dict_weights)
+            for (word, weight) in dict.into_iter().zip(&dict_weights) {
+                if word_map.contains_key(&word) {
+                    let word = std::str::from_utf8(&word).unwrap();
+                    let word_size = word.chars().count();
+                    let idx = std::cmp::min(word.chars().count(), dict_weights.len()) - 1;
+                    let start = char_window_size - word_size;
+                    let end = start + word_size;
+                    word_weights[idx][start] += weight[0];
+                    for i in start + 1..end {
+                        word_weights[idx][i] += weight[1];
+                    }
+                    word_weights[idx][end] += weight[2];
+                } else {
+                    new_dict.push(word);
+                }
+            }
+            (new_dict, dict_weights)
         }
     }
 
