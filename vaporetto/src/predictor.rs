@@ -549,6 +549,15 @@ mod tests {
                 "世界".as_bytes().to_vec(),
                 "世".as_bytes().to_vec(),
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            word_weights: vec![
+                vec![0.5, 1.0, 1.5, 2.0, 2.5],
+                vec![3.0, 3.5, 4.0, 4.5],
+                vec![5.0, 5.5, 6.0, 6.5, 7.0],
+                vec![7.5, 8.0, 8.5, 9.0, 9.5],
+                vec![10.0, 10.5, 11.0, 11.5, 12.0, 12.5],
+            ],
+            #[cfg(feature = "model-quantize")]
             word_weights: vec![
                 vec![1, 2, 3, 4, 5],
                 vec![6, 7, 8, 9],
@@ -556,15 +565,30 @@ mod tests {
                 vec![15, 16, 17, 18, 19],
                 vec![20, 21, 22, 23, 24, 25],
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            type_weights: vec![
+                vec![13.0, 13.5, 14.0, 14.5],
+                vec![15.0, 15.5, 16.0, 16.5],
+                vec![17.0, 17.5, 18.0],
+                vec![18.5, 19.0, 19.5],
+            ],
+            #[cfg(feature = "model-quantize")]
             type_weights: vec![
                 vec![26, 27, 28, 29],
                 vec![30, 31, 32, 33],
                 vec![34, 35, 36],
                 vec![37, 38, 39],
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            dict_weights: vec![[20.0, 20.5, 21.0], [21.5, 22.0, 22.5]],
+            #[cfg(feature = "model-quantize")]
             dict_weights: vec![[40, 41, 42], [43, 44, 45]],
+            #[cfg(feature = "model-quantize")]
             quantize_multiplier: 0.5,
             dict_word_wise: false,
+            #[cfg(not(feature = "model-quantize"))]
+            bias: -100.0,
+            #[cfg(feature = "model-quantize")]
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
@@ -612,6 +636,15 @@ mod tests {
                 "世界".as_bytes().to_vec(),
                 "世".as_bytes().to_vec(),
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            word_weights: vec![
+                vec![0.25, 0.5, 0.75],
+                vec![1.0, 1.25],
+                vec![1.5, 1.75, 2.0],
+                vec![2.25, 2.5, 2.75],
+                vec![3.0, 3.25, 3.5, 3.75],
+            ],
+            #[cfg(feature = "model-quantize")]
             word_weights: vec![
                 vec![1, 2, 3],
                 vec![4, 5],
@@ -619,15 +652,30 @@ mod tests {
                 vec![9, 10, 11],
                 vec![12, 13, 14, 15],
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            type_weights: vec![
+                vec![4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
+                vec![5.5, 5.75, 6.0, 6.25, 6.5, 6.75],
+                vec![7.0, 7.25, 7.5, 7.75, 8.0],
+                vec![8.25, 8.5, 8.75, 9.0, 9.25],
+            ],
+            #[cfg(feature = "model-quantize")]
             type_weights: vec![
                 vec![16, 17, 18, 19, 20, 21],
                 vec![22, 23, 24, 25, 26, 27],
                 vec![28, 29, 30, 31, 32],
                 vec![33, 34, 35, 36, 37],
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            dict_weights: vec![[9.5, 9.75, 10.0], [10.25, 10.5, 10.75], [11.0, 11.25, 11.5]],
+            #[cfg(feature = "model-quantize")]
             dict_weights: vec![[38, 39, 40], [41, 42, 43], [44, 45, 46]],
+            #[cfg(feature = "model-quantize")]
             quantize_multiplier: 0.25,
             dict_word_wise: false,
+            #[cfg(not(feature = "model-quantize"))]
+            bias: -71.25,
+            #[cfg(feature = "model-quantize")]
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
@@ -680,6 +728,15 @@ mod tests {
                 "世界".as_bytes().to_vec(),
                 "世".as_bytes().to_vec(),
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            word_weights: vec![
+                vec![0.25, 0.5, 0.75],
+                vec![1.0, 1.25],
+                vec![1.5, 1.75, 2.0],
+                vec![2.25, 2.5, 2.75],
+                vec![3.0, 3.25, 3.5, 3.75],
+            ],
+            #[cfg(feature = "model-quantize")]
             word_weights: vec![
                 vec![1, 2, 3],
                 vec![4, 5],
@@ -687,15 +744,30 @@ mod tests {
                 vec![9, 10, 11],
                 vec![12, 13, 14, 15],
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            type_weights: vec![
+                vec![4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
+                vec![5.5, 5.75, 6.0, 6.25, 6.5, 6.75],
+                vec![7.0, 7.25, 7.5, 7.75, 8.0],
+                vec![8.25, 8.5, 8.75, 9.0, 9.25],
+            ],
+            #[cfg(feature = "model-quantize")]
             type_weights: vec![
                 vec![16, 17, 18, 19, 20, 21],
                 vec![22, 23, 24, 25, 26, 27],
                 vec![28, 29, 30, 31, 32],
                 vec![33, 34, 35, 36, 37],
             ],
+            #[cfg(not(feature = "model-quantize"))]
+            dict_weights: vec![[9.5, 9.75, 11.0], [10.25, 10.5, 10.75], [11.0, 11.25, 11.5]],
+            #[cfg(feature = "model-quantize")]
             dict_weights: vec![[38, 39, 40], [41, 42, 43], [44, 45, 46]],
+            #[cfg(feature = "model-quantize")]
             quantize_multiplier: 0.25,
             dict_word_wise: true,
+            #[cfg(not(feature = "model-quantize"))]
+            bias: -71.25,
+            #[cfg(feature = "model-quantize")]
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
