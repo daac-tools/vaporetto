@@ -503,3 +503,478 @@ impl MultithreadPredictor {
         sentence
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Input:  我  ら  は  全  世  界  の  国  民
+    /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
+    /// words:
+    ///   我ら:    3   4   5
+    ///   全世界:          6   7   8   9
+    ///   国民:                       10  11  12
+    ///   世界:           15  16  17  18  19
+    ///   界:             20  21  22  23  24  25
+    /// types:
+    ///   H:      27  28  29
+    ///           26  27  28  29
+    ///                           26  27  28  29
+    ///   K:      32  33
+    ///               30  31  32  33
+    ///                   30  31  32  33
+    ///                       30  31  32  33
+    ///                               30  31  32
+    ///                                   30  31
+    ///   KH:     35  36
+    ///                           34  35  36
+    ///   HK:         37  38  39
+    ///                               37  38  39
+    /// dict:
+    ///   全世界:         43  44  44  45
+    ///   世界:               43  44  45
+    ///   世:                 40  42
+    fn generate_model_1() -> Model {
+        Model {
+            words: vec![
+                "我ら".as_bytes().to_vec(),
+                "全世界".as_bytes().to_vec(),
+                "国民".as_bytes().to_vec(),
+                "世界".as_bytes().to_vec(),
+                "界".as_bytes().to_vec(),
+            ],
+            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            dict: vec![
+                "全世界".as_bytes().to_vec(),
+                "世界".as_bytes().to_vec(),
+                "世".as_bytes().to_vec(),
+            ],
+            word_weights: vec![
+                vec![1, 2, 3, 4, 5],
+                vec![6, 7, 8, 9],
+                vec![10, 11, 12, 13, 14],
+                vec![15, 16, 17, 18, 19],
+                vec![20, 21, 22, 23, 24, 25],
+            ],
+            type_weights: vec![
+                vec![26, 27, 28, 29],
+                vec![30, 31, 32, 33],
+                vec![34, 35, 36],
+                vec![37, 38, 39],
+            ],
+            dict_weights: vec![[40, 41, 42], [43, 44, 45]],
+            quantize_multiplier: 0.5,
+            dict_word_wise: false,
+            bias: -200,
+            char_window_size: 3,
+            type_window_size: 2,
+        }
+    }
+
+    /// Input:  我  ら  は  全  世  界  の  国  民
+    /// bias:   -285  ..  ..  ..  ..  ..  ..  ..
+    /// words:
+    ///   我ら:    2   3
+    ///   全世界:              4   5
+    ///   国民:                            6   7
+    ///   世界:                9  10  11
+    ///   界:                 12  13  14  15
+    /// types:
+    ///   H:      18  19  20  21
+    ///           17  18  19  20  21
+    ///                       16  17  18  19  20
+    ///   K:      25  26  27
+    ///           22  23  24  25  26  27
+    ///               22  23  24  25  26  27
+    ///                   22  23  24  25  26  27
+    ///                           22  23  24  25
+    ///                               22  23  24
+    ///   KH:     30  31  32
+    ///                       28  29  30  31  32
+    ///   HK:     33  34  35  36  37
+    ///                           33  34  35  36
+    /// dict:
+    ///   全世界:         44  45  45  46
+    ///   世界:               41  42  43
+    ///   世:                 38  40
+    fn generate_model_2() -> Model {
+        Model {
+            words: vec![
+                "我ら".as_bytes().to_vec(),
+                "全世界".as_bytes().to_vec(),
+                "国民".as_bytes().to_vec(),
+                "世界".as_bytes().to_vec(),
+                "界".as_bytes().to_vec(),
+            ],
+            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            dict: vec![
+                "全世界".as_bytes().to_vec(),
+                "世界".as_bytes().to_vec(),
+                "世".as_bytes().to_vec(),
+            ],
+            word_weights: vec![
+                vec![1, 2, 3],
+                vec![4, 5],
+                vec![6, 7, 8],
+                vec![9, 10, 11],
+                vec![12, 13, 14, 15],
+            ],
+            type_weights: vec![
+                vec![16, 17, 18, 19, 20, 21],
+                vec![22, 23, 24, 25, 26, 27],
+                vec![28, 29, 30, 31, 32],
+                vec![33, 34, 35, 36, 37],
+            ],
+            dict_weights: vec![[38, 39, 40], [41, 42, 43], [44, 45, 46]],
+            quantize_multiplier: 0.25,
+            dict_word_wise: false,
+            bias: -285,
+            char_window_size: 2,
+            type_window_size: 3,
+        }
+    }
+
+    /// Input:  我  ら  は  全  世  界  の  国  民
+    /// bias:   -285  ..  ..  ..  ..  ..  ..  ..
+    /// words:
+    ///   我ら:    2   3
+    ///   全世界:              4   5
+    ///   国民:                            6   7
+    ///   世界:                9  10  11
+    ///   界:                 12  13  14  15
+    /// types:
+    ///   H:      18  19  20  21
+    ///           17  18  19  20  21
+    ///                       16  17  18  19  20
+    ///   K:      25  26  27
+    ///           22  23  24  25  26  27
+    ///               22  23  24  25  26  27
+    ///                   22  23  24  25  26  27
+    ///                           22  23  24  25
+    ///                               22  23  24
+    ///   KH:     30  31  32
+    ///                       28  29  30  31  32
+    ///   HK:     33  34  35  36  37
+    ///                           33  34  35  36
+    /// dict:
+    ///   国民:                           38  39
+    ///   世界:               41  42  43
+    ///   世:                 44  46
+    ///
+    ///                       85  88  43  38  39
+    ///                 -44 -124 -127 -89
+    ///
+    ///                 -44  -39 -39 -46  38  39
+    fn generate_model_3() -> Model {
+        Model {
+            words: vec![
+                "我ら".as_bytes().to_vec(),
+                "全世界".as_bytes().to_vec(),
+                "国民".as_bytes().to_vec(),
+                "世界".as_bytes().to_vec(),
+                "界".as_bytes().to_vec(),
+            ],
+            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            dict: vec![
+                "国民".as_bytes().to_vec(),
+                "世界".as_bytes().to_vec(),
+                "世".as_bytes().to_vec(),
+            ],
+            word_weights: vec![
+                vec![1, 2, 3],
+                vec![4, 5],
+                vec![6, 7, 8],
+                vec![9, 10, 11],
+                vec![12, 13, 14, 15],
+            ],
+            type_weights: vec![
+                vec![16, 17, 18, 19, 20, 21],
+                vec![22, 23, 24, 25, 26, 27],
+                vec![28, 29, 30, 31, 32],
+                vec![33, 34, 35, 36, 37],
+            ],
+            dict_weights: vec![[38, 39, 40], [41, 42, 43], [44, 45, 46]],
+            quantize_multiplier: 0.25,
+            dict_word_wise: true,
+            bias: -285,
+            char_window_size: 2,
+            type_window_size: 3,
+        }
+    }
+
+    #[test]
+    fn test_predict_1() {
+        let model = generate_model_1();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
+    fn test_predict_2() {
+        let model = generate_model_2();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
+    fn test_predict_3() {
+        let model = generate_model_3();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
+    fn test_predict_with_score_1() {
+        let model = generate_model_1();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_with_score(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+            ],
+            s.boundaries(),
+        );
+        assert_eq!(
+            &[-38.5, -2.5, 22.5, 66.0, 66.5, 72.0, 25.0, -16.0],
+            s.boundary_scores().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_predict_with_score_2() {
+        let model = generate_model_2();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_with_score(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+            ],
+            s.boundaries(),
+        );
+        assert_eq!(
+            &[-34.5, -27.25, -9.75, 14.25, 26.0, 8.5, -19.75, -28.5],
+            s.boundary_scores().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_predict_with_score_3() {
+        let model = generate_model_3();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_with_score(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::NotWordBoundary,
+            ],
+            s.boundaries(),
+        );
+        assert_eq!(
+            &[-34.5, -27.25, -20.75, 4.5, 16.25, -3.0, -10.25, -18.75],
+            s.boundary_scores().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_predict_partial_1() {
+        let model = generate_model_1();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_partial(s, 1..5);
+        assert_eq!(
+            &[
+                BoundaryType::Unknown,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
+    fn test_predict_partial_2() {
+        let model = generate_model_2();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_partial(s, 2..7);
+        assert_eq!(
+            &[
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::Unknown,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
+    fn test_predict_partial_3() {
+        let model = generate_model_3();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_partial(s, 2..6);
+        assert_eq!(
+            &[
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
+    fn test_predict_partial_with_score_1() {
+        let model = generate_model_1();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_partial_with_score(s, 1..5);
+        assert_eq!(
+            &[
+                BoundaryType::Unknown,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+            ],
+            s.boundaries(),
+        );
+        assert_eq!(
+            &[0.0, -2.5, 22.5, 66.0, 66.5, 0.0, 0.0, 0.0],
+            s.boundary_scores().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_predict_partial_with_score_2() {
+        let model = generate_model_2();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_partial_with_score(s, 2..7);
+        assert_eq!(
+            &[
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::Unknown,
+            ],
+            s.boundaries(),
+        );
+        assert_eq!(
+            &[0.0, 0.0, -9.75, 14.25, 26.0, 8.5, -19.75, 0.0],
+            s.boundary_scores().unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_predict_partial_with_score_3() {
+        let model = generate_model_3();
+        let p = Predictor::new(model);
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict_partial_with_score(s, 2..6);
+        assert_eq!(
+            &[
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::NotWordBoundary,
+                BoundaryType::Unknown,
+                BoundaryType::Unknown,
+            ],
+            s.boundaries(),
+        );
+        assert_eq!(
+            &[0.0, 0.0, -20.75, 4.5, 16.25, -3.0, 0.0, 0.0],
+            s.boundary_scores().unwrap(),
+        );
+    }
+}
