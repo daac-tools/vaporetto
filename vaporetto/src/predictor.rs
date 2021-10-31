@@ -207,9 +207,6 @@ impl Predictor {
         range: Range<usize>,
         ys: &mut [ScoreValue],
     ) {
-        if range.start >= range.end || range.start >= sentence.boundaries.len() {
-            panic!("invalid range: {:?}", range);
-        }
         ys.fill(self.bias);
         self.add_word_ngram_scores(sentence, range.start, ys);
         self.add_type_ngram_scores(sentence, range.start, ys);
