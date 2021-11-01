@@ -97,7 +97,7 @@ impl TypeScorerCache {
             if !Self::seqid_to_seq(i, &mut sequence) {
                 continue;
             }
-            let mut y = 0;
+            let mut y = ScoreValue::default();
             for m in pma.find_overlapping_no_suffix_iter(&sequence) {
                 y += weights[m.pattern()][sequence_size - m.end()];
             }
