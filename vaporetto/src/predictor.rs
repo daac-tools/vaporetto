@@ -13,21 +13,22 @@ use crossbeam_channel::{Receiver, Sender};
 
 use crate::model::{Model, ScoreValue, WeightValue};
 use crate::sentence::{BoundaryType, Sentence};
+use crate::type_predictor::TypePredictor;
+
 use daachorse::DoubleArrayAhoCorasick;
 
 /// Predictor.
 pub struct Predictor {
     word_pma: DoubleArrayAhoCorasick,
-    type_pma: DoubleArrayAhoCorasick,
     dict_pma: DoubleArrayAhoCorasick,
     word_weights: Vec<Vec<ScoreValue>>,
-    type_weights: Vec<Vec<ScoreValue>>,
     dict_weights: Vec<[ScoreValue; 3]>,
     dict_word_wise: bool,
     bias: ScoreValue,
     char_window_size: usize,
-    type_window_size: usize,
     dict_window_size: usize,
+
+    type_predictor: TypePredictor,
 
     #[cfg(feature = "model-quantize")]
     quantize_multiplier: f64,
@@ -60,18 +61,20 @@ impl Predictor {
         let word_pma = DoubleArrayAhoCorasick::new(model.words).unwrap();
         let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
         let dict_pma = DoubleArrayAhoCorasick::new(model.dict).unwrap();
+
+        let type_predictor = TypePredictor::new(type_pma, type_weights, model.type_window_size);
+
         Self {
             word_pma,
-            type_pma,
             dict_pma,
             word_weights,
-            type_weights,
             dict_weights,
             dict_word_wise: model.dict_word_wise,
             bias,
             char_window_size: model.char_window_size,
-            type_window_size: model.type_window_size,
             dict_window_size: 1,
+
+            type_predictor,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
@@ -136,30 +139,7 @@ impl Predictor {
     }
 
     fn add_type_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let type_start = if start >= self.type_window_size {
-            start + 1 - self.type_window_size
-        } else {
-            0
-        };
-        let type_end = std::cmp::min(
-            start + ys.len() + self.type_window_size,
-            sentence.char_type.len(),
-        );
-        let char_type = &sentence.char_type[type_start..type_end];
-        let padding = start - type_start + 1;
-        for m in self.type_pma.find_overlapping_no_suffix_iter(&char_type) {
-            let offset = m.end() as isize - self.type_window_size as isize - padding as isize;
-            let weights = &self.type_weights[m.pattern()];
-            if offset >= 0 {
-                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
-                    *y += w;
-                }
-            } else {
-                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
-                    *y += w;
-                }
-            }
-        }
+        self.type_predictor.add_scores(sentence, start, ys);
     }
 
     fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {

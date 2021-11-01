@@ -41,6 +41,8 @@ mod trainer;
 #[cfg(feature = "kytea")]
 mod kytea_model;
 
+mod type_predictor;
+
 pub use model::Model;
 pub use predictor::Predictor;
 pub use sentence::{BoundaryType, CharacterType, Sentence};
