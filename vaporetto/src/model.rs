@@ -24,7 +24,7 @@ pub type ScoreValue = f64;
 pub type ScoreValue = i32;
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
-pub(crate) struct DictWeight {
+pub struct DictWeight {
     pub right: ScoreValue,
     pub inner: ScoreValue,
     pub left: ScoreValue,
