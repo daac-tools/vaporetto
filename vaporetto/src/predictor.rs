@@ -46,14 +46,14 @@ impl Predictor {
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
 
-        let words = model.words;
+        let mut words = model.words;
         let dict = model.dict;
         let dict_weights = model.dict_weights;
 
         let mut word_weights: Vec<_> = model.word_weights.into_iter().map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect()).collect();
         let type_weights: Vec<_> = model.type_weights.into_iter().map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect()).collect();
 
-        let (dict, dict_weights) = Self::merge_dict_weights(model.dict_word_wise, model.char_window_size, dict, dict_weights, &words, &mut word_weights);
+        let (dict, dict_weights) = Self::merge_dict_weights(model.dict_word_wise, model.char_window_size, dict, dict_weights, &mut words, &mut word_weights);
 
         let word_weights = Self::merge_weights(&words, &word_weights);
         let type_weights = Self::merge_weights(&model.types, &type_weights);
@@ -92,48 +92,80 @@ impl Predictor {
         char_window_size: usize,
         dict: Vec<Vec<u8>>,
         dict_weights: Vec<[ScoreValue; 3]>,
-        words: &[Vec<u8>],
+        words: &mut Vec<Vec<u8>>,
         word_weights: &mut Vec<Vec<ScoreValue>>,
     ) -> (Vec<Vec<u8>>, Vec<[ScoreValue; 3]>) {
         let mut word_map = HashMap::new();
-        for (i, word) in words.iter().enumerate() {
+        for (i, word) in words.iter().cloned().enumerate() {
             word_map.insert(word, i);
         }
         let mut new_dict = vec![];
         if dict_word_wise {
             let mut new_dict_weights = vec![];
             for (word, weight) in dict.into_iter().zip(dict_weights) {
-                if let Some(&idx) = word_map.get(&word) {
-                    let word_size = 2 * char_window_size - word_weights[idx].len() + 1;
-                    let start = char_window_size - word_size;
-                    let end = start + word_size;
-                    word_weights[idx][start] += weight[0];
-                    for i in start + 1..end {
-                        word_weights[idx][i] += weight[1];
+                let word_size = std::str::from_utf8(&word).unwrap().chars().count();
+                if char_window_size >= word_size {
+                    if let Some(&idx) = word_map.get(&word) {
+                        let start = char_window_size - word_size;
+                        let end = start + word_size;
+                        word_weights[idx][start] += weight[0];
+                        for i in start + 1..end {
+                            word_weights[idx][i] += weight[1];
+                        }
+                        word_weights[idx][end] += weight[2];
+                        continue;
                     }
-                    word_weights[idx][end] += weight[2];
-                } else {
-                    new_dict.push(word);
-                    new_dict_weights.push(weight);
+                    else {
+                        let mut weight_vec = vec![ScoreValue::default(); char_window_size * 2 - word_size + 1];
+                        let start = char_window_size - word_size;
+                        let end = start + word_size;
+                        weight_vec[start] += weight[0];
+                        for i in start + 1..end {
+                            weight_vec[i] += weight[1];
+                        }
+                        weight_vec[end] += weight[2];
+                        words.push(word);
+                        word_weights.push(weight_vec);
+                        continue;
+                    }
                 }
+                new_dict.push(word);
+                new_dict_weights.push(weight);
             }
             (new_dict, new_dict_weights)
         } else {
-            for (word, weight) in dict.into_iter().zip(&dict_weights) {
-                if word_map.contains_key(&word) {
-                    let word = std::str::from_utf8(&word).unwrap();
-                    let word_size = word.chars().count();
-                    let idx = std::cmp::min(word.chars().count(), dict_weights.len()) - 1;
-                    let start = char_window_size - word_size;
-                    let end = start + word_size;
-                    word_weights[idx][start] += weight[0];
-                    for i in start + 1..end {
-                        word_weights[idx][i] += weight[1];
+            for word in dict {
+                let word_size = std::str::from_utf8(&word).unwrap().chars().count();
+                if char_window_size >= word_size {
+                    if let Some(&idx) = word_map.get(&word) {
+                        let start = char_window_size - word_size;
+                        let end = start + word_size;
+                        let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
+                        let weight = &dict_weights[word_size_idx];
+                        word_weights[idx][start] += weight[0];
+                        for i in start + 1..end {
+                            word_weights[idx][i] += weight[1];
+                        }
+                        word_weights[idx][end] += weight[2];
+                        continue;
                     }
-                    word_weights[idx][end] += weight[2];
-                } else {
-                    new_dict.push(word);
+                    else {
+                        let mut weight_vec = vec![ScoreValue::default(); char_window_size * 2 - word_size + 1];
+                        let start = char_window_size - word_size;
+                        let end = start + word_size;
+                        let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
+                        let weight = &dict_weights[word_size_idx];
+                        weight_vec[start] += weight[0];
+                        for i in start + 1..end {
+                            weight_vec[i] += weight[1];
+                        }
+                        weight_vec[end] += weight[2];
+                        words.push(word);
+                        word_weights.push(weight_vec);
+                        continue;
+                    }
                 }
+                new_dict.push(word);
             }
             (new_dict, dict_weights)
         }
