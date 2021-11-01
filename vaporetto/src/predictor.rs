@@ -13,7 +13,7 @@ use crossbeam_channel::{Receiver, Sender};
 
 use crate::model::{Model, ScoreValue, WeightValue};
 use crate::sentence::{BoundaryType, Sentence};
-use crate::type_predictor::TypePredictor;
+use crate::type_scorer::TypeScorer;
 
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -28,7 +28,7 @@ pub struct Predictor {
     char_window_size: usize,
     dict_window_size: usize,
 
-    type_predictor: TypePredictor,
+    type_scorer: TypeScorer,
 
     #[cfg(feature = "model-quantize")]
     quantize_multiplier: f64,
@@ -62,7 +62,7 @@ impl Predictor {
         let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
         let dict_pma = DoubleArrayAhoCorasick::new(model.dict).unwrap();
 
-        let type_predictor = TypePredictor::new(type_pma, type_weights, model.type_window_size);
+        let type_scorer = TypeScorer::new(type_pma, type_weights, model.type_window_size);
 
         Self {
             word_pma,
@@ -74,7 +74,7 @@ impl Predictor {
             char_window_size: model.char_window_size,
             dict_window_size: 1,
 
-            type_predictor,
+            type_scorer,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
@@ -185,7 +185,7 @@ impl Predictor {
     ) {
         ys.fill(self.bias);
         self.add_word_ngram_scores(sentence, range.start, ys);
-        self.type_predictor.add_scores(sentence, range.start, ys);
+        self.type_scorer.add_scores(sentence, range.start, ys);
         self.add_dict_scores(sentence, range.start, ys);
     }
 

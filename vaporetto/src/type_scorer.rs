@@ -2,39 +2,39 @@ use crate::model::ScoreValue;
 use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
 
-pub enum TypePredictor {
-    Pma(TypePredictorPma),
-    Cache(TypePredictorCache),
+pub enum TypeScorer {
+    Pma(TypeScorerPma),
+    Cache(TypeScorerCache),
 }
 
-impl TypePredictor {
+impl TypeScorer {
     pub fn new(
         pma: DoubleArrayAhoCorasick,
         weights: Vec<Vec<ScoreValue>>,
         window_size: usize,
     ) -> Self {
         if window_size <= 3 {
-            Self::Cache(TypePredictorCache::new(pma, weights, window_size))
+            Self::Cache(TypeScorerCache::new(pma, weights, window_size))
         } else {
-            Self::Pma(TypePredictorPma::new(pma, weights, window_size))
+            Self::Pma(TypeScorerPma::new(pma, weights, window_size))
         }
     }
 
     pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
         match self {
-            TypePredictor::Pma(pma) => pma.add_scores(sentence, start, ys),
-            TypePredictor::Cache(cache) => cache.add_scores(sentence, start, ys),
+            TypeScorer::Pma(pma) => pma.add_scores(sentence, start, ys),
+            TypeScorer::Cache(cache) => cache.add_scores(sentence, start, ys),
         }
     }
 }
 
-pub struct TypePredictorPma {
+pub struct TypeScorerPma {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<Vec<ScoreValue>>,
     window_size: usize,
 }
 
-impl TypePredictorPma {
+impl TypeScorerPma {
     pub fn new(
         pma: DoubleArrayAhoCorasick,
         weights: Vec<Vec<ScoreValue>>,
@@ -75,13 +75,13 @@ impl TypePredictorPma {
     }
 }
 
-pub struct TypePredictorCache {
+pub struct TypeScorerCache {
     scores: Vec<ScoreValue>,
     window_size: usize,
     sequence_mask: usize,
 }
 
-impl TypePredictorCache {
+impl TypeScorerCache {
     pub fn new(
         pma: DoubleArrayAhoCorasick,
         weights: Vec<Vec<ScoreValue>>,
