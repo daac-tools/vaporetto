@@ -652,7 +652,18 @@ mod tests {
                 vec![37, 38, 39],
             ],
             #[cfg(not(feature = "model-quantize"))]
-            dict_weights: vec![[20.0, 20.5, 21.0], [21.5, 22.0, 22.5]],
+            dict_weights: vec![
+                DictWeight {
+                    right: 20.0,
+                    inner: 20.5,
+                    left: 21.0,
+                },
+                DictWeight {
+                    right: 21.5,
+                    inner: 22.0,
+                    left: 22.5,
+                },
+            ],
             #[cfg(feature = "model-quantize")]
             dict_weights: vec![
                 DictWeight {
@@ -750,7 +761,23 @@ mod tests {
                 vec![33, 34, 35, 36, 37],
             ],
             #[cfg(not(feature = "model-quantize"))]
-            dict_weights: vec![[9.5, 9.75, 10.0], [10.25, 10.5, 10.75], [11.0, 11.25, 11.5]],
+            dict_weights: vec![
+                DictWeight {
+                    right: 9.5,
+                    inner: 9.75,
+                    left: 10.0,
+                },
+                DictWeight {
+                    right: 10.25,
+                    inner: 10.5,
+                    left: 10.75,
+                },
+                DictWeight {
+                    right: 11.0,
+                    inner: 11.25,
+                    left: 11.5,
+                },
+            ],
             #[cfg(feature = "model-quantize")]
             dict_weights: vec![
                 DictWeight {
@@ -853,7 +880,23 @@ mod tests {
                 vec![33, 34, 35, 36, 37],
             ],
             #[cfg(not(feature = "model-quantize"))]
-            dict_weights: vec![[9.5, 9.75, 11.0], [10.25, 10.5, 10.75], [11.0, 11.25, 11.5]],
+            dict_weights: vec![
+                DictWeight {
+                    right: 9.5,
+                    inner: 9.75,
+                    left: 11.0,
+                },
+                DictWeight {
+                    right: 10.25,
+                    inner: 10.5,
+                    left: 10.75,
+                },
+                DictWeight {
+                    right: 11.0,
+                    inner: 11.25,
+                    left: 11.5,
+                }
+            ],
             #[cfg(feature = "model-quantize")]
             dict_weights: vec![
                 DictWeight {
