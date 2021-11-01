@@ -138,10 +138,6 @@ impl Predictor {
         }
     }
 
-    fn add_type_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        self.type_predictor.add_scores(sentence, start, ys);
-    }
-
     fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
         let char_start = if start >= self.dict_window_size {
             start + 1 - self.dict_window_size
@@ -189,7 +185,7 @@ impl Predictor {
     ) {
         ys.fill(self.bias);
         self.add_word_ngram_scores(sentence, range.start, ys);
-        self.add_type_ngram_scores(sentence, range.start, ys);
+        self.type_predictor.add_scores(sentence, range.start, ys);
         self.add_dict_scores(sentence, range.start, ys);
     }
 
