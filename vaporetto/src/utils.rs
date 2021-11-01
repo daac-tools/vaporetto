@@ -56,6 +56,7 @@ impl StringIdManager {
 }
 
 #[cfg(test)]
+#[allow(unused_macros)]
 macro_rules! ct2u8 {
     ( $( $v:path ),* ) => {
         ct2u8!( $( $v, )* )

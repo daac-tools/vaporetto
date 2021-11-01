@@ -23,6 +23,13 @@ pub type ScoreValue = f64;
 #[cfg(feature = "model-quantize")]
 pub type ScoreValue = i32;
 
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+pub struct DictWeight {
+    pub right: ScoreValue,
+    pub inner: ScoreValue,
+    pub left: ScoreValue,
+}
+
 /// Model data.
 #[derive(Serialize, Deserialize)]
 pub struct Model {
@@ -32,7 +39,7 @@ pub struct Model {
 
     pub(crate) word_weights: Vec<Vec<WeightValue>>,
     pub(crate) type_weights: Vec<Vec<WeightValue>>,
-    pub(crate) dict_weights: Vec<[ScoreValue; 3]>,
+    pub(crate) dict_weights: Vec<DictWeight>,
 
     #[cfg(feature = "model-quantize")]
     pub(crate) quantize_multiplier: f64,
@@ -102,9 +109,7 @@ impl Model {
         let mut types = vec![];
         let mut word_weights = vec![];
         let mut type_weights = vec![];
-        let mut dict_weights: Vec<[_; 3]> = (0..dict_word_max_size)
-            .map(|_| [ScoreValue::default(); 3])
-            .collect();
+        let mut dict_weights = vec![DictWeight::default(); dict_word_max_size];
         let mut word_ids = StringIdManager::new();
         let mut type_ids = StringIdManager::new();
 
@@ -155,9 +160,12 @@ impl Model {
                     }
                     type_weights[id][feature.rel_position] = weight as WeightValue;
                 }
-                FeatureContent::DictionaryWord(size) => {
-                    dict_weights[size - 1][feature.rel_position] = weight as ScoreValue;
-                }
+                FeatureContent::DictionaryWord(size) => match feature.rel_position {
+                    0 => dict_weights[size - 1].right = weight as ScoreValue,
+                    1 => dict_weights[size - 1].inner = weight as ScoreValue,
+                    2 => dict_weights[size - 1].left = weight as ScoreValue,
+                    _ => panic!("Invalid rel_position"),
+                },
             };
         }
         Self {

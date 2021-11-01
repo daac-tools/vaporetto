@@ -4,7 +4,7 @@ use std::io::BufRead;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::model::Model;
+use crate::model::{DictWeight, Model};
 
 struct KyteaConfig {
     _model_tag: String,
@@ -430,13 +430,13 @@ impl TryFrom<KyteaModel> for Model {
         if let Some(kytea_dict) = model.dict {
             for (w, data) in kytea_dict.dump_items() {
                 let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
-                let mut weights = [0i32; 3];
+                let mut weights = DictWeight::default();
                 for j in 0..kytea_dict.n_dicts as usize {
                     if data.in_dict >> j & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * word_len;
-                        weights[0] += feature_lookup.dict_vec[offset] as i32;
-                        weights[1] += feature_lookup.dict_vec[offset + 1] as i32;
-                        weights[2] += feature_lookup.dict_vec[offset + 2] as i32;
+                        weights.right += feature_lookup.dict_vec[offset] as i32;
+                        weights.inner += feature_lookup.dict_vec[offset + 1] as i32;
+                        weights.left += feature_lookup.dict_vec[offset + 2] as i32;
                     }
                 }
                 dict_weights.push(weights);
