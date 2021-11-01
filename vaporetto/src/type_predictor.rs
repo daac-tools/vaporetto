@@ -13,7 +13,7 @@ impl TypePredictor {
         weights: Vec<Vec<ScoreValue>>,
         window_size: usize,
     ) -> Self {
-        if window_size <= 2 {
+        if window_size <= 3 {
             Self::Cache(TypePredictorCache::new(pma, weights, window_size))
         } else {
             Self::Pma(TypePredictorPma::new(pma, weights, window_size))
@@ -122,8 +122,9 @@ impl TypePredictorCache {
             sentence.char_type.len(),
         );
         let char_type = &sentence.char_type[type_start..type_end];
+        let offset = self.window_size + start;
         let mut seqid = 0;
-        for i in 0..self.window_size {
+        for i in 0..offset {
             if let Some(ct) = char_type.get(i) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
@@ -131,7 +132,7 @@ impl TypePredictorCache {
             };
         }
         for (i, y) in ys.iter_mut().enumerate() {
-            if let Some(ct) = char_type.get(i + self.window_size) {
+            if let Some(ct) = char_type.get(i + offset) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);
