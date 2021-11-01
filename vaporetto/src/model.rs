@@ -23,21 +23,11 @@ pub type ScoreValue = f64;
 #[cfg(feature = "model-quantize")]
 pub type ScoreValue = i32;
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
 pub struct DictWeight {
     pub right: ScoreValue,
     pub inner: ScoreValue,
     pub left: ScoreValue,
-}
-
-impl Default for DictWeight {
-    fn default() -> Self {
-        Self {
-            right: ScoreValue::default(),
-            inner: ScoreValue::default(),
-            left: ScoreValue::default(),
-        }
-    }
 }
 
 /// Model data.
