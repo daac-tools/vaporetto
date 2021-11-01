@@ -895,7 +895,7 @@ mod tests {
                     right: 11.0,
                     inner: 11.25,
                     left: 11.5,
-                }
+                },
             ],
             #[cfg(feature = "model-quantize")]
             dict_weights: vec![
