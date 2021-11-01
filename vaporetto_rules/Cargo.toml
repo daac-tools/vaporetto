@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_rules"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2018"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Rule-base filters for Vaporetto"
@@ -14,4 +14,4 @@ autotests = false
 
 [dependencies]
 unicode-segmentation = "1.8.0"  # MIT or Apache-2.0
-vaporetto = { path = "../vaporetto", version = "0.1" }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "0.2.0" }  # MIT or Apache-2.0
