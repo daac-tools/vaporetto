@@ -93,7 +93,7 @@ impl TypePredictorCache {
         let mut sequence = vec![0u8; sequence_size];
         let mut scores = vec![0 as ScoreValue; all_sequences];
 
-        for i in 0..all_sequences {
+        for (i, score) in scores.iter_mut().enumerate() {
             if !Self::seqid_to_seq(i, &mut sequence) {
                 continue;
             }
@@ -101,7 +101,7 @@ impl TypePredictorCache {
             for m in pma.find_overlapping_no_suffix_iter(&sequence) {
                 y += weights[m.pattern()][sequence_size - m.end()];
             }
-            scores[i] = y;
+            *score = y;
         }
 
         Self {
@@ -148,7 +148,7 @@ impl TypePredictorCache {
                 return false; // invalid
             }
             sequence[i] = ID_TO_TYPE[x];
-            seqid = seqid >> ALPHABET_SHIFT;
+            seqid >>= ALPHABET_SHIFT;
         }
         assert_eq!(seqid, 0);
         true
@@ -162,12 +162,12 @@ impl TypePredictorCache {
     #[inline(always)]
     fn increment_seqid(&self, seqid: usize, char_type: u8) -> usize {
         let char_id = TYPE_TO_ID[char_type as usize] as usize;
-        debug_assert!(1 <= char_id && char_id <= 6);
+        debug_assert!((1..=6).contains(&char_id));
         ((seqid << ALPHABET_SHIFT) | char_id) & self.sequence_mask
     }
 
     #[inline(always)]
-    fn increment_seqid_without_char(&self, seqid: usize) -> usize {
+    const fn increment_seqid_without_char(&self, seqid: usize) -> usize {
         (seqid << ALPHABET_SHIFT) & self.sequence_mask
     }
 }
