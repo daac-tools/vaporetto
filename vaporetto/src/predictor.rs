@@ -11,7 +11,7 @@ use std::thread;
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
-use crate::model::{Model, ScoreValue};
+use crate::model::{DictWeight, Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -22,7 +22,7 @@ pub struct Predictor {
     dict_pma: DoubleArrayAhoCorasick,
     word_weights: Vec<Vec<ScoreValue>>,
     type_weights: Vec<Vec<ScoreValue>>,
-    dict_weights: Vec<[ScoreValue; 3]>,
+    dict_weights: Vec<DictWeight>,
     dict_word_wise: bool,
     bias: ScoreValue,
     char_window_size: usize,
@@ -46,29 +46,40 @@ impl Predictor {
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
 
-        let mut words = model.words;
+        let words = model.words;
         let dict = model.dict;
         let dict_weights = model.dict_weights;
 
-        let mut word_weights: Vec<_> = model.word_weights.into_iter().map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect()).collect();
-        let type_weights: Vec<_> = model.type_weights.into_iter().map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect()).collect();
+        let mut word_weights: Vec<_> = model
+            .word_weights
+            .into_iter()
+            .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
+            .collect();
+        let type_weights: Vec<_> = model
+            .type_weights
+            .into_iter()
+            .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
+            .collect();
 
-        let (dict, dict_weights) = Self::merge_dict_weights(model.dict_word_wise, model.char_window_size, dict, dict_weights, &mut words, &mut word_weights);
+        let (dict, dict_weights) = Self::merge_dict_weights(
+            dict,
+            dict_weights,
+            &words,
+            &mut word_weights,
+            model.char_window_size,
+            model.dict_word_wise,
+        );
 
         let word_weights = Self::merge_weights(&words, &word_weights);
         let type_weights = Self::merge_weights(&model.types, &type_weights);
 
         #[cfg(feature = "model-quantize")]
         let bias = bias as i32;
-        #[cfg(feature = "model-quantize")]
-        let dict_weights = dict_weights
-            .iter()
-            .map(|ws| [ws[0] as i32, ws[1] as i32, ws[2] as i32])
-            .collect();
 
         let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
         let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
         let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
+
         Self {
             word_pma,
             type_pma,
@@ -88,13 +99,13 @@ impl Predictor {
     }
 
     fn merge_dict_weights(
-        dict_word_wise: bool,
-        char_window_size: usize,
         dict: Vec<Vec<u8>>,
-        dict_weights: Vec<[ScoreValue; 3]>,
-        words: &mut Vec<Vec<u8>>,
+        dict_weights: Vec<DictWeight>,
+        words: &[Vec<u8>],
         word_weights: &mut Vec<Vec<ScoreValue>>,
-    ) -> (Vec<Vec<u8>>, Vec<[ScoreValue; 3]>) {
+        char_window_size: usize,
+        dict_word_wise: bool,
+    ) -> (Vec<Vec<u8>>, Vec<DictWeight>) {
         let mut word_map = HashMap::new();
         for (i, word) in words.iter().cloned().enumerate() {
             word_map.insert(word, i);
@@ -104,68 +115,40 @@ impl Predictor {
             let mut new_dict_weights = vec![];
             for (word, weight) in dict.into_iter().zip(dict_weights) {
                 let word_size = std::str::from_utf8(&word).unwrap().chars().count();
-                if char_window_size >= word_size {
-                    if let Some(&idx) = word_map.get(&word) {
+                match word_map.get(&word) {
+                    Some(&idx) if char_window_size >= word_size => {
                         let start = char_window_size - word_size;
                         let end = start + word_size;
-                        word_weights[idx][start] += weight[0];
+                        word_weights[idx][start] += weight.right;
                         for i in start + 1..end {
-                            word_weights[idx][i] += weight[1];
+                            word_weights[idx][i] += weight.inner;
                         }
-                        word_weights[idx][end] += weight[2];
-                        continue;
+                        word_weights[idx][end] += weight.left;
                     }
-                    else {
-                        let mut weight_vec = vec![ScoreValue::default(); char_window_size * 2 - word_size + 1];
-                        let start = char_window_size - word_size;
-                        let end = start + word_size;
-                        weight_vec[start] += weight[0];
-                        for i in start + 1..end {
-                            weight_vec[i] += weight[1];
-                        }
-                        weight_vec[end] += weight[2];
-                        words.push(word);
-                        word_weights.push(weight_vec);
-                        continue;
+                    _ => {
+                        new_dict.push(word);
+                        new_dict_weights.push(weight);
                     }
                 }
-                new_dict.push(word);
-                new_dict_weights.push(weight);
             }
             (new_dict, new_dict_weights)
         } else {
             for word in dict {
                 let word_size = std::str::from_utf8(&word).unwrap().chars().count();
-                if char_window_size >= word_size {
-                    if let Some(&idx) = word_map.get(&word) {
+                match word_map.get(&word) {
+                    Some(&idx) if char_window_size >= word_size => {
                         let start = char_window_size - word_size;
                         let end = start + word_size;
                         let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
                         let weight = &dict_weights[word_size_idx];
-                        word_weights[idx][start] += weight[0];
+                        word_weights[idx][start] += weight.right;
                         for i in start + 1..end {
-                            word_weights[idx][i] += weight[1];
+                            word_weights[idx][i] += weight.inner;
                         }
-                        word_weights[idx][end] += weight[2];
-                        continue;
+                        word_weights[idx][end] += weight.left;
                     }
-                    else {
-                        let mut weight_vec = vec![ScoreValue::default(); char_window_size * 2 - word_size + 1];
-                        let start = char_window_size - word_size;
-                        let end = start + word_size;
-                        let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
-                        let weight = &dict_weights[word_size_idx];
-                        weight_vec[start] += weight[0];
-                        for i in start + 1..end {
-                            weight_vec[i] += weight[1];
-                        }
-                        weight_vec[end] += weight[2];
-                        words.push(word);
-                        word_weights.push(weight_vec);
-                        continue;
-                    }
+                    _ => new_dict.push(word),
                 }
-                new_dict.push(word);
             }
             (new_dict, dict_weights)
         }
@@ -276,19 +259,19 @@ impl Predictor {
             } else {
                 std::cmp::min(m_end - m_start, self.dict_weights.len()) - 1
             };
-            let [w_right, w_center, w_left] = self.dict_weights[idx];
+            let dict_weight = self.dict_weights[idx];
             if m_start >= padding && m_start < padding + ys.len() {
-                ys[m_start - padding] += w_right;
+                ys[m_start - padding] += dict_weight.right;
             }
             let range_start = std::cmp::max(0, m_start as isize - padding as isize + 1);
             let range_end = std::cmp::min(m_end as isize - padding as isize, ys.len() as isize);
             if range_start < range_end {
                 for y in &mut ys[range_start as usize..range_end as usize] {
-                    *y += w_center;
+                    *y += dict_weight.inner;
                 }
             }
             if m_end >= padding && m_end < ys.len() + padding {
-                ys[m_end - padding] += w_left;
+                ys[m_end - padding] += dict_weight.left;
             }
         }
     }
@@ -671,7 +654,18 @@ mod tests {
             #[cfg(not(feature = "model-quantize"))]
             dict_weights: vec![[20.0, 20.5, 21.0], [21.5, 22.0, 22.5]],
             #[cfg(feature = "model-quantize")]
-            dict_weights: vec![[40, 41, 42], [43, 44, 45]],
+            dict_weights: vec![
+                DictWeight {
+                    right: 40,
+                    inner: 41,
+                    left: 42,
+                },
+                DictWeight {
+                    right: 43,
+                    inner: 44,
+                    left: 45,
+                },
+            ],
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: 0.5,
             dict_word_wise: false,
@@ -758,7 +752,23 @@ mod tests {
             #[cfg(not(feature = "model-quantize"))]
             dict_weights: vec![[9.5, 9.75, 10.0], [10.25, 10.5, 10.75], [11.0, 11.25, 11.5]],
             #[cfg(feature = "model-quantize")]
-            dict_weights: vec![[38, 39, 40], [41, 42, 43], [44, 45, 46]],
+            dict_weights: vec![
+                DictWeight {
+                    right: 38,
+                    inner: 39,
+                    left: 40,
+                },
+                DictWeight {
+                    right: 41,
+                    inner: 42,
+                    left: 43,
+                },
+                DictWeight {
+                    right: 44,
+                    inner: 45,
+                    left: 46,
+                },
+            ],
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: 0.25,
             dict_word_wise: false,
@@ -845,7 +855,23 @@ mod tests {
             #[cfg(not(feature = "model-quantize"))]
             dict_weights: vec![[9.5, 9.75, 11.0], [10.25, 10.5, 10.75], [11.0, 11.25, 11.5]],
             #[cfg(feature = "model-quantize")]
-            dict_weights: vec![[38, 39, 40], [41, 42, 43], [44, 45, 46]],
+            dict_weights: vec![
+                DictWeight {
+                    right: 38,
+                    inner: 39,
+                    left: 40,
+                },
+                DictWeight {
+                    right: 41,
+                    inner: 42,
+                    left: 43,
+                },
+                DictWeight {
+                    right: 44,
+                    inner: 45,
+                    left: 46,
+                },
+            ],
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: 0.25,
             dict_word_wise: true,
