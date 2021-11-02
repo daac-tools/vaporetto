@@ -55,7 +55,7 @@ The second way, which is mainly for researchers, is to prepare your own training
 
 Vaporetto can train from two types of corpora: fully annotated corpora and partially annotated corpora.
 
-Fully annotated corpora are corpora in which all character boundaries are annotated with eather token boundaries or internal positions of tokens.
+Fully annotated corpora are corpora in which all character boundaries are annotated with either token boundaries or internal positions of tokens.
 This is the data in the form of spaces inserted into the boundaries of the tokens, as shown below:
 
 ```
