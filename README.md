@@ -63,7 +63,7 @@ This is the data in the form of spaces inserted into the boundaries of the token
 火星 猫 の 生態 の 調査 結果
 ```
 
-On the other hand,　partially annotated corpora are corpora in which only some character boundaries are annotated.
+On the other hand, partially annotated corpora are corpora in which only some character boundaries are annotated.
 Each character boundary is annotated in the form of `|` (token boundary), `-` (not token boundary), and ` ` (unknown).
 Here is an example:
 
