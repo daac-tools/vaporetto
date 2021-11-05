@@ -9,8 +9,7 @@ use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
-    SentenceFilter,
-    StringFilter,
+    SentenceFilter, StringFilter,
 };
 
 #[derive(Debug)]
@@ -47,14 +46,15 @@ struct Opt {
     #[structopt(long)]
     wsconst: Vec<WsConst>,
 
-    /// Chunk size of each thread
+    /// Do not normalize input strings before prediction.
     #[structopt(long)]
-    no_norm_fullwidth: bool,
+    no_norm: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
+    let fullwidth_filter = KyteaFullwidthFilter::new();
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
     for wsconst in &opt.wsconst {
         match wsconst {
@@ -71,14 +71,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
     let predictor = Predictor::new(model);
-    let fullwidth_filter = KyteaFullwidthFilter::new();
 
     eprintln!("Start tokenization");
     let mut n_boundaries = 0;
     let start = Instant::now();
     for line in stdin().lock().lines() {
         let line = line?;
-        let s = if !opt.no_norm_fullwidth {
+        let s = if opt.no_norm {
             let s = Sentence::from_raw(line)?;
             predictor.predict(s)
         } else {
