@@ -1,10 +1,39 @@
 use std::fs::File;
 use std::io::{prelude::*, stdin};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Instant;
 
 use structopt::StructOpt;
-use vaporetto::{Model, Predictor, Sentence};
+use vaporetto::{CharacterType, Model, Predictor, Sentence};
+use vaporetto_rules::{
+    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
+    string_filters::KyteaFullwidthFilter,
+    SentenceFilter,
+    StringFilter,
+};
+
+#[derive(Debug)]
+enum WsConst {
+    GraphemeCluster,
+    CharType(CharacterType),
+}
+
+impl FromStr for WsConst {
+    type Err = &'static str;
+    fn from_str(wsconst: &str) -> Result<Self, Self::Err> {
+        match wsconst {
+            "D" => Ok(Self::CharType(CharacterType::Digit)),
+            "R" => Ok(Self::CharType(CharacterType::Roman)),
+            "H" => Ok(Self::CharType(CharacterType::Hiragana)),
+            "T" => Ok(Self::CharType(CharacterType::Katakana)),
+            "K" => Ok(Self::CharType(CharacterType::Kanji)),
+            "O" => Ok(Self::CharType(CharacterType::Other)),
+            "G" => Ok(Self::GraphemeCluster),
+            _ => Err("Could not parse a wsconst value"),
+        }
+    }
+}
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "predict", about = "A program to perform word segmentation.")]
@@ -13,47 +42,57 @@ struct Opt {
     #[structopt(long)]
     model: PathBuf,
 
-    /// Number of threads
-    #[structopt(long, default_value = "0")]
-    n_threads: usize,
+    /// Do not segment some character types: {D, R, H, T, K, O, G}.
+    /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
+    #[structopt(long)]
+    wsconst: Vec<WsConst>,
 
     /// Chunk size of each thread
-    #[structopt(long, default_value = "10")]
-    mt_chunk_size: usize,
-
-    /// Window size for dictionary words
-    #[structopt(long, default_value = "3")]
-    chunk_dict_window: usize,
+    #[structopt(long)]
+    no_norm_fullwidth: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
+    let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
+    for wsconst in &opt.wsconst {
+        match wsconst {
+            WsConst::GraphemeCluster => {
+                post_filters.push(Box::new(ConcatGraphemeClustersFilter::new()))
+            }
+            WsConst::CharType(char_type) => {
+                post_filters.push(Box::new(KyteaWsConstFilter::new(*char_type)))
+            }
+        }
+    }
+
     eprintln!("Loading model file...");
     let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model).dict_window_size(opt.chunk_dict_window);
+    let predictor = Predictor::new(model);
+    let fullwidth_filter = KyteaFullwidthFilter::new();
 
     eprintln!("Start tokenization");
     let mut n_boundaries = 0;
     let start = Instant::now();
-    if opt.n_threads == 0 {
-        for line in stdin().lock().lines() {
-            let s = Sentence::from_raw(line?)?;
+    for line in stdin().lock().lines() {
+        let line = line?;
+        let s = if !opt.no_norm_fullwidth {
+            let s = Sentence::from_raw(line)?;
+            predictor.predict(s)
+        } else {
+            let norm = fullwidth_filter.filter(&line);
+            let mut s_orig = Sentence::from_raw(line)?;
+            let s = Sentence::from_raw(norm)?;
             let s = predictor.predict(s);
-            let toks = s.to_tokenized_string()?;
-            n_boundaries += s.boundaries().len();
-            println!("{}", toks);
-        }
-    } else {
-        let predictor = predictor.multithreading(opt.n_threads, opt.mt_chunk_size);
-        for line in stdin().lock().lines() {
-            let s = Sentence::from_raw(line?)?;
-            let s = predictor.predict(s);
-            let toks = s.to_tokenized_string()?;
-            n_boundaries += s.boundaries().len();
-            println!("{}", toks);
-        }
+            s_orig.boundaries_mut().clone_from_slice(s.boundaries());
+            s_orig
+        };
+        let s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+        n_boundaries += s.boundaries().len();
+        let toks = s.to_tokenized_string()?;
+        println!("{}", toks);
     }
     let duration = start.elapsed();
     eprintln!("Elapsed: {} [sec]", duration.as_secs_f64());
