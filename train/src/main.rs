@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use structopt::{clap::ArgGroup, StructOpt};
 use vaporetto::{Dataset, Sentence, SolverType, Trainer};
+use vaporetto_rules::{string_filters::KyteaFullwidthFilter, StringFilter};
 
 #[derive(StructOpt, Debug)]
 #[structopt(
@@ -64,10 +65,16 @@ struct Opt {
     /// The solver. {0, 1, 2, 3, 4, 5, 6, 7} (see LIBLINEAR documentation for more details)
     #[structopt(long, default_value = "1")]
     solver: SolverType,
+
+    /// Do not normalize training data.
+    #[structopt(long)]
+    no_norm: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
+
+    let fullwidth_filter = KyteaFullwidthFilter::new();
 
     eprintln!("Loading dataset...");
     let mut train_sents = vec![];
@@ -81,7 +88,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprint!("# of sentences: {}\r", i);
                 stderr().flush()?;
             }
-            train_sents.push(Sentence::from_tokenized(line?)?);
+            let s = Sentence::from_tokenized(line?)?;
+            let s = if opt.no_norm {
+                s
+            } else {
+                let new_line = fullwidth_filter.filter(s.to_raw_string());
+                let mut new_s = Sentence::from_raw(new_line)?;
+                new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s
+            };
+            train_sents.push(s);
         }
         eprintln!("# of sentences: {}", train_sents.len());
     }
@@ -94,7 +110,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprint!("# of sentences: {}\r", i);
                 stderr().flush()?;
             }
-            train_sents.push(Sentence::from_partial_annotation(line?)?);
+            let s = Sentence::from_partial_annotation(line?)?;
+            let s = if opt.no_norm {
+                s
+            } else {
+                let new_line = fullwidth_filter.filter(s.to_raw_string());
+                let mut new_s = Sentence::from_raw(new_line)?;
+                new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s
+            };
+            train_sents.push(s);
         }
         eprintln!("# of sentences: {}", train_sents.len());
     }
@@ -109,7 +134,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprint!("# of words: {}\r", i);
                 stderr().flush()?;
             }
-            dictionary.insert(line?);
+            let line = line?;
+            let line = if opt.no_norm {
+                line
+            } else {
+                fullwidth_filter.filter(line)
+            };
+            dictionary.insert(line);
         }
         eprintln!("# of words: {}", dictionary.len());
     }
