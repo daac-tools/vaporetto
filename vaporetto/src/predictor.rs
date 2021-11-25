@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
+use crate::char_scorer::CharScorer;
+use crate::dict_scorer::DictScorer;
 use crate::model::{DictWeight, Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
@@ -9,16 +11,11 @@ use daachorse::DoubleArrayAhoCorasick;
 
 /// Predictor.
 pub struct Predictor {
-    word_pma: DoubleArrayAhoCorasick,
-    dict_pma: Option<DoubleArrayAhoCorasick>,
-    word_weights: Vec<Vec<ScoreValue>>,
-    dict_weights: Vec<DictWeight>,
-    dict_word_wise: bool,
     bias: ScoreValue,
-    char_window_size: usize,
-    dict_window_size: usize,
 
+    char_scorer: CharScorer,
     type_scorer: TypeScorer,
+    dict_scorer: Option<DictScorer>,
 
     #[cfg(feature = "model-quantize")]
     quantize_multiplier: f64,
@@ -37,17 +34,17 @@ impl Predictor {
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
 
-        let words = model.words;
+        let char_ngrams = model.char_ngrams;
         let dict = model.dict;
         let dict_weights = model.dict_weights;
 
-        let mut word_weights: Vec<_> = model
-            .word_weights
+        let mut char_ngram_weights: Vec<_> = model
+            .char_ngram_weights
             .into_iter()
             .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
             .collect();
-        let type_weights: Vec<_> = model
-            .type_weights
+        let type_ngram_weights: Vec<_> = model
+            .type_ngram_weights
             .into_iter()
             .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
             .collect();
@@ -55,39 +52,40 @@ impl Predictor {
         let (dict, dict_weights) = Self::merge_dict_weights(
             dict,
             dict_weights,
-            &words,
-            &mut word_weights,
+            &char_ngrams,
+            &mut char_ngram_weights,
             model.char_window_size,
             model.dict_word_wise,
         );
 
-        let word_weights = Self::merge_weights(&words, &word_weights);
-        let type_weights = Self::merge_weights(&model.types, &type_weights);
+        let char_ngram_weights = Self::merge_weights(&char_ngrams, &char_ngram_weights);
+        let type_ngram_weights = Self::merge_weights(&model.type_ngrams, &type_ngram_weights);
 
         #[cfg(feature = "model-quantize")]
         let bias = bias as i32;
 
-        let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
-        let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
-        let dict_pma = if dict.is_empty() {
+        let char_pma = DoubleArrayAhoCorasick::new(char_ngrams).unwrap();
+        let type_pma = DoubleArrayAhoCorasick::new(model.type_ngrams).unwrap();
+
+        let char_scorer = CharScorer::new(char_pma, char_ngram_weights, model.char_window_size);
+        let type_scorer = TypeScorer::new(type_pma, type_ngram_weights, model.type_window_size);
+        let dict_scorer = if dict.is_empty() {
             None
         } else {
-            Some(DoubleArrayAhoCorasick::new(dict).unwrap())
+            let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
+            Some(DictScorer::new(
+                dict_pma,
+                dict_weights,
+                model.dict_word_wise,
+            ))
         };
 
-        let type_scorer = TypeScorer::new(type_pma, type_weights, model.type_window_size);
-
         Self {
-            word_pma,
-            dict_pma,
-            word_weights,
-            dict_weights,
-            dict_word_wise: model.dict_word_wise,
             bias,
-            char_window_size: model.char_window_size,
-            dict_window_size: 1,
 
+            char_scorer,
             type_scorer,
+            dict_scorer,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
@@ -176,77 +174,6 @@ impl Predictor {
         result
     }
 
-    fn add_word_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let char_start = if start >= self.char_window_size {
-            start + 1 - self.char_window_size
-        } else {
-            0
-        };
-        let text_start = sentence.char_to_str_pos[char_start];
-        let char_end = std::cmp::min(
-            start + ys.len() + self.char_window_size,
-            sentence.char_to_str_pos.len() - 1,
-        );
-        let text_end = sentence.char_to_str_pos[char_end];
-        let text = &sentence.text[text_start..text_end];
-        let padding = start - char_start + 1;
-        for m in self.word_pma.find_overlapping_no_suffix_iter(&text) {
-            let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
-            let offset = m_end as isize - self.char_window_size as isize - padding as isize;
-            let weights = &self.word_weights[m.pattern()];
-            if offset >= 0 {
-                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
-                    *y += w;
-                }
-            } else {
-                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
-                    *y += w;
-                }
-            }
-        }
-    }
-
-    fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        if let Some(dict_pma) = self.dict_pma.as_ref() {
-            let char_start = if start >= self.dict_window_size {
-                start + 1 - self.dict_window_size
-            } else {
-                0
-            };
-            let text_start = sentence.char_to_str_pos[char_start];
-            let char_end = std::cmp::min(
-                start + ys.len() + self.dict_window_size,
-                sentence.char_to_str_pos.len() - 1,
-            );
-            let text_end = sentence.char_to_str_pos[char_end];
-            let text = &sentence.text[text_start..text_end];
-            let padding = start - char_start + 1;
-            for m in dict_pma.find_overlapping_iter(&text) {
-                let m_start = sentence.str_to_char_pos[m.start() + text_start] - char_start;
-                let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
-                let idx = if self.dict_word_wise {
-                    m.pattern()
-                } else {
-                    std::cmp::min(m_end - m_start, self.dict_weights.len()) - 1
-                };
-                let dict_weight = self.dict_weights[idx];
-                if m_start >= padding && m_start < padding + ys.len() {
-                    ys[m_start - padding] += dict_weight.right;
-                }
-                let range_start = std::cmp::max(0, m_start as isize - padding as isize + 1);
-                let range_end = std::cmp::min(m_end as isize - padding as isize, ys.len() as isize);
-                if range_start < range_end {
-                    for y in &mut ys[range_start as usize..range_end as usize] {
-                        *y += dict_weight.inner;
-                    }
-                }
-                if m_end >= padding && m_end < ys.len() + padding {
-                    ys[m_end - padding] += dict_weight.left;
-                }
-            }
-        }
-    }
-
     fn predict_partial_impl(
         &self,
         sentence: &Sentence,
@@ -254,9 +181,11 @@ impl Predictor {
         ys: &mut [ScoreValue],
     ) {
         ys.fill(self.bias);
-        self.add_word_ngram_scores(sentence, range.start, ys);
+        self.char_scorer.add_scores(sentence, range.start, ys);
         self.type_scorer.add_scores(sentence, range.start, ys);
-        self.add_dict_scores(sentence, range.start, ys);
+        if let Some(dict_scorer) = self.dict_scorer.as_ref() {
+            dict_scorer.add_scores(sentence, range.start, ys);
+        }
     }
 
     /// Predicts word boundaries of the specified range of a sentence.
@@ -370,7 +299,9 @@ impl Predictor {
     ///
     /// A predictor with the specified window size.
     pub fn dict_window_size(mut self, size: usize) -> Self {
-        self.dict_window_size = std::cmp::max(size, 1);
+        if let Some(dict_scorer) = self.dict_scorer.as_mut() {
+            dict_scorer.window_size(size);
+        }
         self
     }
 }
@@ -407,21 +338,21 @@ mod tests {
     ///   世:                 40  42
     fn generate_model_1() -> Model {
         Model {
-            words: vec![
+            char_ngrams: vec![
                 "我ら".as_bytes().to_vec(),
                 "全世界".as_bytes().to_vec(),
                 "国民".as_bytes().to_vec(),
                 "世界".as_bytes().to_vec(),
                 "界".as_bytes().to_vec(),
             ],
-            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
             dict: vec![
                 "全世界".as_bytes().to_vec(),
                 "世界".as_bytes().to_vec(),
                 "世".as_bytes().to_vec(),
             ],
             #[cfg(not(feature = "model-quantize"))]
-            word_weights: vec![
+            char_ngram_weights: vec![
                 vec![0.5, 1.0, 1.5, 2.0, 2.5],
                 vec![3.0, 3.5, 4.0, 4.5],
                 vec![5.0, 5.5, 6.0, 6.5, 7.0],
@@ -429,7 +360,7 @@ mod tests {
                 vec![10.0, 10.5, 11.0, 11.5, 12.0, 12.5],
             ],
             #[cfg(feature = "model-quantize")]
-            word_weights: vec![
+            char_ngram_weights: vec![
                 vec![1, 2, 3, 4, 5],
                 vec![6, 7, 8, 9],
                 vec![10, 11, 12, 13, 14],
@@ -437,14 +368,14 @@ mod tests {
                 vec![20, 21, 22, 23, 24, 25],
             ],
             #[cfg(not(feature = "model-quantize"))]
-            type_weights: vec![
+            type_ngram_weights: vec![
                 vec![13.0, 13.5, 14.0, 14.5],
                 vec![15.0, 15.5, 16.0, 16.5],
                 vec![17.0, 17.5, 18.0],
                 vec![18.5, 19.0, 19.5],
             ],
             #[cfg(feature = "model-quantize")]
-            type_weights: vec![
+            type_ngram_weights: vec![
                 vec![26, 27, 28, 29],
                 vec![30, 31, 32, 33],
                 vec![34, 35, 36],
@@ -516,21 +447,21 @@ mod tests {
     ///   世:                 38  40
     fn generate_model_2() -> Model {
         Model {
-            words: vec![
+            char_ngrams: vec![
                 "我ら".as_bytes().to_vec(),
                 "全世界".as_bytes().to_vec(),
                 "国民".as_bytes().to_vec(),
                 "世界".as_bytes().to_vec(),
                 "界".as_bytes().to_vec(),
             ],
-            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
             dict: vec![
                 "全世界".as_bytes().to_vec(),
                 "世界".as_bytes().to_vec(),
                 "世".as_bytes().to_vec(),
             ],
             #[cfg(not(feature = "model-quantize"))]
-            word_weights: vec![
+            char_ngram_weights: vec![
                 vec![0.25, 0.5, 0.75],
                 vec![1.0, 1.25],
                 vec![1.5, 1.75, 2.0],
@@ -538,7 +469,7 @@ mod tests {
                 vec![3.0, 3.25, 3.5, 3.75],
             ],
             #[cfg(feature = "model-quantize")]
-            word_weights: vec![
+            char_ngram_weights: vec![
                 vec![1, 2, 3],
                 vec![4, 5],
                 vec![6, 7, 8],
@@ -546,14 +477,14 @@ mod tests {
                 vec![12, 13, 14, 15],
             ],
             #[cfg(not(feature = "model-quantize"))]
-            type_weights: vec![
+            type_ngram_weights: vec![
                 vec![4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
                 vec![5.5, 5.75, 6.0, 6.25, 6.5, 6.75],
                 vec![7.0, 7.25, 7.5, 7.75, 8.0],
                 vec![8.25, 8.5, 8.75, 9.0, 9.25],
             ],
             #[cfg(feature = "model-quantize")]
-            type_weights: vec![
+            type_ngram_weights: vec![
                 vec![16, 17, 18, 19, 20, 21],
                 vec![22, 23, 24, 25, 26, 27],
                 vec![28, 29, 30, 31, 32],
@@ -635,21 +566,21 @@ mod tests {
     ///   世:                 44  46
     fn generate_model_3() -> Model {
         Model {
-            words: vec![
+            char_ngrams: vec![
                 "我ら".as_bytes().to_vec(),
                 "全世界".as_bytes().to_vec(),
                 "国民".as_bytes().to_vec(),
                 "世界".as_bytes().to_vec(),
                 "界".as_bytes().to_vec(),
             ],
-            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
             dict: vec![
                 "国民".as_bytes().to_vec(),
                 "世界".as_bytes().to_vec(),
                 "世".as_bytes().to_vec(),
             ],
             #[cfg(not(feature = "model-quantize"))]
-            word_weights: vec![
+            char_ngram_weights: vec![
                 vec![0.25, 0.5, 0.75],
                 vec![1.0, 1.25],
                 vec![1.5, 1.75, 2.0],
@@ -657,7 +588,7 @@ mod tests {
                 vec![3.0, 3.25, 3.5, 3.75],
             ],
             #[cfg(feature = "model-quantize")]
-            word_weights: vec![
+            char_ngram_weights: vec![
                 vec![1, 2, 3],
                 vec![4, 5],
                 vec![6, 7, 8],
@@ -665,14 +596,14 @@ mod tests {
                 vec![12, 13, 14, 15],
             ],
             #[cfg(not(feature = "model-quantize"))]
-            type_weights: vec![
+            type_ngram_weights: vec![
                 vec![4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
                 vec![5.5, 5.75, 6.0, 6.25, 6.5, 6.75],
                 vec![7.0, 7.25, 7.5, 7.75, 8.0],
                 vec![8.25, 8.5, 8.75, 9.0, 9.25],
             ],
             #[cfg(feature = "model-quantize")]
-            type_weights: vec![
+            type_ngram_weights: vec![
                 vec![16, 17, 18, 19, 20, 21],
                 vec![22, 23, 24, 25, 26, 27],
                 vec![28, 29, 30, 31, 32],

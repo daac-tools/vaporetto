@@ -29,6 +29,8 @@
 #[macro_use]
 mod utils;
 
+mod char_scorer;
+mod dict_scorer;
 mod model;
 mod predictor;
 mod sentence;

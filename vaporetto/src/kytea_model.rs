@@ -409,20 +409,32 @@ impl TryFrom<KyteaModel> for Model {
             .type_dict
             .ok_or_else(|| anyhow!("no type dictionary."))?;
 
-        let mut words: Vec<Vec<u8>> = vec![];
-        let mut word_weights = vec![];
-        for (word, v) in char_dict.dump_items() {
-            let weight_size = config.char_w as usize * 2 - word.len() + 1;
-            words.push(word.into_iter().collect::<String>().as_bytes().to_vec());
-            word_weights.push(v[..weight_size].to_vec());
+        let mut char_ngrams: Vec<Vec<u8>> = vec![];
+        let mut char_ngram_weights = vec![];
+        for (char_ngram, v) in char_dict.dump_items() {
+            let weight_size = config.char_w as usize * 2 - char_ngram.len() + 1;
+            char_ngrams.push(
+                char_ngram
+                    .into_iter()
+                    .collect::<String>()
+                    .as_bytes()
+                    .to_vec(),
+            );
+            char_ngram_weights.push(v[..weight_size].to_vec());
         }
 
-        let mut types: Vec<Vec<u8>> = vec![];
-        let mut type_weights = vec![];
-        for (word, v) in type_dict.dump_items() {
-            let weight_size = config.type_w as usize * 2 - word.len() + 1;
-            types.push(word.into_iter().collect::<String>().as_bytes().to_vec());
-            type_weights.push(v[..weight_size].to_vec());
+        let mut type_ngrams: Vec<Vec<u8>> = vec![];
+        let mut type_ngram_weights = vec![];
+        for (type_ngram, v) in type_dict.dump_items() {
+            let weight_size = config.type_w as usize * 2 - type_ngram.len() + 1;
+            type_ngrams.push(
+                type_ngram
+                    .into_iter()
+                    .collect::<String>()
+                    .as_bytes()
+                    .to_vec(),
+            );
+            type_ngram_weights.push(v[..weight_size].to_vec());
         }
 
         let mut dict: Vec<Vec<u8>> = vec![];
@@ -445,15 +457,15 @@ impl TryFrom<KyteaModel> for Model {
         }
 
         Ok(Self {
-            words,
-            types,
+            char_ngrams,
+            type_ngrams,
             dict,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier,
 
-            word_weights,
-            type_weights,
+            char_ngram_weights,
+            type_ngram_weights,
             dict_weights,
             dict_word_wise: true,
             bias,
