@@ -46,9 +46,6 @@ pub use model::Model;
 pub use predictor::Predictor;
 pub use sentence::{BoundaryType, CharacterType, Sentence};
 
-#[cfg(feature = "multithreading")]
-pub use predictor::MultithreadPredictor;
-
 #[cfg(feature = "train")]
 pub use trainer::{Dataset, SolverType, Trainer};
 
