@@ -33,12 +33,12 @@ pub struct DictWeight {
 /// Model data.
 #[derive(Serialize, Deserialize)]
 pub struct Model {
-    pub(crate) words: Vec<Vec<u8>>,
-    pub(crate) types: Vec<Vec<u8>>,
+    pub(crate) char_ngrams: Vec<Vec<u8>>,
+    pub(crate) type_ngrams: Vec<Vec<u8>>,
     pub(crate) dict: Vec<Vec<u8>>,
 
-    pub(crate) word_weights: Vec<Vec<WeightValue>>,
-    pub(crate) type_weights: Vec<Vec<WeightValue>>,
+    pub(crate) char_ngram_weights: Vec<Vec<WeightValue>>,
+    pub(crate) type_ngram_weights: Vec<Vec<WeightValue>>,
     pub(crate) dict_weights: Vec<DictWeight>,
 
     #[cfg(feature = "model-quantize")]
@@ -105,13 +105,13 @@ impl Model {
             .unwrap() as i32;
 
         let bias = model.label_bias(wb_idx);
-        let mut words = vec![];
-        let mut types = vec![];
-        let mut word_weights = vec![];
-        let mut type_weights = vec![];
+        let mut char_ngrams = vec![];
+        let mut type_ngrams = vec![];
+        let mut char_ngram_weights = vec![];
+        let mut type_ngram_weights = vec![];
         let mut dict_weights = vec![DictWeight::default(); dict_word_max_size];
-        let mut word_ids = StringIdManager::new();
-        let mut type_ids = StringIdManager::new();
+        let mut char_ngram_ids = StringIdManager::new();
+        let mut type_ngram_ids = StringIdManager::new();
 
         #[cfg(feature = "model-quantize")]
         let quantize_multiplier = {
@@ -138,27 +138,29 @@ impl Model {
             let weight = weight / quantize_multiplier;
 
             match feature.feature {
-                FeatureContent::CharacterNgram(word) => {
-                    let id = word_ids.get_id(word.as_bytes());
-                    if id == word_weights.len() {
-                        words.push(word.as_bytes().to_vec());
-                        word_weights.push(vec![
+                FeatureContent::CharacterNgram(char_ngram) => {
+                    let id = char_ngram_ids.get_id(char_ngram.as_bytes());
+                    if id == char_ngram_weights.len() {
+                        char_ngrams.push(char_ngram.as_bytes().to_vec());
+                        char_ngram_weights.push(vec![
                             WeightValue::default();
-                            char_window_size * 2 - word.chars().count() + 1
+                            char_window_size * 2
+                                - char_ngram.chars().count()
+                                + 1
                         ]);
                     }
-                    word_weights[id][feature.rel_position] = weight as WeightValue;
+                    char_ngram_weights[id][feature.rel_position] = weight as WeightValue;
                 }
-                FeatureContent::CharacterTypeNgram(word) => {
-                    let id = type_ids.get_id(word) as usize;
-                    if id == type_weights.len() {
-                        types.push(word.to_vec());
-                        type_weights.push(vec![
+                FeatureContent::CharacterTypeNgram(type_ngram) => {
+                    let id = type_ngram_ids.get_id(type_ngram) as usize;
+                    if id == type_ngram_weights.len() {
+                        type_ngrams.push(type_ngram.to_vec());
+                        type_ngram_weights.push(vec![
                             WeightValue::default();
-                            type_window_size * 2 - word.len() + 1
+                            type_window_size * 2 - type_ngram.len() + 1
                         ]);
                     }
-                    type_weights[id][feature.rel_position] = weight as WeightValue;
+                    type_ngram_weights[id][feature.rel_position] = weight as WeightValue;
                 }
                 FeatureContent::DictionaryWord(size) => match feature.rel_position {
                     0 => dict_weights[size - 1].right = weight as ScoreValue,
@@ -169,15 +171,15 @@ impl Model {
             };
         }
         Self {
-            words,
-            types,
+            char_ngrams,
+            type_ngrams,
             dict,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier,
 
-            word_weights,
-            type_weights,
+            char_ngram_weights,
+            type_ngram_weights,
             dict_weights,
             dict_word_wise: false,
             bias,

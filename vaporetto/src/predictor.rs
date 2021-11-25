@@ -11,11 +11,11 @@ use std::thread;
 #[cfg(feature = "multithreading")]
 use crossbeam_channel::{Receiver, Sender};
 
+use crate::char_scorer::CharScorer;
+use crate::dict_scorer::DictScorer;
 use crate::model::{DictWeight, Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
-use crate::char_scorer::CharScorer;
 use crate::type_scorer::TypeScorer;
-use crate::dict_scorer::DictScorer;
 
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -44,17 +44,17 @@ impl Predictor {
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
 
-        let chars = model.words;
+        let char_ngrams = model.char_ngrams;
         let dict = model.dict;
         let dict_weights = model.dict_weights;
 
-        let mut char_weights: Vec<_> = model
-            .word_weights
+        let mut char_ngram_weights: Vec<_> = model
+            .char_ngram_weights
             .into_iter()
             .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
             .collect();
-        let type_weights: Vec<_> = model
-            .type_weights
+        let type_ngram_weights: Vec<_> = model
+            .type_ngram_weights
             .into_iter()
             .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
             .collect();
@@ -62,28 +62,32 @@ impl Predictor {
         let (dict, dict_weights) = Self::merge_dict_weights(
             dict,
             dict_weights,
-            &chars,
-            &mut char_weights,
+            &char_ngrams,
+            &mut char_ngram_weights,
             model.char_window_size,
             model.dict_word_wise,
         );
 
-        let char_weights = Self::merge_weights(&chars, &char_weights);
-        let type_weights = Self::merge_weights(&model.types, &type_weights);
+        let char_ngram_weights = Self::merge_weights(&char_ngrams, &char_ngram_weights);
+        let type_ngram_weights = Self::merge_weights(&model.type_ngrams, &type_ngram_weights);
 
         #[cfg(feature = "model-quantize")]
         let bias = bias as i32;
 
-        let char_pma = DoubleArrayAhoCorasick::new(chars).unwrap();
-        let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
+        let char_pma = DoubleArrayAhoCorasick::new(char_ngrams).unwrap();
+        let type_pma = DoubleArrayAhoCorasick::new(model.type_ngrams).unwrap();
 
-        let char_scorer = CharScorer::new(char_pma, char_weights, model.char_window_size);
-        let type_scorer = TypeScorer::new(type_pma, type_weights, model.type_window_size);
+        let char_scorer = CharScorer::new(char_pma, char_ngram_weights, model.char_window_size);
+        let type_scorer = TypeScorer::new(type_pma, type_ngram_weights, model.type_window_size);
         let dict_scorer = if dict.is_empty() {
             None
         } else {
             let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
-            Some(DictScorer::new(dict_pma, dict_weights, model.dict_word_wise))
+            Some(DictScorer::new(
+                dict_pma,
+                dict_weights,
+                model.dict_word_wise,
+            ))
         };
 
         Self {
