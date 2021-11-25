@@ -33,6 +33,8 @@ mod model;
 mod predictor;
 mod sentence;
 mod type_scorer;
+mod char_scorer;
+mod dict_scorer;
 
 #[cfg(feature = "train")]
 mod feature;

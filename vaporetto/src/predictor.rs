@@ -13,22 +13,19 @@ use crossbeam_channel::{Receiver, Sender};
 
 use crate::model::{DictWeight, Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
+use crate::char_scorer::CharScorer;
 use crate::type_scorer::TypeScorer;
+use crate::dict_scorer::DictScorer;
 
 use daachorse::DoubleArrayAhoCorasick;
 
 /// Predictor.
 pub struct Predictor {
-    word_pma: DoubleArrayAhoCorasick,
-    dict_pma: Option<DoubleArrayAhoCorasick>,
-    word_weights: Vec<Vec<ScoreValue>>,
-    dict_weights: Vec<DictWeight>,
-    dict_word_wise: bool,
     bias: ScoreValue,
-    char_window_size: usize,
-    dict_window_size: usize,
 
+    char_scorer: CharScorer,
     type_scorer: TypeScorer,
+    dict_scorer: Option<DictScorer>,
 
     #[cfg(feature = "model-quantize")]
     quantize_multiplier: f64,
@@ -47,11 +44,11 @@ impl Predictor {
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
 
-        let words = model.words;
+        let chars = model.words;
         let dict = model.dict;
         let dict_weights = model.dict_weights;
 
-        let mut word_weights: Vec<_> = model
+        let mut char_weights: Vec<_> = model
             .word_weights
             .into_iter()
             .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
@@ -65,39 +62,36 @@ impl Predictor {
         let (dict, dict_weights) = Self::merge_dict_weights(
             dict,
             dict_weights,
-            &words,
-            &mut word_weights,
+            &chars,
+            &mut char_weights,
             model.char_window_size,
             model.dict_word_wise,
         );
 
-        let word_weights = Self::merge_weights(&words, &word_weights);
+        let char_weights = Self::merge_weights(&chars, &char_weights);
         let type_weights = Self::merge_weights(&model.types, &type_weights);
 
         #[cfg(feature = "model-quantize")]
         let bias = bias as i32;
 
-        let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
+        let char_pma = DoubleArrayAhoCorasick::new(chars).unwrap();
         let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
-        let dict_pma = if dict.is_empty() {
+
+        let char_scorer = CharScorer::new(char_pma, char_weights, model.char_window_size);
+        let type_scorer = TypeScorer::new(type_pma, type_weights, model.type_window_size);
+        let dict_scorer = if dict.is_empty() {
             None
         } else {
-            Some(DoubleArrayAhoCorasick::new(dict).unwrap())
+            let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
+            Some(DictScorer::new(dict_pma, dict_weights, model.dict_word_wise))
         };
 
-        let type_scorer = TypeScorer::new(type_pma, type_weights, model.type_window_size);
-
         Self {
-            word_pma,
-            dict_pma,
-            word_weights,
-            dict_weights,
-            dict_word_wise: model.dict_word_wise,
             bias,
-            char_window_size: model.char_window_size,
-            dict_window_size: 1,
 
+            char_scorer,
             type_scorer,
+            dict_scorer,
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
@@ -186,77 +180,6 @@ impl Predictor {
         result
     }
 
-    fn add_word_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let char_start = if start >= self.char_window_size {
-            start + 1 - self.char_window_size
-        } else {
-            0
-        };
-        let text_start = sentence.char_to_str_pos[char_start];
-        let char_end = std::cmp::min(
-            start + ys.len() + self.char_window_size,
-            sentence.char_to_str_pos.len() - 1,
-        );
-        let text_end = sentence.char_to_str_pos[char_end];
-        let text = &sentence.text[text_start..text_end];
-        let padding = start - char_start + 1;
-        for m in self.word_pma.find_overlapping_no_suffix_iter(&text) {
-            let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
-            let offset = m_end as isize - self.char_window_size as isize - padding as isize;
-            let weights = &self.word_weights[m.pattern()];
-            if offset >= 0 {
-                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
-                    *y += w;
-                }
-            } else {
-                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
-                    *y += w;
-                }
-            }
-        }
-    }
-
-    fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        if let Some(dict_pma) = self.dict_pma.as_ref() {
-            let char_start = if start >= self.dict_window_size {
-                start + 1 - self.dict_window_size
-            } else {
-                0
-            };
-            let text_start = sentence.char_to_str_pos[char_start];
-            let char_end = std::cmp::min(
-                start + ys.len() + self.dict_window_size,
-                sentence.char_to_str_pos.len() - 1,
-            );
-            let text_end = sentence.char_to_str_pos[char_end];
-            let text = &sentence.text[text_start..text_end];
-            let padding = start - char_start + 1;
-            for m in dict_pma.find_overlapping_iter(&text) {
-                let m_start = sentence.str_to_char_pos[m.start() + text_start] - char_start;
-                let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
-                let idx = if self.dict_word_wise {
-                    m.pattern()
-                } else {
-                    std::cmp::min(m_end - m_start, self.dict_weights.len()) - 1
-                };
-                let dict_weight = self.dict_weights[idx];
-                if m_start >= padding && m_start < padding + ys.len() {
-                    ys[m_start - padding] += dict_weight.right;
-                }
-                let range_start = std::cmp::max(0, m_start as isize - padding as isize + 1);
-                let range_end = std::cmp::min(m_end as isize - padding as isize, ys.len() as isize);
-                if range_start < range_end {
-                    for y in &mut ys[range_start as usize..range_end as usize] {
-                        *y += dict_weight.inner;
-                    }
-                }
-                if m_end >= padding && m_end < ys.len() + padding {
-                    ys[m_end - padding] += dict_weight.left;
-                }
-            }
-        }
-    }
-
     fn predict_partial_impl(
         &self,
         sentence: &Sentence,
@@ -264,9 +187,11 @@ impl Predictor {
         ys: &mut [ScoreValue],
     ) {
         ys.fill(self.bias);
-        self.add_word_ngram_scores(sentence, range.start, ys);
+        self.char_scorer.add_scores(sentence, range.start, ys);
         self.type_scorer.add_scores(sentence, range.start, ys);
-        self.add_dict_scores(sentence, range.start, ys);
+        if let Some(dict_scorer) = self.dict_scorer.as_ref() {
+            dict_scorer.add_scores(sentence, range.start, ys);
+        }
     }
 
     /// Predicts word boundaries of the specified range of a sentence.
@@ -380,7 +305,9 @@ impl Predictor {
     ///
     /// A predictor with the specified window size.
     pub fn dict_window_size(mut self, size: usize) -> Self {
-        self.dict_window_size = std::cmp::max(size, 1);
+        if let Some(dict_scorer) = self.dict_scorer.as_mut() {
+            dict_scorer.window_size(size);
+        }
         self
     }
 
