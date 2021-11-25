@@ -2,33 +2,13 @@ use crate::model::ScoreValue;
 use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
 
-pub enum CharScorer {
-    Pma(CharScorerPma),
-}
-
-impl CharScorer {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
-        Self::Pma(CharScorerPma::new(pma, weights, window_size))
-    }
-
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        match self {
-            CharScorer::Pma(pma) => pma.add_scores(sentence, start, ys),
-        }
-    }
-}
-
-pub struct CharScorerPma {
+pub struct CharScorer {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<Vec<ScoreValue>>,
     window_size: usize,
 }
 
-impl CharScorerPma {
+impl CharScorer {
     pub fn new(
         pma: DoubleArrayAhoCorasick,
         weights: Vec<Vec<ScoreValue>>,

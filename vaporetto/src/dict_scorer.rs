@@ -2,40 +2,14 @@ use crate::model::{DictWeight, ScoreValue};
 use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
 
-pub enum DictScorer {
-    Pma(DictScorerPma),
-}
-
-impl DictScorer {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<DictWeight>,
-        word_wise_score: bool,
-    ) -> Self {
-        Self::Pma(DictScorerPma::new(pma, weights, word_wise_score))
-    }
-
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        match self {
-            DictScorer::Pma(pma) => pma.add_scores(sentence, start, ys),
-        }
-    }
-
-    pub fn window_size(&mut self, size: usize) {
-        match self {
-            DictScorer::Pma(pma) => pma.window_size(size),
-        }
-    }
-}
-
-pub struct DictScorerPma {
+pub struct DictScorer {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<DictWeight>,
     window_size: usize,
     word_wise_score: bool,
 }
 
-impl DictScorerPma {
+impl DictScorer {
     pub fn new(
         pma: DoubleArrayAhoCorasick,
         weights: Vec<DictWeight>,
