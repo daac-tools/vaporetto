@@ -12,3 +12,9 @@ vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
 wasm-bindgen = "0.2.75"  # MIT or Apache-2.0
 ruzstd = "0.2.4"  # MIT
+wee_alloc = "0.4.5"  # MPL-2.0
+
+[profile.release]
+opt-level = "z"
+codegen-units = 1
+lto = true

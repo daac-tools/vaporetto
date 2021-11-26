@@ -1,19 +1,33 @@
 # WebAssembly example of Vaporetto
 
-1. Build a model file:
+## How to build?
+
+1. Build a model file refering the [documentation](../README.md).
+
+2. Build a JS file containing a web assembly using `build_portable_js.sh`.
+   This script requires a model file, an identifier, and an output path.
+   
+   The identifier must consist of alphanumeric characters and underscores.
    ```
-   # jp-0.4.7-5.mod is a model file distributed by KyTea.
-   cargo run --release -p convert_kytea_model -- --model-in ./jp-0.4.7-5.mod --model-out ../model/model.zstd
+   ./build_portable_js.sh <MODEL_FILE> <IDENTIFIER> <OUTPUT>
    ```
 
-2. Build a web assembly:
+3. You can use the generated JS file like the follwing code:
+   ```html
+   <!DOCTYPE html>
+   <html>
+       <head>
+           <script src="vaporetto.js"></script>
+           <script>
+               // Replace IDENTIFIER with a string you specified.
+               vaporetto_IDENTIFIER().then((Vaporetto) => {
+                   const vaporetto = Vaporetto.new("DG");
+                   const tokens = vaporetto.tokenize("火星猫の生態");
+                   console.log(tokens);
+               });
+           </script>
+       </head>
+       <body>
+       </body>
+   </html>
    ```
-   % wasm-pack build --release --target web
-   ```
-
-3. Launch the server:
-   ```
-   % python3 -m http.server 8000
-   ```
-
-4. Open http://localhost:8000/www
