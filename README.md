@@ -86,6 +86,8 @@ You can specify all arguments above multiple times.
 
 ## Speed Comparison of Various Tokenizers
 
+You can find the comparison script at [here](https://github.com/legalforce-research/tokenizer-speed-bench).
+
 ### Experimental Setup
 
 * Document: Japanese training data of Kyoto Free Translation Task
