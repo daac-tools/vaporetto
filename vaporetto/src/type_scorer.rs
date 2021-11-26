@@ -20,10 +20,10 @@ impl TypeScorer {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
         match self {
-            TypeScorer::Pma(pma) => pma.add_scores(sentence, start, ys),
-            TypeScorer::Cache(cache) => cache.add_scores(sentence, start, ys),
+            TypeScorer::Pma(pma) => pma.add_scores(sentence, ys),
+            TypeScorer::Cache(cache) => cache.add_scores(sentence, ys),
         }
     }
 }
@@ -47,20 +47,12 @@ impl TypeScorerPma {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let type_start = if start >= self.window_size {
-            start + 1 - self.window_size
-        } else {
-            0
-        };
-        let type_end = std::cmp::min(
-            start + ys.len() + self.window_size,
-            sentence.char_type.len(),
-        );
-        let char_type = &sentence.char_type[type_start..type_end];
-        let padding = start - type_start + 1;
-        for m in self.pma.find_overlapping_no_suffix_iter(&char_type) {
-            let offset = m.end() as isize - self.window_size as isize - padding as isize;
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
+        for m in self
+            .pma
+            .find_overlapping_no_suffix_iter(&sentence.char_type)
+        {
+            let offset = m.end() as isize - self.window_size as isize - 1;
             let weights = &self.weights[m.pattern()];
             if offset >= 0 {
                 for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
@@ -111,28 +103,17 @@ impl TypeScorerCache {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let type_start = if start >= self.window_size {
-            start + 1 - self.window_size
-        } else {
-            0
-        };
-        let type_end = std::cmp::min(
-            start + ys.len() + self.window_size,
-            sentence.char_type.len(),
-        );
-        let char_type = &sentence.char_type[type_start..type_end];
-        let offset = self.window_size + start;
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
         let mut seqid = 0;
-        for i in 0..offset {
-            if let Some(ct) = char_type.get(i) {
+        for i in 0..self.window_size {
+            if let Some(ct) = sentence.char_type.get(i) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);
             };
         }
         for (i, y) in ys.iter_mut().enumerate() {
-            if let Some(ct) = char_type.get(i + offset) {
+            if let Some(ct) = sentence.char_type.get(i + self.window_size) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);

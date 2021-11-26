@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ops::Range;
 
 use crate::char_scorer::CharScorer;
 use crate::dict_scorer::DictScorer;
@@ -174,83 +173,13 @@ impl Predictor {
         result
     }
 
-    fn predict_partial_impl(
-        &self,
-        sentence: &Sentence,
-        range: Range<usize>,
-        ys: &mut [ScoreValue],
-    ) {
+    fn predict_impl(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
         ys.fill(self.bias);
-        self.char_scorer.add_scores(sentence, range.start, ys);
-        self.type_scorer.add_scores(sentence, range.start, ys);
+        self.char_scorer.add_scores(sentence, ys);
+        self.type_scorer.add_scores(sentence, ys);
         if let Some(dict_scorer) = self.dict_scorer.as_ref() {
-            dict_scorer.add_scores(sentence, range.start, ys);
+            dict_scorer.add_scores(sentence, ys);
         }
-    }
-
-    /// Predicts word boundaries of the specified range of a sentence.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    /// * `range` - The range of the sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict_partial(&self, mut sentence: Sentence, range: Range<usize>) -> Sentence {
-        let mut ys = vec![ScoreValue::default(); range.len()];
-        self.predict_partial_impl(&sentence, range.clone(), &mut ys);
-        for (y, b) in ys.into_iter().zip(sentence.boundaries[range].iter_mut()) {
-            *b = if y >= ScoreValue::default() {
-                BoundaryType::WordBoundary
-            } else {
-                BoundaryType::NotWordBoundary
-            };
-        }
-        sentence
-    }
-
-    /// Predicts word boundaries of the specified range of a sentence. This function inserts
-    /// scores.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    /// * `range` - The range of the sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict_partial_with_score(
-        &self,
-        mut sentence: Sentence,
-        range: Range<usize>,
-    ) -> Sentence {
-        let mut ys = vec![ScoreValue::default(); range.len()];
-        self.predict_partial_impl(&sentence, range.clone(), &mut ys);
-        let mut scores = sentence
-            .boundary_scores
-            .take()
-            .unwrap_or_else(|| vec![0.; sentence.boundaries.len()]);
-        for (y, (b, s)) in ys.into_iter().zip(
-            sentence.boundaries[range.clone()]
-                .iter_mut()
-                .zip(scores[range].iter_mut()),
-        ) {
-            *b = if y >= ScoreValue::default() {
-                BoundaryType::WordBoundary
-            } else {
-                BoundaryType::NotWordBoundary
-            };
-
-            #[cfg(feature = "model-quantize")]
-            let y = y as f64 * self.quantize_multiplier;
-
-            *s = y;
-        }
-        sentence.boundary_scores.replace(scores);
-        sentence
     }
 
     /// Predicts word boundaries.
@@ -262,13 +191,20 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict(&self, sentence: Sentence) -> Sentence {
+    pub fn predict(&self, mut sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
-        if boundaries_size == 0 {
-            sentence
-        } else {
-            self.predict_partial(sentence, 0..boundaries_size)
+        if boundaries_size != 0 {
+            let mut ys = vec![ScoreValue::default(); boundaries_size];
+            self.predict_impl(&sentence, &mut ys);
+            for (y, b) in ys.into_iter().zip(sentence.boundaries.iter_mut()) {
+                *b = if y >= ScoreValue::default() {
+                    BoundaryType::WordBoundary
+                } else {
+                    BoundaryType::NotWordBoundary
+                };
+            }
         }
+        sentence
     }
 
     /// Predicts word boundaries. This function inserts scores.
@@ -280,29 +216,33 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
+    pub fn predict_with_score(&self, mut sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
-        if boundaries_size == 0 {
-            sentence
-        } else {
-            self.predict_partial_with_score(sentence, 0..boundaries_size)
-        }
-    }
+        if boundaries_size != 0 {
+            let mut ys = vec![ScoreValue::default(); boundaries_size];
+            self.predict_impl(&sentence, &mut ys);
+            let mut scores = sentence
+                .boundary_scores
+                .take()
+                .unwrap_or_else(|| vec![0.; boundaries_size]);
+            for (y, (b, s)) in ys
+                .into_iter()
+                .zip(sentence.boundaries.iter_mut().zip(scores.iter_mut()))
+            {
+                *b = if y >= ScoreValue::default() {
+                    BoundaryType::WordBoundary
+                } else {
+                    BoundaryType::NotWordBoundary
+                };
 
-    /// Sets the window size of words in the dictionary.
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - The window size.
-    ///
-    /// # Returns
-    ///
-    /// A predictor with the specified window size.
-    pub fn dict_window_size(mut self, size: usize) -> Self {
-        if let Some(dict_scorer) = self.dict_scorer.as_mut() {
-            dict_scorer.window_size(size);
+                #[cfg(feature = "model-quantize")]
+                let y = y as f64 * self.quantize_multiplier;
+
+                *s = y;
+            }
+            sentence.boundary_scores.replace(scores);
         }
-        self
+        sentence
     }
 }
 
@@ -791,144 +731,6 @@ mod tests {
         );
         assert_eq!(
             &[-34.5, -27.25, -20.75, 4.5, 16.25, -3.0, -10.25, -18.75],
-            s.boundary_scores().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_1() {
-        let model = generate_model_1();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial(s, 1..5);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_2() {
-        let model = generate_model_2();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial(s, 2..7);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_3() {
-        let model = generate_model_3();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial(s, 2..6);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_with_score_1() {
-        let model = generate_model_1();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial_with_score(s, 1..5);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[0.0, -2.5, 22.5, 66.0, 66.5, 0.0, 0.0, 0.0],
-            s.boundary_scores().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_with_score_2() {
-        let model = generate_model_2();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial_with_score(s, 2..7);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[0.0, 0.0, -9.75, 14.25, 26.0, 8.5, -19.75, 0.0],
-            s.boundary_scores().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_with_score_3() {
-        let model = generate_model_3();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial_with_score(s, 2..6);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[0.0, 0.0, -20.75, 4.5, 16.25, -3.0, 0.0, 0.0],
             s.boundary_scores().unwrap(),
         );
     }
