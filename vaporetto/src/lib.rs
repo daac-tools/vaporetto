@@ -17,12 +17,10 @@
 //! let model = Model::read(&mut f).unwrap();
 //! let predictor = Predictor::new(model);
 //!
-//! for line in stdin().lock().lines() {
-//!     let s = Sentence::from_raw(line.unwrap()).unwrap();
-//!     let s = predictor.predict(s);
-//!     let toks = s.to_tokenized_string().unwrap();
-//!     println!("{}", toks);
-//! }
+//! let s = Sentence::from_raw("火星猫の生態").unwrap();
+//! let s = predictor.predict(s);
+//!
+//! println!("{:?}", s.to_tokenized_vec().unwrap());
 //! ```
 //!
 //! Training requires **crate feature** `train`. For more details, see [`Trainer`].
