@@ -26,6 +26,7 @@ default = ["model-quantize"]
 kytea = ["byteorder"]
 model-quantize = []
 train = ["liblinear"]
+simd = []
 
 [package.metadata.docs.rs]
 all-features = true

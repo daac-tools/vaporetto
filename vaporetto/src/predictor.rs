@@ -6,6 +6,9 @@ use crate::model::{DictWeight, Model, ScoreValue};
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
 
+#[cfg(feature = "simd")]
+use crate::char_scorer::CharScorerSimd;
+
 use daachorse::DoubleArrayAhoCorasick;
 
 /// Predictor.
@@ -18,6 +21,9 @@ pub struct Predictor {
 
     #[cfg(feature = "model-quantize")]
     quantize_multiplier: f64,
+
+    #[cfg(feature = "simd")]
+    padding: usize,
 }
 
 impl Predictor {
@@ -88,6 +94,9 @@ impl Predictor {
 
             #[cfg(feature = "model-quantize")]
             quantize_multiplier: model.quantize_multiplier,
+
+            #[cfg(feature = "simd")]
+            padding: model.char_window_size.max(model.type_window_size),
         }
     }
 
@@ -173,12 +182,12 @@ impl Predictor {
         result
     }
 
-    fn predict_impl(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
+    fn predict_impl(&self, sentence: &Sentence, padding: usize, ys: &mut [ScoreValue]) {
         ys.fill(self.bias);
-        self.char_scorer.add_scores(sentence, ys);
-        self.type_scorer.add_scores(sentence, ys);
+        self.char_scorer.add_scores(sentence, padding, ys);
+        self.type_scorer.add_scores(sentence, &mut ys[padding..]);
         if let Some(dict_scorer) = self.dict_scorer.as_ref() {
-            dict_scorer.add_scores(sentence, ys);
+            dict_scorer.add_scores(sentence, &mut ys[padding..]);
         }
     }
 
@@ -193,9 +202,11 @@ impl Predictor {
     /// A sentence with predicted boundary information.
     pub fn predict(&self, mut sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
+
+        #[cfg(not(feature = "simd"))]
         if boundaries_size != 0 {
             let mut ys = vec![ScoreValue::default(); boundaries_size];
-            self.predict_impl(&sentence, &mut ys);
+            self.predict_impl(&sentence, 0, &mut ys);
             for (y, b) in ys.into_iter().zip(sentence.boundaries.iter_mut()) {
                 *b = if y >= ScoreValue::default() {
                     BoundaryType::WordBoundary
@@ -204,6 +215,24 @@ impl Predictor {
                 };
             }
         }
+
+        #[cfg(feature = "simd")]
+        if boundaries_size != 0 {
+            let ys_size = boundaries_size + self.padding + CharScorerSimd::simd_len() - 1;
+            let mut ys = vec![ScoreValue::default(); ys_size];
+            self.predict_impl(&sentence, self.padding, &mut ys);
+            for (&y, b) in ys[self.padding..]
+                .into_iter()
+                .zip(sentence.boundaries.iter_mut())
+            {
+                *b = if y >= ScoreValue::default() {
+                    BoundaryType::WordBoundary
+                } else {
+                    BoundaryType::NotWordBoundary
+                };
+            }
+        }
+
         sentence
     }
 
@@ -218,9 +247,11 @@ impl Predictor {
     /// A sentence with predicted boundary information.
     pub fn predict_with_score(&self, mut sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
+
+        #[cfg(not(feature = "simd"))]
         if boundaries_size != 0 {
             let mut ys = vec![ScoreValue::default(); boundaries_size];
-            self.predict_impl(&sentence, &mut ys);
+            self.predict_impl(&sentence, 0, &mut ys);
             let mut scores = sentence
                 .boundary_scores
                 .take()
@@ -242,6 +273,34 @@ impl Predictor {
             }
             sentence.boundary_scores.replace(scores);
         }
+
+        #[cfg(feature = "simd")]
+        if boundaries_size != 0 {
+            let ys_size = boundaries_size + self.padding + CharScorerSimd::simd_len() - 1;
+            let mut ys = vec![ScoreValue::default(); ys_size];
+            self.predict_impl(&sentence, self.padding, &mut ys);
+            let mut scores = sentence
+                .boundary_scores
+                .take()
+                .unwrap_or_else(|| vec![0.; boundaries_size]);
+            for (&y, (b, s)) in ys[self.padding..]
+                .into_iter()
+                .zip(sentence.boundaries.iter_mut().zip(scores.iter_mut()))
+            {
+                *b = if y >= ScoreValue::default() {
+                    BoundaryType::WordBoundary
+                } else {
+                    BoundaryType::NotWordBoundary
+                };
+
+                #[cfg(feature = "model-quantize")]
+                let y = y as f64 * self.quantize_multiplier;
+
+                *s = y;
+            }
+            sentence.boundary_scores.replace(scores);
+        }
+
         sentence
     }
 }
