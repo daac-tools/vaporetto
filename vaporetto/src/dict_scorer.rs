@@ -9,13 +9,15 @@ pub struct DictScorer {
 }
 
 impl DictScorer {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<DictWeight>,
-        word_wise_score: bool,
-    ) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(words: &[String], weights: Vec<DictWeight>, word_wise_score: bool) -> Self {
+        if word_wise_score && words.len() != weights.len() {
+            panic!("word_wise_score == true && words.len() != weights.len()");
+        }
         Self {
-            pma,
+            pma: DoubleArrayAhoCorasick::new(words).unwrap(),
             weights,
             word_wise_score,
         }

@@ -46,7 +46,11 @@ impl StringIdManager {
         }
     }
 
-    pub fn get_id(&mut self, key: &[u8]) -> usize {
+    pub fn get_id<K>(&mut self, key: K) -> usize
+    where
+        K: AsRef<[u8]>,
+    {
+        let key = key.as_ref();
         self.map.get(key).copied().unwrap_or_else(|| {
             let new_id = self.map.len();
             self.map.insert(key.into(), new_id);

@@ -9,8 +9,6 @@ use crate::type_scorer::TypeScorer;
 #[cfg(feature = "simd")]
 use crate::char_scorer::CharScorerSimd;
 
-use daachorse::DoubleArrayAhoCorasick;
-
 /// Predictor.
 pub struct Predictor {
     bias: ScoreValue,
@@ -69,20 +67,16 @@ impl Predictor {
         #[cfg(feature = "model-quantize")]
         let bias = bias as i32;
 
-        let char_pma = DoubleArrayAhoCorasick::new(char_ngrams).unwrap();
-        let type_pma = DoubleArrayAhoCorasick::new(model.type_ngrams).unwrap();
-
-        let char_scorer = CharScorer::new(char_pma, char_ngram_weights, model.char_window_size);
-        let type_scorer = TypeScorer::new(type_pma, type_ngram_weights, model.type_window_size);
+        let char_scorer = CharScorer::new(&char_ngrams, char_ngram_weights, model.char_window_size);
+        let type_scorer = TypeScorer::new(
+            &model.type_ngrams,
+            type_ngram_weights,
+            model.type_window_size,
+        );
         let dict_scorer = if dict.is_empty() {
             None
         } else {
-            let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
-            Some(DictScorer::new(
-                dict_pma,
-                dict_weights,
-                model.dict_word_wise,
-            ))
+            Some(DictScorer::new(&dict, dict_weights, model.dict_word_wise))
         };
 
         Self {
@@ -101,13 +95,13 @@ impl Predictor {
     }
 
     fn merge_dict_weights(
-        dict: Vec<Vec<u8>>,
+        dict: Vec<String>,
         dict_weights: Vec<DictWeight>,
-        words: &[Vec<u8>],
+        words: &[String],
         word_weights: &mut Vec<Vec<ScoreValue>>,
         char_window_size: usize,
         dict_word_wise: bool,
-    ) -> (Vec<Vec<u8>>, Vec<DictWeight>) {
+    ) -> (Vec<String>, Vec<DictWeight>) {
         let mut word_map = HashMap::new();
         for (i, word) in words.iter().cloned().enumerate() {
             word_map.insert(word, i);
@@ -116,7 +110,7 @@ impl Predictor {
         if dict_word_wise {
             let mut new_dict_weights = vec![];
             for (word, weight) in dict.into_iter().zip(dict_weights) {
-                let word_size = std::str::from_utf8(&word).unwrap().chars().count();
+                let word_size = word.chars().count();
                 match word_map.get(&word) {
                     Some(&idx) if char_window_size >= word_size => {
                         let start = char_window_size - word_size;
@@ -136,7 +130,7 @@ impl Predictor {
             (new_dict, new_dict_weights)
         } else {
             for word in dict {
-                let word_size = std::str::from_utf8(&word).unwrap().chars().count();
+                let word_size = word.chars().count();
                 match word_map.get(&word) {
                     Some(&idx) if char_window_size >= word_size => {
                         let start = char_window_size - word_size;
@@ -156,15 +150,18 @@ impl Predictor {
         }
     }
 
-    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<ScoreValue>]) -> Vec<Vec<ScoreValue>> {
+    fn merge_weights<P>(words: &[P], weights: &[Vec<ScoreValue>]) -> Vec<Vec<ScoreValue>>
+    where
+        P: AsRef<[u8]>,
+    {
         let mut result = vec![];
         let word_ids = words
             .iter()
-            .cloned()
             .enumerate()
-            .map(|(i, w)| (w, i))
+            .map(|(i, w)| (w.as_ref().to_vec(), i))
             .collect::<HashMap<Vec<u8>, usize>>();
         for seq in words {
+            let seq = seq.as_ref();
             let mut new_weights: Option<Vec<_>> = None;
             for st in (0..seq.len()).rev() {
                 if let Some(&idx) = word_ids.get(&seq[st..]) {
@@ -338,18 +335,14 @@ mod tests {
     fn generate_model_1() -> Model {
         Model {
             char_ngrams: vec![
-                "我ら".as_bytes().to_vec(),
-                "全世界".as_bytes().to_vec(),
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "界".as_bytes().to_vec(),
+                "我ら".to_string(),
+                "全世界".to_string(),
+                "国民".to_string(),
+                "世界".to_string(),
+                "界".to_string(),
             ],
             type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
-            dict: vec![
-                "全世界".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "世".as_bytes().to_vec(),
-            ],
+            dict: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
             #[cfg(not(feature = "model-quantize"))]
             char_ngram_weights: vec![
                 vec![0.5, 1.0, 1.5, 2.0, 2.5],
@@ -447,18 +440,14 @@ mod tests {
     fn generate_model_2() -> Model {
         Model {
             char_ngrams: vec![
-                "我ら".as_bytes().to_vec(),
-                "全世界".as_bytes().to_vec(),
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "界".as_bytes().to_vec(),
+                "我ら".to_string(),
+                "全世界".to_string(),
+                "国民".to_string(),
+                "世界".to_string(),
+                "界".to_string(),
             ],
             type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
-            dict: vec![
-                "全世界".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "世".as_bytes().to_vec(),
-            ],
+            dict: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
             #[cfg(not(feature = "model-quantize"))]
             char_ngram_weights: vec![
                 vec![0.25, 0.5, 0.75],
@@ -566,18 +555,14 @@ mod tests {
     fn generate_model_3() -> Model {
         Model {
             char_ngrams: vec![
-                "我ら".as_bytes().to_vec(),
-                "全世界".as_bytes().to_vec(),
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "界".as_bytes().to_vec(),
+                "我ら".to_string(),
+                "全世界".to_string(),
+                "国民".to_string(),
+                "世界".to_string(),
+                "界".to_string(),
             ],
             type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
-            dict: vec![
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "世".as_bytes().to_vec(),
-            ],
+            dict: vec!["国民".to_string(), "世界".to_string(), "世".to_string()],
             #[cfg(not(feature = "model-quantize"))]
             char_ngram_weights: vec![
                 vec![0.25, 0.5, 0.75],

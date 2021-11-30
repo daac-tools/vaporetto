@@ -8,15 +8,14 @@ pub enum TypeScorer {
 }
 
 impl TypeScorer {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
         if window_size <= 3 {
-            Self::Cache(TypeScorerCache::new(pma, weights, window_size))
+            Self::Cache(TypeScorerCache::new(ngrams, weights, window_size))
         } else {
-            Self::Pma(TypeScorerPma::new(pma, weights, window_size))
+            Self::Pma(TypeScorerPma::new(ngrams, weights, window_size))
         }
     }
 
@@ -35,13 +34,15 @@ pub struct TypeScorerPma {
 }
 
 impl TypeScorerPma {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
+        if ngrams.len() != weights.len() {
+            panic!("ngrams.len() != weights.len()");
+        }
         Self {
-            pma,
+            pma: DoubleArrayAhoCorasick::new(ngrams).unwrap(),
             weights,
             window_size,
         }
@@ -74,11 +75,15 @@ pub struct TypeScorerCache {
 }
 
 impl TypeScorerCache {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
+        if ngrams.len() != weights.len() {
+            panic!("ngrams.len() != weights.len()");
+        }
+        let pma = DoubleArrayAhoCorasick::new(ngrams).unwrap();
+
         let sequence_size = window_size * 2;
         let all_sequences = ALPHABET_SIZE.pow(sequence_size as u32);
 

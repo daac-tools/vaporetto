@@ -13,21 +13,20 @@ pub enum CharScorer {
 }
 
 impl CharScorer {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(ngrams: &[String], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
         #[cfg(not(feature = "simd"))]
         {
-            Self::Naive(CharScorerNaive::new(pma, weights, window_size))
+            Self::Naive(CharScorerNaive::new(ngrams, weights, window_size))
         }
 
         #[cfg(feature = "simd")]
         if window_size <= 4 {
-            Self::Simd(CharScorerSimd::new(pma, weights, window_size))
+            Self::Simd(CharScorerSimd::new(ngrams, weights, window_size))
         } else {
-            Self::Naive(CharScorerNaive::new(pma, weights, window_size))
+            Self::Naive(CharScorerNaive::new(ngrams, weights, window_size))
         }
     }
 
@@ -48,13 +47,15 @@ pub struct CharScorerNaive {
 }
 
 impl CharScorerNaive {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(ngrams: &[String], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
+        if ngrams.len() != weights.len() {
+            panic!("ngrams.len() != weights.len()");
+        }
         Self {
-            pma,
+            pma: DoubleArrayAhoCorasick::new(ngrams).unwrap(),
             weights,
             window_size,
         }
@@ -87,7 +88,13 @@ pub struct CharScorerSimd {
 
 #[cfg(feature = "simd")]
 impl CharScorerSimd {
-    pub fn new(pma: DoubleArrayAhoCorasick, weights: Vec<Vec<i32>>, window_size: usize) -> Self {
+    /// # Panics
+    ///
+    /// `ngrams` and `weights` must have same number of entries.
+    pub fn new(ngrams: &[String], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
+        if ngrams.len() != weights.len() {
+            panic!("ngrams.len() != weights.len()");
+        }
         let weights: Vec<_> = weights
             .iter()
             .map(|w| {
@@ -97,7 +104,7 @@ impl CharScorerSimd {
             })
             .collect();
         Self {
-            pma,
+            pma: DoubleArrayAhoCorasick::new(ngrams).unwrap(),
             weights,
             window_size,
         }

@@ -409,17 +409,11 @@ impl TryFrom<KyteaModel> for Model {
             .type_dict
             .ok_or_else(|| anyhow!("no type dictionary."))?;
 
-        let mut char_ngrams: Vec<Vec<u8>> = vec![];
+        let mut char_ngrams: Vec<String> = vec![];
         let mut char_ngram_weights = vec![];
         for (char_ngram, v) in char_dict.dump_items() {
             let weight_size = config.char_w as usize * 2 - char_ngram.len() + 1;
-            char_ngrams.push(
-                char_ngram
-                    .into_iter()
-                    .collect::<String>()
-                    .as_bytes()
-                    .to_vec(),
-            );
+            char_ngrams.push(char_ngram.into_iter().collect::<String>());
             char_ngram_weights.push(v[..weight_size].to_vec());
         }
 
@@ -437,7 +431,7 @@ impl TryFrom<KyteaModel> for Model {
             type_ngram_weights.push(v[..weight_size].to_vec());
         }
 
-        let mut dict: Vec<Vec<u8>> = vec![];
+        let mut dict: Vec<String> = vec![];
         let mut dict_weights = vec![];
         if let Some(kytea_dict) = model.dict {
             for (w, data) in kytea_dict.dump_items() {
@@ -452,7 +446,7 @@ impl TryFrom<KyteaModel> for Model {
                     }
                 }
                 dict_weights.push(weights);
-                dict.push(w.into_iter().collect::<String>().as_bytes().to_vec());
+                dict.push(w.into_iter().collect());
             }
         }
 

@@ -33,9 +33,9 @@ pub struct DictWeight {
 /// Model data.
 #[derive(Serialize, Deserialize)]
 pub struct Model {
-    pub(crate) char_ngrams: Vec<Vec<u8>>,
+    pub(crate) char_ngrams: Vec<String>,
     pub(crate) type_ngrams: Vec<Vec<u8>>,
-    pub(crate) dict: Vec<Vec<u8>>,
+    pub(crate) dict: Vec<String>,
 
     pub(crate) char_ngram_weights: Vec<Vec<WeightValue>>,
     pub(crate) type_ngram_weights: Vec<Vec<WeightValue>>,
@@ -93,7 +93,7 @@ impl Model {
     pub(crate) fn from_liblinear_model(
         model: impl LibLinearModel,
         fid_manager: FeatureIDManager,
-        dict: Vec<Vec<u8>>,
+        dict: Vec<String>,
         char_window_size: usize,
         type_window_size: usize,
         dict_word_max_size: usize,
@@ -139,9 +139,9 @@ impl Model {
 
             match feature.feature {
                 FeatureContent::CharacterNgram(char_ngram) => {
-                    let id = char_ngram_ids.get_id(char_ngram.as_bytes());
+                    let id = char_ngram_ids.get_id(&char_ngram);
                     if id == char_ngram_weights.len() {
-                        char_ngrams.push(char_ngram.as_bytes().to_vec());
+                        char_ngrams.push(char_ngram.to_string());
                         char_ngram_weights.push(vec![
                             WeightValue::default();
                             char_window_size * 2

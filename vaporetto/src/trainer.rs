@@ -72,7 +72,7 @@ impl From<SolverType> for liblinear::SolverType {
 /// Dataset manager.
 #[cfg_attr(docsrs, doc(cfg(feature = "train")))]
 pub struct Dataset<'a> {
-    dictionary: Vec<Vec<u8>>,
+    dictionary: Vec<String>,
     feature_extractor: FeatureExtractor,
     example_generator: ExampleGenerator,
     char_window_size: usize,
@@ -118,7 +118,7 @@ impl<'a> Dataset<'a> {
             dictionary: dictionary
                 .as_ref()
                 .iter()
-                .map(|word| (word.as_ref() as &[u8]).to_vec())
+                .map(|word| (word.as_ref() as &str).to_string())
                 .collect(),
             feature_extractor: FeatureExtractor::new(
                 char_ngram_size,
