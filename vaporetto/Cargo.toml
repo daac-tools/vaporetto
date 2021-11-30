@@ -22,9 +22,8 @@ byteorder = { version = "1.4", optional = true }  # Unlicense or MIT
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
-default = ["model-quantize"]
+default = []
 kytea = ["byteorder"]
-model-quantize = []
 train = ["liblinear"]
 simd = []
 

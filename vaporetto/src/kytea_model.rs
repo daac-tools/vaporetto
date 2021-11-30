@@ -401,7 +401,7 @@ impl TryFrom<KyteaModel> for Model {
         let feature_lookup = wordseg_model
             .feature_lookup
             .ok_or_else(|| anyhow!("no lookup data."))?;
-        let bias = feature_lookup.biases[0];
+        let bias = feature_lookup.biases[0] as i32;
         let char_dict = feature_lookup
             .char_dict
             .ok_or_else(|| anyhow!("no character dictionary."))?;
@@ -414,7 +414,7 @@ impl TryFrom<KyteaModel> for Model {
         for (char_ngram, v) in char_dict.dump_items() {
             let weight_size = config.char_w as usize * 2 - char_ngram.len() + 1;
             char_ngrams.push(char_ngram.into_iter().collect::<String>());
-            char_ngram_weights.push(v[..weight_size].to_vec());
+            char_ngram_weights.push(v[..weight_size].iter().map(|&w| w as i32).collect());
         }
 
         let mut type_ngrams: Vec<Vec<u8>> = vec![];
@@ -428,7 +428,7 @@ impl TryFrom<KyteaModel> for Model {
                     .as_bytes()
                     .to_vec(),
             );
-            type_ngram_weights.push(v[..weight_size].to_vec());
+            type_ngram_weights.push(v[..weight_size].iter().map(|&w| w as i32).collect());
         }
 
         let mut dict: Vec<String> = vec![];
@@ -455,7 +455,6 @@ impl TryFrom<KyteaModel> for Model {
             type_ngrams,
             dict,
 
-            #[cfg(feature = "model-quantize")]
             quantize_multiplier,
 
             char_ngram_weights,

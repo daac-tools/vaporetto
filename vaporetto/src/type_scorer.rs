@@ -1,4 +1,3 @@
-use crate::model::ScoreValue;
 use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -11,7 +10,7 @@ impl TypeScorer {
     /// # Panics
     ///
     /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
+    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
         if window_size <= 3 {
             Self::Cache(TypeScorerCache::new(ngrams, weights, window_size))
         } else {
@@ -19,7 +18,7 @@ impl TypeScorer {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         match self {
             TypeScorer::Pma(pma) => pma.add_scores(sentence, ys),
             TypeScorer::Cache(cache) => cache.add_scores(sentence, ys),
@@ -29,7 +28,7 @@ impl TypeScorer {
 
 pub struct TypeScorerPma {
     pma: DoubleArrayAhoCorasick,
-    weights: Vec<Vec<ScoreValue>>,
+    weights: Vec<Vec<i32>>,
     window_size: usize,
 }
 
@@ -37,7 +36,7 @@ impl TypeScorerPma {
     /// # Panics
     ///
     /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
+    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
         if ngrams.len() != weights.len() {
             panic!("ngrams.len() != weights.len()");
         }
@@ -48,7 +47,7 @@ impl TypeScorerPma {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         for m in self
             .pma
             .find_overlapping_no_suffix_iter(&sentence.char_type)
@@ -69,7 +68,7 @@ impl TypeScorerPma {
 }
 
 pub struct TypeScorerCache {
-    scores: Vec<ScoreValue>,
+    scores: Vec<i32>,
     window_size: usize,
     sequence_mask: usize,
 }
@@ -78,7 +77,7 @@ impl TypeScorerCache {
     /// # Panics
     ///
     /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<ScoreValue>>, window_size: usize) -> Self {
+    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
         if ngrams.len() != weights.len() {
             panic!("ngrams.len() != weights.len()");
         }
@@ -88,13 +87,13 @@ impl TypeScorerCache {
         let all_sequences = ALPHABET_SIZE.pow(sequence_size as u32);
 
         let mut sequence = vec![0u8; sequence_size];
-        let mut scores = vec![0 as ScoreValue; all_sequences];
+        let mut scores = vec![0; all_sequences];
 
         for (i, score) in scores.iter_mut().enumerate() {
             if !Self::seqid_to_seq(i, &mut sequence) {
                 continue;
             }
-            let mut y = ScoreValue::default();
+            let mut y = 0;
             for m in pma.find_overlapping_no_suffix_iter(&sequence) {
                 y += weights[m.pattern()][sequence_size - m.end()];
             }
@@ -108,7 +107,7 @@ impl TypeScorerCache {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         let mut seqid = 0;
         for i in 0..self.window_size {
             if let Some(ct) = sentence.char_type.get(i) {
@@ -141,7 +140,7 @@ impl TypeScorerCache {
     }
 
     #[inline(always)]
-    fn get_score(&self, seqid: usize) -> ScoreValue {
+    fn get_score(&self, seqid: usize) -> i32 {
         self.scores[seqid]
     }
 

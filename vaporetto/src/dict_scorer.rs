@@ -1,4 +1,4 @@
-use crate::model::{DictWeight, ScoreValue};
+use crate::model::DictWeight;
 use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -23,7 +23,7 @@ impl DictScorer {
         }
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [ScoreValue]) {
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         for m in self.pma.find_overlapping_iter(&sentence.text) {
             let m_start = sentence.str_to_char_pos[m.start()];
             let m_end = sentence.str_to_char_pos[m.end()];
