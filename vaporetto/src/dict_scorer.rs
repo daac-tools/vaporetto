@@ -1,6 +1,7 @@
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::dict_model::{DictModel, DictModelLengthwise, DictModelWordwise, DictWeight};
+use crate::errors::{Result, VaporettoError};
 use crate::sentence::Sentence;
 
 pub enum DictScorer {
@@ -9,11 +10,11 @@ pub enum DictScorer {
 }
 
 impl DictScorer {
-    pub fn new(model: DictModel) -> Self {
-        match model {
+    pub fn new(model: DictModel) -> Result<Self> {
+        Ok(match model {
             DictModel::Wordwise(model) => Self::Wordwise(DictScorerWordwise::new(model)),
-            DictModel::Lengthwise(model) => Self::Lengthwise(DictScorerLengthwise::new(model)),
-        }
+            DictModel::Lengthwise(model) => Self::Lengthwise(DictScorerLengthwise::new(model)?),
+        })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
@@ -68,11 +69,16 @@ pub struct DictScorerLengthwise {
 }
 
 impl DictScorerLengthwise {
-    pub fn new(model: DictModelLengthwise) -> Self {
-        Self {
+    pub fn new(model: DictModelLengthwise) -> Result<Self> {
+        if model.weights.is_empty() {
+            return Err(VaporettoError::invalid_model(
+                "dict_word_max_size must be >= 1",
+            ));
+        }
+        Ok(Self {
             pma: DoubleArrayAhoCorasick::new(model.words).unwrap(),
             weights: model.weights,
-        }
+        })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {

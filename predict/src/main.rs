@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Loading model file...");
     let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model);
+    let predictor = Predictor::new(model)?;
 
     eprintln!("Start tokenization");
     let mut n_boundaries = 0;

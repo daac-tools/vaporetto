@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
-
+use crate::errors::{Result, VaporettoError};
 use crate::feature::{ExampleGenerator, FeatureExtractor};
 use crate::model::Model;
 use crate::sentence::Sentence;
@@ -237,14 +236,16 @@ impl Trainer {
         let mut builder = liblinear::Builder::new();
         let training_input =
             liblinear::util::TrainingInput::from_sparse_features(dataset.ys, dataset.xs)
-                .map_err(|e| anyhow!("liblinear error: {:?}", e))?;
+                .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {:?}", e)))?;
         builder.problem().input_data(training_input).bias(self.bias);
         builder
             .parameters()
             .solver_type(solver.into())
             .stopping_criterion(self.epsilon)
             .constraints_violation_cost(self.cost);
-        let model = builder.build_model().map_err(|e| anyhow!(e.to_string()))?;
+        let model = builder
+            .build_model()
+            .map_err(|e| VaporettoError::invalid_model(e.to_string()))?;
 
         Ok(Model::from_liblinear_model(
             model,

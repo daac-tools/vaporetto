@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use crate::errors::{Result, VaporettoError};
 
 /// Character type.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -140,7 +140,7 @@ impl Sentence {
         let text = text.into();
 
         if text.is_empty() {
-            return Err(anyhow!("`text` is empty"));
+            return Err(VaporettoError::invalid_argument("text", "is empty"));
         }
 
         let chars: Vec<char> = text.chars().collect();
@@ -212,7 +212,10 @@ impl Sentence {
         let tokenized_text = tokenized_text.as_ref();
 
         if tokenized_text.is_empty() {
-            return Err(anyhow!("`tokenized_text` is empty"));
+            return Err(VaporettoError::invalid_argument(
+                "tokenized_text",
+                "is empty",
+            ));
         }
 
         let tokenized_chars: Vec<char> = tokenized_text.chars().collect();
@@ -228,9 +231,15 @@ impl Sentence {
                 }
                 (false, ' ') => {
                     if chars.is_empty() {
-                        return Err(anyhow!("`tokenized_text` starts with a whitespace"));
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "starts with a whitespace",
+                        ));
                     } else if prev_boundary {
-                        return Err(anyhow!("`tokenized_text` contains consecutive whitespaces"));
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "contains consecutive whitespaces",
+                        ));
                     }
                     prev_boundary = true;
                 }
@@ -249,7 +258,10 @@ impl Sentence {
             };
         }
         if prev_boundary {
-            return Err(anyhow!("`tokenized_text` ends with a whitespace"));
+            return Err(VaporettoError::invalid_argument(
+                "tokenized_text",
+                "ends with a whitespace",
+            ));
         }
 
         let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
@@ -296,7 +308,9 @@ impl Sentence {
                 }
                 BoundaryType::NotWordBoundary => (),
                 BoundaryType::Unknown => {
-                    return Err(anyhow!("sentence contains an unknown boundary"));
+                    return Err(VaporettoError::invalid_sentence(
+                        "contains an unknown boundary",
+                    ));
                 }
             }
             match c {
@@ -344,7 +358,9 @@ impl Sentence {
                 }
                 BoundaryType::NotWordBoundary => (),
                 BoundaryType::Unknown => {
-                    return Err(anyhow!("sentence contains an unknown boundary"));
+                    return Err(VaporettoError::invalid_sentence(
+                        "contains an unknown boundary",
+                    ));
                 }
             }
         }
@@ -389,14 +405,14 @@ impl Sentence {
         let labeled_text = labeled_text.as_ref();
 
         if labeled_text.is_empty() {
-            return Err(anyhow!("`labeled_text` is empty"));
+            return Err(VaporettoError::invalid_argument("labeled_text", "is empty"));
         }
 
         let labeled_chars: Vec<char> = labeled_text.chars().collect();
         if labeled_chars.len() & 0x01 == 0 {
-            return Err(anyhow!(
-                "invalid length for `labeled_text`: {}",
-                labeled_chars.len()
+            return Err(VaporettoError::invalid_argument(
+                "labeled_text",
+                format!("invalid length: {}", labeled_chars.len()),
             ));
         }
         let mut chars = Vec::with_capacity(labeled_chars.len() / 2 + 1);
@@ -407,7 +423,12 @@ impl Sentence {
                 ' ' => BoundaryType::Unknown,
                 '|' => BoundaryType::WordBoundary,
                 '-' => BoundaryType::NotWordBoundary,
-                _ => return Err(anyhow!("invalid boundary character: '{}'", c)),
+                _ => {
+                    return Err(VaporettoError::invalid_argument(
+                        "labeled_text",
+                        format!("contains invalid boundary character: '{}'", c),
+                    ))
+                }
             });
         }
         for c in labeled_chars.into_iter().step_by(2) {
@@ -527,7 +548,7 @@ impl Sentence {
         } else {
             match self.str_to_char_pos.get(index) {
                 Some(index) if *index != 0 => Ok(*index),
-                _ => Err(anyhow!("invalid index")),
+                _ => Err(VaporettoError::invalid_argument("index", "invalid index")),
             }
         }
     }
@@ -556,7 +577,10 @@ mod tests {
         let s = Sentence::from_raw("");
 
         assert!(s.is_err());
-        assert_eq!("`text` is empty", &s.err().unwrap().to_string());
+        assert_eq!(
+            "InvalidArgumentError: text: is empty",
+            &s.err().unwrap().to_string()
+        );
     }
 
     #[test]
@@ -612,7 +636,10 @@ mod tests {
         let s = Sentence::from_tokenized("");
 
         assert!(s.is_err());
-        assert_eq!("`tokenized_text` is empty", &s.err().unwrap().to_string());
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: is empty",
+            &s.err().unwrap().to_string()
+        );
     }
 
     #[test]
@@ -621,7 +648,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "`tokenized_text` starts with a whitespace",
+            "InvalidArgumentError: tokenized_text: starts with a whitespace",
             &s.err().unwrap().to_string()
         );
     }
@@ -632,7 +659,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "`tokenized_text` ends with a whitespace",
+            "InvalidArgumentError: tokenized_text: ends with a whitespace",
             &s.err().unwrap().to_string()
         );
     }
@@ -643,7 +670,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "`tokenized_text` contains consecutive whitespaces",
+            "InvalidArgumentError: tokenized_text: contains consecutive whitespaces",
             &s.err().unwrap().to_string()
         );
     }
@@ -778,7 +805,7 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(
-            "sentence contains an unknown boundary",
+            "InvalidSentenceError: contains an unknown boundary",
             result.err().unwrap().to_string()
         );
     }
@@ -810,7 +837,7 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(
-            "sentence contains an unknown boundary",
+            "InvalidSentenceError: contains an unknown boundary",
             result.err().unwrap().to_string()
         );
     }
@@ -830,7 +857,10 @@ mod tests {
         let s = Sentence::from_partial_annotation("");
 
         assert!(s.is_err());
-        assert_eq!("`labeled_text` is empty", &s.err().unwrap().to_string());
+        assert_eq!(
+            "InvalidArgumentError: labeled_text: is empty",
+            &s.err().unwrap().to_string()
+        );
     }
 
     #[test]
@@ -839,7 +869,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "invalid length for `labeled_text`: 12",
+            "InvalidArgumentError: labeled_text: invalid length: 12",
             &s.err().unwrap().to_string()
         );
     }
@@ -850,7 +880,7 @@ mod tests {
 
         assert!(s.is_err());
         assert_eq!(
-            "invalid boundary character: '?'",
+            "InvalidArgumentError: labeled_text: contains invalid boundary character: '?'",
             &s.err().unwrap().to_string()
         );
     }

@@ -1,6 +1,6 @@
+use crate::errors::{Result, VaporettoError};
 use crate::sentence::{BoundaryType, Sentence};
 
-use anyhow::{anyhow, Result};
 use daachorse::DoubleArrayAhoCorasick;
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +55,10 @@ impl FeatureExtractor {
                 dict_word_max_size,
             );
             if size == 0 {
-                return Err(anyhow!("`dictionary` contains an empty string"));
+                return Err(VaporettoError::invalid_argument(
+                    "dictionary",
+                    "contains an empty string",
+                ));
             }
             dict_word_size.push(size);
         }
@@ -224,7 +227,7 @@ mod tests {
 
         assert!(fe.is_err());
         assert_eq!(
-            "`dictionary` contains an empty string",
+            "InvalidArgumentError: dictionary: contains an empty string",
             &fe.err().unwrap().to_string()
         );
     }

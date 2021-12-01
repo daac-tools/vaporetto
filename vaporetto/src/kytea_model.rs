@@ -1,10 +1,10 @@
 use std::convert::TryFrom;
 use std::io::BufRead;
 
-use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::dict_model::{DictModel, DictModelWordwise, DictWeight, WordwiseDictData};
+use crate::errors::{Result, VaporettoError};
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
 
@@ -392,24 +392,24 @@ impl KyteaModel {
 }
 
 impl TryFrom<KyteaModel> for Model {
-    type Error = anyhow::Error;
+    type Error = VaporettoError;
 
     fn try_from(model: KyteaModel) -> Result<Self> {
         let config = &model.config;
         let wordseg_model = model
             .wordseg_model
-            .ok_or_else(|| anyhow!("no word segmentation model."))?;
+            .ok_or_else(|| VaporettoError::invalid_model("no word segmentation model."))?;
         let quantize_multiplier = wordseg_model.multiplier;
         let feature_lookup = wordseg_model
             .feature_lookup
-            .ok_or_else(|| anyhow!("no lookup data."))?;
+            .ok_or_else(|| VaporettoError::invalid_model("no lookup data."))?;
         let bias = feature_lookup.biases[0] as i32;
         let char_dict = feature_lookup
             .char_dict
-            .ok_or_else(|| anyhow!("no character dictionary."))?;
+            .ok_or_else(|| VaporettoError::invalid_model("no character dictionary."))?;
         let type_dict = feature_lookup
             .type_dict
-            .ok_or_else(|| anyhow!("no type dictionary."))?;
+            .ok_or_else(|| VaporettoError::invalid_model("no type dictionary."))?;
 
         let mut char_ngrams = vec![];
         for (char_ngram, v) in char_dict.dump_items() {

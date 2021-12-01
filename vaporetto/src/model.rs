@@ -1,6 +1,5 @@
 use std::io::{Read, Write};
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::dict_model::DictModel;
@@ -50,12 +49,11 @@ impl Model {
     /// # Errors
     ///
     /// When `wtr` generates an error, it will be returned as is.
-    pub fn write<W>(&self, wtr: &mut W) -> Result<()>
+    pub fn write<W>(&self, wtr: &mut W) -> Result<(), bincode::Error>
     where
         W: Write,
     {
-        bincode::serialize_into(wtr, self)?;
-        Ok(())
+        bincode::serialize_into(wtr, self)
     }
 
     /// Creates a model from a reader.
@@ -71,11 +69,11 @@ impl Model {
     /// # Errors
     ///
     /// When `rdr` generates an error, it will be returned as is.
-    pub fn read<R>(rdr: &mut R) -> Result<Self>
+    pub fn read<R>(rdr: &mut R) -> Result<Self, bincode::Error>
     where
         R: Read,
     {
-        Ok(bincode::deserialize_from(rdr)?)
+        bincode::deserialize_from(rdr)
     }
 
     #[cfg(feature = "train")]

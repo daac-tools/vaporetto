@@ -28,7 +28,7 @@ impl Vaporetto {
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();
         let model = Model::read(&mut buff.as_slice()).unwrap();
-        let predictor = Predictor::new(model);
+        let predictor = Predictor::new(model).unwrap();
         let post_filters: Vec<_> = filters
             .chars()
             .map(|c| {

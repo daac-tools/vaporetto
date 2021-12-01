@@ -1,5 +1,6 @@
 use crate::char_scorer::CharScorer;
 use crate::dict_scorer::DictScorer;
+use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
@@ -31,7 +32,7 @@ impl Predictor {
     /// # Returns
     ///
     /// A new predictor.
-    pub fn new(model: Model) -> Self {
+    pub fn new(model: Model) -> Result<Self> {
         let bias = model.bias;
 
         let mut char_ngram_model = model.char_ngram_model;
@@ -45,10 +46,10 @@ impl Predictor {
         let dict_scorer = if dict_model.is_empty() {
             None
         } else {
-            Some(DictScorer::new(dict_model))
+            Some(DictScorer::new(dict_model)?)
         };
 
-        Self {
+        Ok(Self {
             bias,
 
             char_scorer,
@@ -59,7 +60,7 @@ impl Predictor {
 
             #[cfg(feature = "simd")]
             padding: model.char_window_size.max(model.type_window_size),
-        }
+        })
     }
 
     fn predict_impl(&self, sentence: &Sentence, padding: usize, ys: &mut [i32]) {
@@ -479,7 +480,7 @@ mod tests {
     #[test]
     fn test_predict_1() {
         let model = generate_model_1();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict(s);
         assert_eq!(
@@ -500,7 +501,7 @@ mod tests {
     #[test]
     fn test_predict_2() {
         let model = generate_model_2();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict(s);
         assert_eq!(
@@ -521,7 +522,7 @@ mod tests {
     #[test]
     fn test_predict_3() {
         let model = generate_model_3();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict(s);
         assert_eq!(
@@ -542,7 +543,7 @@ mod tests {
     #[test]
     fn test_predict_with_score_1() {
         let model = generate_model_1();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
         assert_eq!(
@@ -567,7 +568,7 @@ mod tests {
     #[test]
     fn test_predict_with_score_2() {
         let model = generate_model_2();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
         assert_eq!(
@@ -592,7 +593,7 @@ mod tests {
     #[test]
     fn test_predict_with_score_3() {
         let model = generate_model_3();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
         assert_eq!(

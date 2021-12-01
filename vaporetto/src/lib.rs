@@ -15,7 +15,7 @@
 //!
 //! let mut f = BufReader::new(File::open("model.bin").unwrap());
 //! let model = Model::read(&mut f).unwrap();
-//! let predictor = Predictor::new(model);
+//! let predictor = Predictor::new(model).unwrap();
 //!
 //! let s = Sentence::from_raw("火星猫の生態").unwrap();
 //! let s = predictor.predict(s);
@@ -36,6 +36,8 @@ mod ngram_model;
 mod predictor;
 mod sentence;
 mod type_scorer;
+
+pub mod errors;
 
 #[cfg(feature = "train")]
 mod feature;
