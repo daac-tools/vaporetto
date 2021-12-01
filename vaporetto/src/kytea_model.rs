@@ -4,7 +4,8 @@ use std::io::BufRead;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::model::{DictWeight, Model};
+use crate::dict_model::{DictModel, DictModelWordwise, DictWeight, WordwiseDictData};
+use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
 
 struct KyteaConfig {
@@ -432,8 +433,7 @@ impl TryFrom<KyteaModel> for Model {
             });
         }
 
-        let mut dict: Vec<String> = vec![];
-        let mut dict_weights = vec![];
+        let mut dict_data = vec![];
         if let Some(kytea_dict) = model.dict {
             for (w, data) in kytea_dict.dump_items() {
                 let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
@@ -446,20 +446,20 @@ impl TryFrom<KyteaModel> for Model {
                         weights.left += feature_lookup.dict_vec[offset + 2] as i32;
                     }
                 }
-                dict_weights.push(weights);
-                dict.push(w.into_iter().collect());
+                dict_data.push(WordwiseDictData {
+                    word: w.into_iter().collect(),
+                    weights,
+                });
             }
         }
 
         Ok(Self {
             char_ngram_model: NgramModel::new(char_ngrams),
             type_ngram_model: NgramModel::new(type_ngrams),
-            dict,
+            dict_model: DictModel::Wordwise(DictModelWordwise { data: dict_data }),
 
             quantize_multiplier,
 
-            dict_weights,
-            dict_word_wise: true,
             bias,
             char_window_size: config.char_w as usize,
             type_window_size: config.type_w as usize,

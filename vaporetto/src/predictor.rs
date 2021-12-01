@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-
 use crate::char_scorer::CharScorer;
 use crate::dict_scorer::DictScorer;
-use crate::model::{DictWeight, Model};
-use crate::ngram_model::NgramModel;
+use crate::model::Model;
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
 
@@ -39,23 +36,16 @@ impl Predictor {
 
         let mut char_ngram_model = model.char_ngram_model;
         let type_ngram_model = model.type_ngram_model;
-        let dict = model.dict;
-        let dict_weights = model.dict_weights;
+        let mut dict_model = model.dict_model;
 
-        let (dict, dict_weights) = Self::merge_dict_weights(
-            dict,
-            dict_weights,
-            &mut char_ngram_model,
-            model.char_window_size,
-            model.dict_word_wise,
-        );
+        dict_model.merge_dict_weights(&mut char_ngram_model, model.char_window_size);
 
         let char_scorer = CharScorer::new(char_ngram_model, model.char_window_size);
         let type_scorer = TypeScorer::new(type_ngram_model, model.type_window_size);
-        let dict_scorer = if dict.is_empty() {
+        let dict_scorer = if dict_model.is_empty() {
             None
         } else {
-            Some(DictScorer::new(&dict, dict_weights, model.dict_word_wise))
+            Some(DictScorer::new(dict_model))
         };
 
         Self {
@@ -69,66 +59,6 @@ impl Predictor {
 
             #[cfg(feature = "simd")]
             padding: model.char_window_size.max(model.type_window_size),
-        }
-    }
-
-    fn merge_dict_weights(
-        dict: Vec<String>,
-        dict_weights: Vec<DictWeight>,
-        char_ngram_model: &mut NgramModel<String>,
-        char_window_size: usize,
-        dict_word_wise: bool,
-    ) -> (Vec<String>, Vec<DictWeight>) {
-        let mut word_map = HashMap::new();
-        for (i, word) in char_ngram_model
-            .data
-            .iter()
-            .map(|d| d.ngram.clone())
-            .enumerate()
-        {
-            word_map.insert(word, i);
-        }
-        let mut new_dict = vec![];
-        if dict_word_wise {
-            let mut new_dict_weights = vec![];
-            for (word, weight) in dict.into_iter().zip(dict_weights) {
-                let word_size = word.chars().count();
-                match word_map.get(&word) {
-                    Some(&idx) if char_window_size >= word_size => {
-                        let start = char_window_size - word_size;
-                        let end = start + word_size;
-                        char_ngram_model.data[idx].weights[start] += weight.right;
-                        for i in start + 1..end {
-                            char_ngram_model.data[idx].weights[i] += weight.inner;
-                        }
-                        char_ngram_model.data[idx].weights[end] += weight.left;
-                    }
-                    _ => {
-                        new_dict.push(word);
-                        new_dict_weights.push(weight);
-                    }
-                }
-            }
-            (new_dict, new_dict_weights)
-        } else {
-            for word in dict {
-                let word_size = word.chars().count();
-                match word_map.get(&word) {
-                    Some(&idx) if char_window_size >= word_size => {
-                        let start = char_window_size - word_size;
-                        let end = start + word_size;
-                        let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
-                        let weight = &dict_weights[word_size_idx];
-                        char_ngram_model.data[idx].weights[start] += weight.right;
-                        for i in start + 1..end {
-                            char_ngram_model.data[idx].weights[i] += weight.inner;
-                        }
-                        char_ngram_model.data[idx].weights[end] += weight.left;
-                    }
-                    _ => new_dict.push(word),
-                }
-            }
-            (new_dict, dict_weights)
         }
     }
 
@@ -253,7 +183,10 @@ impl Predictor {
 mod tests {
     use super::*;
 
-    use crate::ngram_model::NgramData;
+    use crate::dict_model::{
+        DictModel, DictModelLengthwise, DictModelWordwise, DictWeight, WordwiseDictData,
+    };
+    use crate::ngram_model::{NgramData, NgramModel};
 
     /// Input:  我  ら  は  全  世  界  の  国  民
     /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
@@ -323,21 +256,22 @@ mod tests {
                     weights: vec![37, 38, 39],
                 },
             ]),
-            dict: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
-            dict_weights: vec![
-                DictWeight {
-                    right: 40,
-                    inner: 41,
-                    left: 42,
-                },
-                DictWeight {
-                    right: 43,
-                    inner: 44,
-                    left: 45,
-                },
-            ],
+            dict_model: DictModel::Lengthwise(DictModelLengthwise {
+                words: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
+                weights: vec![
+                    DictWeight {
+                        right: 40,
+                        inner: 41,
+                        left: 42,
+                    },
+                    DictWeight {
+                        right: 43,
+                        inner: 44,
+                        left: 45,
+                    },
+                ],
+            }),
             quantize_multiplier: 0.5,
-            dict_word_wise: false,
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
@@ -412,26 +346,27 @@ mod tests {
                     weights: vec![33, 34, 35, 36, 37],
                 },
             ]),
-            dict: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
-            dict_weights: vec![
-                DictWeight {
-                    right: 38,
-                    inner: 39,
-                    left: 40,
-                },
-                DictWeight {
-                    right: 41,
-                    inner: 42,
-                    left: 43,
-                },
-                DictWeight {
-                    right: 44,
-                    inner: 45,
-                    left: 46,
-                },
-            ],
+            dict_model: DictModel::Lengthwise(DictModelLengthwise {
+                words: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
+                weights: vec![
+                    DictWeight {
+                        right: 38,
+                        inner: 39,
+                        left: 40,
+                    },
+                    DictWeight {
+                        right: 41,
+                        inner: 42,
+                        left: 43,
+                    },
+                    DictWeight {
+                        right: 44,
+                        inner: 45,
+                        left: 46,
+                    },
+                ],
+            }),
             quantize_multiplier: 0.25,
-            dict_word_wise: false,
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
@@ -506,26 +441,35 @@ mod tests {
                     weights: vec![33, 34, 35, 36, 37],
                 },
             ]),
-            dict: vec!["国民".to_string(), "世界".to_string(), "世".to_string()],
-            dict_weights: vec![
-                DictWeight {
-                    right: 38,
-                    inner: 39,
-                    left: 40,
-                },
-                DictWeight {
-                    right: 41,
-                    inner: 42,
-                    left: 43,
-                },
-                DictWeight {
-                    right: 44,
-                    inner: 45,
-                    left: 46,
-                },
-            ],
+            dict_model: DictModel::Wordwise(DictModelWordwise {
+                data: vec![
+                    WordwiseDictData {
+                        word: "国民".to_string(),
+                        weights: DictWeight {
+                            right: 38,
+                            inner: 39,
+                            left: 40,
+                        },
+                    },
+                    WordwiseDictData {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 41,
+                            inner: 42,
+                            left: 43,
+                        },
+                    },
+                    WordwiseDictData {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 44,
+                            inner: 45,
+                            left: 46,
+                        },
+                    },
+                ],
+            }),
             quantize_multiplier: 0.25,
-            dict_word_wise: true,
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,

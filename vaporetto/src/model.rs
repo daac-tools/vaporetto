@@ -3,8 +3,11 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::dict_model::DictModel;
 use crate::ngram_model::NgramModel;
 
+#[cfg(feature = "train")]
+use crate::dict_model::{DictModelLengthwise, DictWeight};
 #[cfg(feature = "train")]
 use crate::feature::FeatureContent;
 #[cfg(feature = "train")]
@@ -23,24 +26,14 @@ const EPSILON: f64 = 1e-6;
 #[cfg(feature = "train")]
 const QUANTIZE_BIT_DEPTH: u8 = 16;
 
-#[derive(Clone, Copy, Default, Serialize, Deserialize)]
-pub struct DictWeight {
-    pub right: i32,
-    pub inner: i32,
-    pub left: i32,
-}
-
 /// Model data.
 #[derive(Serialize, Deserialize)]
 pub struct Model {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
-    pub(crate) dict: Vec<String>,
-    pub(crate) dict_weights: Vec<DictWeight>,
+    pub(crate) dict_model: DictModel,
 
     pub(crate) quantize_multiplier: f64,
-
-    pub(crate) dict_word_wise: bool,
 
     pub(crate) bias: i32,
     pub(crate) char_window_size: usize,
@@ -158,12 +151,13 @@ impl Model {
         Self {
             char_ngram_model: NgramModel::new(char_ngrams),
             type_ngram_model: NgramModel::new(type_ngrams),
-            dict,
+            dict_model: DictModel::Lengthwise(DictModelLengthwise {
+                words: dict,
+                weights: dict_weights,
+            }),
 
             quantize_multiplier,
 
-            dict_weights,
-            dict_word_wise: false,
             bias,
             char_window_size,
             type_window_size,

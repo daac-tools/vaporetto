@@ -24,7 +24,7 @@ impl<T> NgramModel<T>
 where
     T: AsRef<[u8]> + Clone,
 {
-    #[cfg(any(feature = "train", test))]
+    #[cfg(any(feature = "train", feature = "kytea", test))]
     pub fn new(data: Vec<NgramData<T>>) -> Self {
         Self {
             data,

@@ -29,6 +29,7 @@
 mod utils;
 
 mod char_scorer;
+mod dict_model;
 mod dict_scorer;
 mod model;
 mod ngram_model;
