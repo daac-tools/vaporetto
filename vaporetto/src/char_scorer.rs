@@ -1,5 +1,7 @@
-use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
+
+use crate::ngram_model::NgramModel;
+use crate::sentence::Sentence;
 
 #[cfg(feature = "simd")]
 use std::simd::i32x8;
@@ -12,20 +14,17 @@ pub enum CharScorer {
 }
 
 impl CharScorer {
-    /// # Panics
-    ///
-    /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[String], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
+    pub fn new(model: NgramModel<String>, window_size: usize) -> Self {
         #[cfg(not(feature = "simd"))]
         {
-            Self::Naive(CharScorerNaive::new(ngrams, weights, window_size))
+            Self::Naive(CharScorerNaive::new(model, window_size))
         }
 
         #[cfg(feature = "simd")]
         if window_size <= 4 {
-            Self::Simd(CharScorerSimd::new(ngrams, weights, window_size))
+            Self::Simd(CharScorerSimd::new(model, window_size))
         } else {
-            Self::Naive(CharScorerNaive::new(ngrams, weights, window_size))
+            Self::Naive(CharScorerNaive::new(model, window_size))
         }
     }
 
@@ -46,16 +45,11 @@ pub struct CharScorerNaive {
 }
 
 impl CharScorerNaive {
-    /// # Panics
-    ///
-    /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[String], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
-        if ngrams.len() != weights.len() {
-            panic!("ngrams.len() != weights.len()");
-        }
+    pub fn new(mut model: NgramModel<String>, window_size: usize) -> Self {
+        model.merge_weights();
         Self {
-            pma: DoubleArrayAhoCorasick::new(ngrams).unwrap(),
-            weights,
+            pma: DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram)).unwrap(),
+            weights: model.data.into_iter().map(|d| d.weights).collect(),
             window_size,
         }
     }
@@ -87,23 +81,20 @@ pub struct CharScorerSimd {
 
 #[cfg(feature = "simd")]
 impl CharScorerSimd {
-    /// # Panics
-    ///
-    /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[String], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
-        if ngrams.len() != weights.len() {
-            panic!("ngrams.len() != weights.len()");
-        }
-        let weights: Vec<_> = weights
-            .iter()
-            .map(|w| {
+    pub fn new(mut model: NgramModel<String>, window_size: usize) -> Self {
+        model.merge_weights();
+        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram)).unwrap();
+        let weights = model
+            .data
+            .into_iter()
+            .map(|d| {
                 let mut s = [0i32; 8];
-                s[..w.len()].copy_from_slice(&w);
+                s[..d.weights.len()].copy_from_slice(&d.weights);
                 i32x8::from_array(s)
             })
             .collect();
         Self {
-            pma: DoubleArrayAhoCorasick::new(ngrams).unwrap(),
+            pma,
             weights,
             window_size,
         }

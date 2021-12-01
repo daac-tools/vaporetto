@@ -31,6 +31,7 @@ mod utils;
 mod char_scorer;
 mod dict_scorer;
 mod model;
+mod ngram_model;
 mod predictor;
 mod sentence;
 mod type_scorer;

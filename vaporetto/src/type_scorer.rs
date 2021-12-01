@@ -1,5 +1,7 @@
-use crate::sentence::Sentence;
 use daachorse::DoubleArrayAhoCorasick;
+
+use crate::ngram_model::NgramModel;
+use crate::sentence::Sentence;
 
 pub enum TypeScorer {
     Pma(TypeScorerPma),
@@ -7,14 +9,11 @@ pub enum TypeScorer {
 }
 
 impl TypeScorer {
-    /// # Panics
-    ///
-    /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Self {
         if window_size <= 3 {
-            Self::Cache(TypeScorerCache::new(ngrams, weights, window_size))
+            Self::Cache(TypeScorerCache::new(model, window_size))
         } else {
-            Self::Pma(TypeScorerPma::new(ngrams, weights, window_size))
+            Self::Pma(TypeScorerPma::new(model, window_size))
         }
     }
 
@@ -33,16 +32,11 @@ pub struct TypeScorerPma {
 }
 
 impl TypeScorerPma {
-    /// # Panics
-    ///
-    /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
-        if ngrams.len() != weights.len() {
-            panic!("ngrams.len() != weights.len()");
-        }
+    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Self {
+        model.merge_weights();
         Self {
-            pma: DoubleArrayAhoCorasick::new(ngrams).unwrap(),
-            weights,
+            pma: DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram)).unwrap(),
+            weights: model.data.into_iter().map(|d| d.weights).collect(),
             window_size,
         }
     }
@@ -74,14 +68,10 @@ pub struct TypeScorerCache {
 }
 
 impl TypeScorerCache {
-    /// # Panics
-    ///
-    /// `ngrams` and `weights` must have same number of entries.
-    pub fn new(ngrams: &[Vec<u8>], weights: Vec<Vec<i32>>, window_size: usize) -> Self {
-        if ngrams.len() != weights.len() {
-            panic!("ngrams.len() != weights.len()");
-        }
-        let pma = DoubleArrayAhoCorasick::new(ngrams).unwrap();
+    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Self {
+        model.merge_weights();
+        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram)).unwrap();
+        let weights: Vec<Vec<i32>> = model.data.into_iter().map(|d| d.weights).collect();
 
         let sequence_size = window_size * 2;
         let all_sequences = ALPHABET_SIZE.pow(sequence_size as u32);

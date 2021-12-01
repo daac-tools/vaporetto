@@ -3,8 +3,12 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::ngram_model::NgramModel;
+
 #[cfg(feature = "train")]
 use crate::feature::FeatureContent;
+#[cfg(feature = "train")]
+use crate::ngram_model::NgramData;
 #[cfg(feature = "train")]
 use crate::sentence::BoundaryType;
 #[cfg(feature = "train")]
@@ -29,12 +33,9 @@ pub struct DictWeight {
 /// Model data.
 #[derive(Serialize, Deserialize)]
 pub struct Model {
-    pub(crate) char_ngrams: Vec<String>,
-    pub(crate) type_ngrams: Vec<Vec<u8>>,
+    pub(crate) char_ngram_model: NgramModel<String>,
+    pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
     pub(crate) dict: Vec<String>,
-
-    pub(crate) char_ngram_weights: Vec<Vec<i32>>,
-    pub(crate) type_ngram_weights: Vec<Vec<i32>>,
     pub(crate) dict_weights: Vec<DictWeight>,
 
     pub(crate) quantize_multiplier: f64,
@@ -102,8 +103,6 @@ impl Model {
         let bias = model.label_bias(wb_idx);
         let mut char_ngrams = vec![];
         let mut type_ngrams = vec![];
-        let mut char_ngram_weights = vec![];
-        let mut type_ngram_weights = vec![];
         let mut dict_weights = vec![DictWeight::default(); dict_word_max_size];
         let mut char_ngram_ids = StringIdManager::new();
         let mut type_ngram_ids = StringIdManager::new();
@@ -130,25 +129,23 @@ impl Model {
             match feature.feature {
                 FeatureContent::CharacterNgram(char_ngram) => {
                     let id = char_ngram_ids.get_id(&char_ngram);
-                    if id == char_ngram_weights.len() {
-                        char_ngrams.push(char_ngram.to_string());
-                        char_ngram_weights.push(vec![
-                            0;
-                            char_window_size * 2
-                                - char_ngram.chars().count()
-                                + 1
-                        ]);
+                    if id == char_ngrams.len() {
+                        char_ngrams.push(NgramData {
+                            ngram: char_ngram.to_string(),
+                            weights: vec![0; char_window_size * 2 - char_ngram.chars().count() + 1],
+                        });
                     }
-                    char_ngram_weights[id][feature.rel_position] = weight as i32;
+                    char_ngrams[id].weights[feature.rel_position] = weight as i32;
                 }
                 FeatureContent::CharacterTypeNgram(type_ngram) => {
                     let id = type_ngram_ids.get_id(type_ngram) as usize;
-                    if id == type_ngram_weights.len() {
-                        type_ngrams.push(type_ngram.to_vec());
-                        type_ngram_weights
-                            .push(vec![0; type_window_size * 2 - type_ngram.len() + 1]);
+                    if id == type_ngrams.len() {
+                        type_ngrams.push(NgramData {
+                            ngram: type_ngram.to_vec(),
+                            weights: vec![0; type_window_size * 2 - type_ngram.len() + 1],
+                        });
                     }
-                    type_ngram_weights[id][feature.rel_position] = weight as i32;
+                    type_ngrams[id].weights[feature.rel_position] = weight as i32;
                 }
                 FeatureContent::DictionaryWord(size) => match feature.rel_position {
                     0 => dict_weights[size - 1].right = weight as i32,
@@ -159,14 +156,12 @@ impl Model {
             };
         }
         Self {
-            char_ngrams,
-            type_ngrams,
+            char_ngram_model: NgramModel::new(char_ngrams),
+            type_ngram_model: NgramModel::new(type_ngrams),
             dict,
 
             quantize_multiplier,
 
-            char_ngram_weights,
-            type_ngram_weights,
             dict_weights,
             dict_word_wise: false,
             bias,

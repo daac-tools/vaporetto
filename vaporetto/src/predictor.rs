@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::char_scorer::CharScorer;
 use crate::dict_scorer::DictScorer;
 use crate::model::{DictWeight, Model};
+use crate::ngram_model::NgramModel;
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
 
@@ -36,31 +37,21 @@ impl Predictor {
     pub fn new(model: Model) -> Self {
         let bias = model.bias;
 
-        let char_ngrams = model.char_ngrams;
+        let mut char_ngram_model = model.char_ngram_model;
+        let type_ngram_model = model.type_ngram_model;
         let dict = model.dict;
         let dict_weights = model.dict_weights;
-
-        let mut char_ngram_weights = model.char_ngram_weights;
-        let type_ngram_weights = model.type_ngram_weights;
 
         let (dict, dict_weights) = Self::merge_dict_weights(
             dict,
             dict_weights,
-            &char_ngrams,
-            &mut char_ngram_weights,
+            &mut char_ngram_model,
             model.char_window_size,
             model.dict_word_wise,
         );
 
-        let char_ngram_weights = Self::merge_weights(&char_ngrams, &char_ngram_weights);
-        let type_ngram_weights = Self::merge_weights(&model.type_ngrams, &type_ngram_weights);
-
-        let char_scorer = CharScorer::new(&char_ngrams, char_ngram_weights, model.char_window_size);
-        let type_scorer = TypeScorer::new(
-            &model.type_ngrams,
-            type_ngram_weights,
-            model.type_window_size,
-        );
+        let char_scorer = CharScorer::new(char_ngram_model, model.char_window_size);
+        let type_scorer = TypeScorer::new(type_ngram_model, model.type_window_size);
         let dict_scorer = if dict.is_empty() {
             None
         } else {
@@ -84,13 +75,17 @@ impl Predictor {
     fn merge_dict_weights(
         dict: Vec<String>,
         dict_weights: Vec<DictWeight>,
-        words: &[String],
-        word_weights: &mut Vec<Vec<i32>>,
+        char_ngram_model: &mut NgramModel<String>,
         char_window_size: usize,
         dict_word_wise: bool,
     ) -> (Vec<String>, Vec<DictWeight>) {
         let mut word_map = HashMap::new();
-        for (i, word) in words.iter().cloned().enumerate() {
+        for (i, word) in char_ngram_model
+            .data
+            .iter()
+            .map(|d| d.ngram.clone())
+            .enumerate()
+        {
             word_map.insert(word, i);
         }
         let mut new_dict = vec![];
@@ -102,11 +97,11 @@ impl Predictor {
                     Some(&idx) if char_window_size >= word_size => {
                         let start = char_window_size - word_size;
                         let end = start + word_size;
-                        word_weights[idx][start] += weight.right;
+                        char_ngram_model.data[idx].weights[start] += weight.right;
                         for i in start + 1..end {
-                            word_weights[idx][i] += weight.inner;
+                            char_ngram_model.data[idx].weights[i] += weight.inner;
                         }
-                        word_weights[idx][end] += weight.left;
+                        char_ngram_model.data[idx].weights[end] += weight.left;
                     }
                     _ => {
                         new_dict.push(word);
@@ -124,46 +119,17 @@ impl Predictor {
                         let end = start + word_size;
                         let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
                         let weight = &dict_weights[word_size_idx];
-                        word_weights[idx][start] += weight.right;
+                        char_ngram_model.data[idx].weights[start] += weight.right;
                         for i in start + 1..end {
-                            word_weights[idx][i] += weight.inner;
+                            char_ngram_model.data[idx].weights[i] += weight.inner;
                         }
-                        word_weights[idx][end] += weight.left;
+                        char_ngram_model.data[idx].weights[end] += weight.left;
                     }
                     _ => new_dict.push(word),
                 }
             }
             (new_dict, dict_weights)
         }
-    }
-
-    fn merge_weights<P>(words: &[P], weights: &[Vec<i32>]) -> Vec<Vec<i32>>
-    where
-        P: AsRef<[u8]>,
-    {
-        let mut result = vec![];
-        let word_ids = words
-            .iter()
-            .enumerate()
-            .map(|(i, w)| (w.as_ref().to_vec(), i))
-            .collect::<HashMap<Vec<u8>, usize>>();
-        for seq in words {
-            let seq = seq.as_ref();
-            let mut new_weights: Option<Vec<_>> = None;
-            for st in (0..seq.len()).rev() {
-                if let Some(&idx) = word_ids.get(&seq[st..]) {
-                    if let Some(new_weights) = new_weights.as_mut() {
-                        for (w_new, w) in new_weights.iter_mut().zip(&weights[idx]) {
-                            *w_new += *w;
-                        }
-                    } else {
-                        new_weights.replace(weights[idx].clone());
-                    }
-                }
-            }
-            result.push(new_weights.unwrap());
-        }
-        result
     }
 
     fn predict_impl(&self, sentence: &Sentence, padding: usize, ys: &mut [i32]) {
@@ -287,6 +253,8 @@ impl Predictor {
 mod tests {
     use super::*;
 
+    use crate::ngram_model::NgramData;
+
     /// Input:  我  ら  は  全  世  界  の  国  民
     /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
     /// words:
@@ -315,28 +283,47 @@ mod tests {
     ///   世:                 40  42
     fn generate_model_1() -> Model {
         Model {
-            char_ngrams: vec![
-                "我ら".to_string(),
-                "全世界".to_string(),
-                "国民".to_string(),
-                "世界".to_string(),
-                "界".to_string(),
-            ],
-            type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3, 4, 5],
+                },
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![6, 7, 8, 9],
+                },
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![10, 11, 12, 13, 14],
+                },
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![15, 16, 17, 18, 19],
+                },
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![20, 21, 22, 23, 24, 25],
+                },
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![26, 27, 28, 29],
+                },
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![30, 31, 32, 33],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![34, 35, 36],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![37, 38, 39],
+                },
+            ]),
             dict: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
-            char_ngram_weights: vec![
-                vec![1, 2, 3, 4, 5],
-                vec![6, 7, 8, 9],
-                vec![10, 11, 12, 13, 14],
-                vec![15, 16, 17, 18, 19],
-                vec![20, 21, 22, 23, 24, 25],
-            ],
-            type_ngram_weights: vec![
-                vec![26, 27, 28, 29],
-                vec![30, 31, 32, 33],
-                vec![34, 35, 36],
-                vec![37, 38, 39],
-            ],
             dict_weights: vec![
                 DictWeight {
                     right: 40,
@@ -385,28 +372,47 @@ mod tests {
     ///   世:                 38  40
     fn generate_model_2() -> Model {
         Model {
-            char_ngrams: vec![
-                "我ら".to_string(),
-                "全世界".to_string(),
-                "国民".to_string(),
-                "世界".to_string(),
-                "界".to_string(),
-            ],
-            type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3],
+                },
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![4, 5],
+                },
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![6, 7, 8],
+                },
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![9, 10, 11],
+                },
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![12, 13, 14, 15],
+                },
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![16, 17, 18, 19, 20, 21],
+                },
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![22, 23, 24, 25, 26, 27],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![28, 29, 30, 31, 32],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![33, 34, 35, 36, 37],
+                },
+            ]),
             dict: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
-            char_ngram_weights: vec![
-                vec![1, 2, 3],
-                vec![4, 5],
-                vec![6, 7, 8],
-                vec![9, 10, 11],
-                vec![12, 13, 14, 15],
-            ],
-            type_ngram_weights: vec![
-                vec![16, 17, 18, 19, 20, 21],
-                vec![22, 23, 24, 25, 26, 27],
-                vec![28, 29, 30, 31, 32],
-                vec![33, 34, 35, 36, 37],
-            ],
             dict_weights: vec![
                 DictWeight {
                     right: 38,
@@ -460,28 +466,47 @@ mod tests {
     ///   世:                 44  46
     fn generate_model_3() -> Model {
         Model {
-            char_ngrams: vec![
-                "我ら".to_string(),
-                "全世界".to_string(),
-                "国民".to_string(),
-                "世界".to_string(),
-                "界".to_string(),
-            ],
-            type_ngrams: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3],
+                },
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![4, 5],
+                },
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![6, 7, 8],
+                },
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![9, 10, 11],
+                },
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![12, 13, 14, 15],
+                },
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![16, 17, 18, 19, 20, 21],
+                },
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![22, 23, 24, 25, 26, 27],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![28, 29, 30, 31, 32],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![33, 34, 35, 36, 37],
+                },
+            ]),
             dict: vec!["国民".to_string(), "世界".to_string(), "世".to_string()],
-            char_ngram_weights: vec![
-                vec![1, 2, 3],
-                vec![4, 5],
-                vec![6, 7, 8],
-                vec![9, 10, 11],
-                vec![12, 13, 14, 15],
-            ],
-            type_ngram_weights: vec![
-                vec![16, 17, 18, 19, 20, 21],
-                vec![22, 23, 24, 25, 26, 27],
-                vec![28, 29, 30, 31, 32],
-                vec![33, 34, 35, 36, 37],
-            ],
             dict_weights: vec![
                 DictWeight {
                     right: 38,

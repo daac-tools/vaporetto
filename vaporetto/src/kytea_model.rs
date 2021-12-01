@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::model::{DictWeight, Model};
+use crate::ngram_model::{NgramData, NgramModel};
 
 struct KyteaConfig {
     _model_tag: String,
@@ -409,26 +410,26 @@ impl TryFrom<KyteaModel> for Model {
             .type_dict
             .ok_or_else(|| anyhow!("no type dictionary."))?;
 
-        let mut char_ngrams: Vec<String> = vec![];
-        let mut char_ngram_weights = vec![];
+        let mut char_ngrams = vec![];
         for (char_ngram, v) in char_dict.dump_items() {
             let weight_size = config.char_w as usize * 2 - char_ngram.len() + 1;
-            char_ngrams.push(char_ngram.into_iter().collect::<String>());
-            char_ngram_weights.push(v[..weight_size].iter().map(|&w| w as i32).collect());
+            char_ngrams.push(NgramData {
+                ngram: char_ngram.into_iter().collect(),
+                weights: v[..weight_size].iter().map(|&w| w as i32).collect(),
+            });
         }
 
-        let mut type_ngrams: Vec<Vec<u8>> = vec![];
-        let mut type_ngram_weights = vec![];
+        let mut type_ngrams = vec![];
         for (type_ngram, v) in type_dict.dump_items() {
             let weight_size = config.type_w as usize * 2 - type_ngram.len() + 1;
-            type_ngrams.push(
-                type_ngram
+            type_ngrams.push(NgramData {
+                ngram: type_ngram
                     .into_iter()
                     .collect::<String>()
                     .as_bytes()
                     .to_vec(),
-            );
-            type_ngram_weights.push(v[..weight_size].iter().map(|&w| w as i32).collect());
+                weights: v[..weight_size].iter().map(|&w| w as i32).collect(),
+            });
         }
 
         let mut dict: Vec<String> = vec![];
@@ -451,14 +452,12 @@ impl TryFrom<KyteaModel> for Model {
         }
 
         Ok(Self {
-            char_ngrams,
-            type_ngrams,
+            char_ngram_model: NgramModel::new(char_ngrams),
+            type_ngram_model: NgramModel::new(type_ngrams),
             dict,
 
             quantize_multiplier,
 
-            char_ngram_weights,
-            type_ngram_weights,
             dict_weights,
             dict_word_wise: true,
             bias,
