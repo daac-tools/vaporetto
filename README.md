@@ -86,47 +86,19 @@ You can specify all arguments above multiple times.
 
 ## Speed Comparison of Various Tokenizers
 
-You can find the comparison script at [here](https://github.com/legalforce-research/tokenizer-speed-bench).
+Details can be found [here](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison).
 
-### Experimental Setup
-
-* Document: Japanese training data of Kyoto Free Translation Task
-* Models:
-  * KyTea and Vaporetto: Compact LR model (jp-0.4.7-6)
-  * MeCab, Kuromoji, and Lindera: IPAdic
-  * Sudachi and Sudachi.rs: system_core.dic (v20210802)
-
-### Results
-
-* VM instance on Google Cloud Platform (c2-standard-16, Debian)
-
-  | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
-  | -------------------------- | ---------------------:|-------|
-  | KyTea (2020-04-03)         |                 0.777 | 0.020 |
-  | Vaporetto (0.1.6)          |             **4.426** | 0.182 |
-  |                            |                       |       |
-  | MeCab (2020-09-14)         |                 2.736 | 0.041 |
-  |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 0.423 | 0.013 |
-  | Lindera (0.8.0)            |                 1.002 | 0.014 |
-  |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.251 | 0.012 |
-  | Sudachi.rs (0.6.0-rc1)     |                 0.644 | 0.012 |
-
-* MacBook Pro (2017, Processor: 2.3 GHz Intel Core i5, Memory: 8 GB 2133 MHz LPDDR3)
-
-  | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
-  | -------------------------- | ---------------------:|-------|
-  | KyTea (2020-04-03)         |                 0.490 | 0.003 |
-  | Vaporetto (0.1.6)          |             **3.016** | 0.113 |
-  |                            |                       |       |
-  | MeCab (2020-09-14)         |                 1.418 | 0.007 |
-  |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 1.197 | 0.034 |
-  | Lindera (0.8.0)            |                 0.542 | 0.010 |
-  |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.439 | 0.026 |
-  | Sudachi.rs (0.6.0-rc1)     |                 0.427 | 0.009 |
+| Tool Name (version)               | Speed [M chars/s] | STD           |
+| --------------------------------- | -----------------:| -------------:|
+| KyTea (2020-04-03)                |             1.463 |         0.012 |
+| Vaporetto (0.3.0)                 |         **9.716** |         0.115 |
+| Vaporetto (0.3.0, `feature=simd`) |        **11.035** |         0.144 |
+|                                   |                   |               |
+| MeCab (2020-09-14)                |             4.621 |         0.047 |
+| Kuromoji (0.9.0)                  |             1.470 |         0.074 |
+| Lindera (0.8.1)                   |             1.444 |         0.022 |
+| Sudachi (0.5.3)                   |             0.322 |         0.029 |
+| sudachi.rs (0.6.0)                |             0.961 |         0.008 |
 
 ## Disclaimer
 
