@@ -12,7 +12,7 @@ pub enum DictScorer {
 impl DictScorer {
     pub fn new(model: DictModel) -> Result<Self> {
         Ok(match model {
-            DictModel::Wordwise(model) => Self::Wordwise(DictScorerWordwise::new(model)),
+            DictModel::Wordwise(model) => Self::Wordwise(DictScorerWordwise::new(model)?),
             DictModel::Lengthwise(model) => Self::Lengthwise(DictScorerLengthwise::new(model)?),
         })
     }
@@ -31,17 +31,16 @@ pub struct DictScorerWordwise {
 }
 
 impl DictScorerWordwise {
-    pub fn new(model: DictModelWordwise) -> Self {
+    pub fn new(model: DictModelWordwise) -> Result<Self> {
         let mut words = vec![];
         let mut weights = vec![];
         for pair in model.data {
             words.push(pair.word);
             weights.push(pair.weights);
         }
-        Self {
-            pma: DoubleArrayAhoCorasick::new(words).unwrap(),
-            weights,
-        }
+        let pma = DoubleArrayAhoCorasick::new(words)
+            .map_err(|_| VaporettoError::invalid_model("invalid dictionary"))?;
+        Ok(Self { pma, weights })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
@@ -75,8 +74,10 @@ impl DictScorerLengthwise {
                 "dict_word_max_size must be >= 1",
             ));
         }
+        let pma = DoubleArrayAhoCorasick::new(model.words)
+            .map_err(|_| VaporettoError::invalid_model("invalid dictionary"))?;
         Ok(Self {
-            pma: DoubleArrayAhoCorasick::new(model.words).unwrap(),
+            pma,
             weights: model.weights,
         })
     }

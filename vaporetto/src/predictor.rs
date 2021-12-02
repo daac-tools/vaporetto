@@ -41,8 +41,8 @@ impl Predictor {
 
         dict_model.merge_dict_weights(&mut char_ngram_model, model.char_window_size);
 
-        let char_scorer = CharScorer::new(char_ngram_model, model.char_window_size);
-        let type_scorer = TypeScorer::new(type_ngram_model, model.type_window_size);
+        let char_scorer = CharScorer::new(char_ngram_model, model.char_window_size)?;
+        let type_scorer = TypeScorer::new(type_ngram_model, model.type_window_size)?;
         let dict_scorer = if dict_model.is_empty() {
             None
         } else {

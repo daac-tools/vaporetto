@@ -1,5 +1,6 @@
 use daachorse::DoubleArrayAhoCorasick;
 
+use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
@@ -9,12 +10,12 @@ pub enum TypeScorer {
 }
 
 impl TypeScorer {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Self {
-        if window_size <= 3 {
-            Self::Cache(TypeScorerCache::new(model, window_size))
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+        Ok(if window_size <= 3 {
+            Self::Cache(TypeScorerCache::new(model, window_size)?)
         } else {
-            Self::Pma(TypeScorerPma::new(model, window_size))
-        }
+            Self::Pma(TypeScorerPma::new(model, window_size)?)
+        })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
@@ -32,13 +33,24 @@ pub struct TypeScorerPma {
 }
 
 impl TypeScorerPma {
-    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Self {
+    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
         model.merge_weights();
-        Self {
-            pma: DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram)).unwrap(),
-            weights: model.data.into_iter().map(|d| d.weights).collect(),
-            window_size,
+        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
+            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
+        let mut weights = vec![];
+        for d in model.data {
+            if d.weights.len() <= 2 * window_size - d.ngram.len() {
+                return Err(VaporettoError::invalid_model(
+                    "invalid size of weight vector",
+                ));
+            }
+            weights.push(d.weights);
         }
+        Ok(Self {
+            pma,
+            weights,
+            window_size,
+        })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
@@ -68,10 +80,19 @@ pub struct TypeScorerCache {
 }
 
 impl TypeScorerCache {
-    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Self {
+    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
         model.merge_weights();
-        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram)).unwrap();
-        let weights: Vec<Vec<i32>> = model.data.into_iter().map(|d| d.weights).collect();
+        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
+            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
+        let mut weights = vec![];
+        for d in model.data {
+            if d.weights.len() <= 2 * window_size - d.ngram.len() {
+                return Err(VaporettoError::invalid_model(
+                    "invalid size of weight vector",
+                ));
+            }
+            weights.push(d.weights);
+        }
 
         let sequence_size = window_size * 2;
         let all_sequences = ALPHABET_SIZE.pow(sequence_size as u32);
@@ -90,11 +111,11 @@ impl TypeScorerCache {
             *score = y;
         }
 
-        Self {
+        Ok(Self {
             scores,
             window_size,
             sequence_mask: (1 << (ALPHABET_SHIFT * sequence_size)) - 1,
-        }
+        })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
