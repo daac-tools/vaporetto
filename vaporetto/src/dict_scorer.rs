@@ -47,8 +47,9 @@ impl DictScorerWordwise {
         for m in self.pma.find_overlapping_iter(&sentence.text) {
             let m_start = sentence.str_to_char_pos[m.start()];
             let m_end = sentence.str_to_char_pos[m.end()];
-            let idx = m.pattern();
-            let dict_weight = self.weights[idx];
+            // Both the weights and the PMA always have the same number of items.
+            // Therefore, the following code is safe.
+            let dict_weight = unsafe { self.weights.get_unchecked(m.pattern()) };
             if m_start != 0 {
                 ys[m_start - 1] += dict_weight.right;
             }
@@ -87,7 +88,9 @@ impl DictScorerLengthwise {
             let m_start = sentence.str_to_char_pos[m.start()];
             let m_end = sentence.str_to_char_pos[m.end()];
             let idx = (m_end - m_start).min(self.weights.len()) - 1;
-            let dict_weight = self.weights[idx];
+            // The upper bound of idx is weights.len() - 1.
+            // Therefore, the following code is safe.
+            let dict_weight = unsafe { self.weights.get_unchecked(idx) };
             if m_start != 0 {
                 ys[m_start - 1] += dict_weight.right;
             }

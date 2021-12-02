@@ -59,7 +59,9 @@ impl TypeScorerPma {
             .find_overlapping_no_suffix_iter(&sentence.char_type)
         {
             let offset = m.end() as isize - self.window_size as isize - 1;
-            let weights = &self.weights[m.pattern()];
+            // Both the weights and the PMA always have the same number of items.
+            // Therefore, the following code is safe.
+            let weights = unsafe { self.weights.get_unchecked(m.pattern()) };
             if offset >= 0 {
                 for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
                     *y += w;

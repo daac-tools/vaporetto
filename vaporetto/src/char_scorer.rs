@@ -70,7 +70,9 @@ impl CharScorerNaive {
         for m in self.pma.find_overlapping_no_suffix_iter(&sentence.text) {
             let m_end = sentence.str_to_char_pos[m.end()];
             let offset = m_end as isize - self.window_size as isize - 1;
-            let weights = &self.weights[m.pattern()];
+            // Both the weights and the PMA always have the same number of items.
+            // Therefore, the following code is safe.
+            let weights = unsafe { self.weights.get_unchecked(m.pattern()) };
             if offset >= 0 {
                 for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
                     *y += w;
@@ -120,7 +122,9 @@ impl CharScorerSimd {
         for m in self.pma.find_overlapping_no_suffix_iter(&sentence.text) {
             let m_end = sentence.str_to_char_pos[m.end()];
             let offset = padding as isize + m_end as isize - self.window_size as isize - 1;
-            let weights = &self.weights[m.pattern()];
+            // Both the weights and the PMA always have the same number of items.
+            // Therefore, the following code is safe.
+            let weights = unsafe { self.weights.get_unchecked(m.pattern()) };
             let ys_slice = &mut ys[offset as usize..offset as usize + 8];
             let mut target = i32x8::from_slice(ys_slice);
             target += weights;
