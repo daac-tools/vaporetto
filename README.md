@@ -88,17 +88,7 @@ You can specify all arguments above multiple times.
 
 Details can be found [here](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison).
 
-| Tool Name (version)               | Speed [M chars/s] | STD           |
-| --------------------------------- | -----------------:| -------------:|
-| KyTea (2020-04-03)                |             1.463 |         0.012 |
-| Vaporetto (0.3.0)                 |         **9.716** |         0.115 |
-| Vaporetto (0.3.0, `feature=simd`) |        **11.035** |         0.144 |
-|                                   |                   |               |
-| MeCab (2020-09-14)                |             4.621 |         0.047 |
-| Kuromoji (0.9.0)                  |             1.470 |         0.074 |
-| Lindera (0.8.1)                   |             1.444 |         0.022 |
-| Sudachi (0.5.3)                   |             0.322 |         0.029 |
-| sudachi.rs (0.6.0)                |             0.961 |         0.008 |
+![](./figures/comparison.svg)
 
 ## Disclaimer
 
