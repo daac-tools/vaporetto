@@ -75,23 +75,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Start tokenization");
     let mut n_boundaries = 0;
     let start = Instant::now();
-    for line in stdin().lock().lines() {
-        let line = line?;
-        let s = if opt.no_norm {
-            let s = Sentence::from_raw(line)?;
-            predictor.predict(s)
-        } else {
+    let mut s = Sentence::from_raw(" ")?;
+    if opt.no_norm {
+        for line in stdin().lock().lines() {
+            let line = line?;
+            s.update_raw(line)?;
+            s = predictor.predict(s);
+            s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+            n_boundaries += s.boundaries().len();
+            let toks = s.to_tokenized_string()?;
+            println!("{}", toks);
+        }
+    } else {
+        let mut s_norm = Sentence::from_raw(" ")?;
+        for line in stdin().lock().lines() {
+            let line = line?;
             let norm = fullwidth_filter.filter(&line);
-            let mut s_orig = Sentence::from_raw(line)?;
-            let s = Sentence::from_raw(norm)?;
-            let s = predictor.predict(s);
-            s_orig.boundaries_mut().clone_from_slice(s.boundaries());
-            s_orig
-        };
-        let s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
-        n_boundaries += s.boundaries().len();
-        let toks = s.to_tokenized_string()?;
-        println!("{}", toks);
+            s.update_raw(line)?;
+            s_norm.update_raw(norm)?;
+            s_norm = predictor.predict(s_norm);
+            s.boundaries_mut().clone_from_slice(s_norm.boundaries());
+            s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+            n_boundaries += s.boundaries().len();
+            let toks = s.to_tokenized_string()?;
+            println!("{}", toks);
+        }
     }
     let duration = start.elapsed();
     eprintln!("Elapsed: {} [sec]", duration.as_secs_f64());

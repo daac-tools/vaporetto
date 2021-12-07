@@ -80,6 +80,7 @@ pub enum BoundaryType {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Sentence {
     pub(crate) text: String,
+    pub(crate) chars: Vec<char>,
     pub(crate) str_to_char_pos: Vec<usize>,
     pub(crate) char_to_str_pos: Vec<usize>,
     pub(crate) char_type: Vec<u8>,
@@ -88,31 +89,205 @@ pub struct Sentence {
 }
 
 impl Sentence {
-    fn common_info(chars: &[char]) -> (Vec<usize>, Vec<usize>, Vec<u8>) {
-        let mut char_to_str_pos = Vec::with_capacity(chars.len() + 1);
-        let mut char_type = Vec::with_capacity(chars.len());
-        let mut pos = 0;
-        char_to_str_pos.push(0);
-        for &c in chars {
-            pos += c.len_utf8();
-            char_to_str_pos.push(pos);
-            char_type.push(CharacterType::get_type(c) as u8)
+    fn internal_new(text: String, chars: Vec<char>, boundaries: Vec<BoundaryType>) -> Self {
+        let mut s = Self {
+            text,
+            chars,
+            str_to_char_pos: Vec::with_capacity(0),
+            char_to_str_pos: Vec::with_capacity(0),
+            char_type: Vec::with_capacity(0),
+            boundaries,
+            boundary_scores: None,
+        };
+        s.update_common_info();
+        s
+    }
+
+    fn clear(&mut self) {
+        self.text.clear();
+        self.text.push(' ');
+        self.chars.clear();
+        self.chars.push(' ');
+        self.str_to_char_pos.clear();
+        self.str_to_char_pos.push(0);
+        self.str_to_char_pos.push(1);
+        self.char_to_str_pos.clear();
+        self.char_to_str_pos.push(0);
+        self.char_to_str_pos.push(1);
+        self.char_type.clear();
+        self.char_type.push(CharacterType::Other as u8);
+        self.boundaries.clear();
+        self.boundary_scores = None;
+    }
+
+    fn parse_raw_text(
+        raw_text: &str,
+        chars: &mut Vec<char>,
+        boundaries: &mut Vec<BoundaryType>,
+    ) -> Result<()> {
+        if raw_text.is_empty() {
+            return Err(VaporettoError::invalid_argument("raw_text", "is empty"));
         }
-        let mut str_to_char_pos = vec![0; char_to_str_pos.last().unwrap_or(&0) + 1];
-        for (i, &j) in char_to_str_pos.iter().enumerate() {
-            // j < str_to_char_pos.len()
+
+        chars.clear();
+
+        for c in raw_text.chars() {
+            chars.push(c);
+        }
+        boundaries.clear();
+        boundaries.resize(chars.len() - 1, BoundaryType::Unknown);
+
+        Ok(())
+    }
+
+    fn parse_tokenized_text(
+        tokenized_text: &str,
+        text: &mut String,
+        chars: &mut Vec<char>,
+        boundaries: &mut Vec<BoundaryType>,
+    ) -> Result<()> {
+        if tokenized_text.is_empty() {
+            return Err(VaporettoError::invalid_argument(
+                "tokenized_text",
+                "is empty",
+            ));
+        }
+
+        text.clear();
+        text.reserve(tokenized_text.len());
+        chars.clear();
+        boundaries.clear();
+
+        let mut prev_boundary = false;
+        let mut escape = false;
+        for c in tokenized_text.chars() {
+            match (escape, c) {
+                (false, '\\') => {
+                    escape = true;
+                }
+                (false, ' ') => {
+                    if chars.is_empty() {
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "starts with a whitespace",
+                        ));
+                    } else if prev_boundary {
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "contains consecutive whitespaces",
+                        ));
+                    }
+                    prev_boundary = true;
+                }
+                (_, _) => {
+                    if !chars.is_empty() {
+                        boundaries.push(if prev_boundary {
+                            BoundaryType::WordBoundary
+                        } else {
+                            BoundaryType::NotWordBoundary
+                        });
+                    }
+                    prev_boundary = false;
+                    escape = false;
+                    text.push(c);
+                    chars.push(c);
+                }
+            };
+        }
+
+        if prev_boundary {
+            return Err(VaporettoError::invalid_argument(
+                "tokenized_text",
+                "ends with a whitespace",
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn parse_partial_annotation(
+        labeled_text: &str,
+        text: &mut String,
+        chars: &mut Vec<char>,
+        boundaries: &mut Vec<BoundaryType>,
+    ) -> Result<()> {
+        if labeled_text.is_empty() {
+            return Err(VaporettoError::invalid_argument("labeled_text", "is empty"));
+        }
+
+        let labeled_chars: Vec<char> = labeled_text.chars().collect();
+        if labeled_chars.len() % 2 == 0 {
+            return Err(VaporettoError::invalid_argument(
+                "labeled_text",
+                format!("invalid length: {}", labeled_chars.len()),
+            ));
+        }
+
+        text.clear();
+        text.reserve(labeled_text.len() - labeled_chars.len() / 2);
+        chars.clear();
+        boundaries.clear();
+
+        for c in labeled_chars.iter().skip(1).step_by(2) {
+            boundaries.push(match c {
+                ' ' => BoundaryType::Unknown,
+                '|' => BoundaryType::WordBoundary,
+                '-' => BoundaryType::NotWordBoundary,
+                _ => {
+                    return Err(VaporettoError::invalid_argument(
+                        "labeled_text",
+                        format!("contains invalid boundary character: '{}'", c),
+                    ))
+                }
+            });
+        }
+        for c in labeled_chars.into_iter().step_by(2) {
+            text.push(c);
+            chars.push(c);
+        }
+
+        Ok(())
+    }
+
+    /// Updates char_to_str_pos, str_to_char_pos, and char_type.
+    ///
+    /// This function allocates:
+    ///
+    /// * char_to_str_pos: chars.len() + 1
+    /// * str_to_char_pos: text.len() + 1
+    /// * char_type: chars.len()
+    ///
+    /// If these variables already have sufficient spaces, this function reuses them.
+    fn update_common_info(&mut self) {
+        self.char_to_str_pos.clear();
+        self.str_to_char_pos.clear();
+        self.char_type.clear();
+
+        let mut pos = 0;
+        self.char_to_str_pos.push(0);
+        for &c in &self.chars {
+            pos += c.len_utf8();
+            self.char_to_str_pos.push(pos);
+            self.char_type.push(CharacterType::get_type(c) as u8)
+        }
+
+        debug_assert!(pos == self.text.len());
+
+        self.str_to_char_pos.fill(0);
+        self.str_to_char_pos.resize(self.text.len() + 1, 0);
+        for (i, &j) in self.char_to_str_pos.iter().enumerate() {
+            // j is always lower than pos + 1, so the following is safe.
             unsafe {
-                *str_to_char_pos.get_unchecked_mut(j) = i;
+                *self.str_to_char_pos.get_unchecked_mut(j) = i;
             }
         }
-        (char_to_str_pos, str_to_char_pos, char_type)
     }
 
     /// Creates a new [`Sentence`] from a given string.
     ///
     /// # Arguments
     ///
-    /// * `text` - A raw string without any annotation.
+    /// * `raw_text` - A raw string without any annotation.
     ///
     /// # Returns
     ///
@@ -120,7 +295,7 @@ impl Sentence {
     ///
     /// # Errors
     ///
-    /// If the given `text` is empty, an error variant will be returned.
+    /// If the given `raw_text` is empty, an error variant will be returned.
     ///
     /// # Examples
     ///
@@ -133,29 +308,56 @@ impl Sentence {
     /// let s = Sentence::from_raw("");
     /// assert!(s.is_err());
     /// ```
-    pub fn from_raw<S>(text: S) -> Result<Self>
+    pub fn from_raw<S>(raw_text: S) -> Result<Self>
     where
         S: Into<String>,
     {
-        let text = text.into();
+        let raw_text = raw_text.into();
 
-        if text.is_empty() {
-            return Err(VaporettoError::invalid_argument("text", "is empty"));
+        let mut chars = Vec::with_capacity(0);
+        let mut boundaries = Vec::with_capacity(0);
+        Self::parse_raw_text(&raw_text, &mut chars, &mut boundaries)?;
+
+        Ok(Self::internal_new(raw_text, chars, boundaries))
+    }
+
+    /// Updates the [`Sentence`] using a given string.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_text` - A raw string without any annotation.
+    ///
+    /// # Errors
+    ///
+    /// If the given `raw_text` is empty, an error variant will be returned.
+    /// When an error is occurred, the sentence will be replaced with a white space.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut s = Sentence::from_raw("How are you?").unwrap();
+    /// s.update_raw("I am file.").unwrap();
+    /// assert_eq!("I am file.", s.to_raw_string());
+    /// ```
+    pub fn update_raw<S>(&mut self, raw_text: S) -> Result<()>
+    where
+        S: Into<String>,
+    {
+        let raw_text = raw_text.into();
+
+        match Self::parse_raw_text(&raw_text, &mut self.chars, &mut self.boundaries) {
+            Ok(_) => {
+                self.text = raw_text;
+                self.update_common_info();
+                Ok(())
+            }
+            Err(e) => {
+                self.clear();
+                Err(e)
+            }
         }
-
-        let chars: Vec<char> = text.chars().collect();
-        let boundaries = vec![BoundaryType::Unknown; chars.len() - 1];
-
-        let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
-
-        Ok(Self {
-            text,
-            str_to_char_pos,
-            char_to_str_pos,
-            char_type,
-            boundaries,
-            boundary_scores: None,
-        })
     }
 
     /// Gets a string without any annotation.
@@ -211,68 +413,61 @@ impl Sentence {
     {
         let tokenized_text = tokenized_text.as_ref();
 
-        if tokenized_text.is_empty() {
-            return Err(VaporettoError::invalid_argument(
-                "tokenized_text",
-                "is empty",
-            ));
-        }
+        let mut text = String::with_capacity(0);
+        let mut chars = Vec::with_capacity(0);
+        let mut boundaries = Vec::with_capacity(0);
 
-        let tokenized_chars: Vec<char> = tokenized_text.chars().collect();
-        let mut chars = Vec::with_capacity(tokenized_chars.len());
-        let mut boundaries = Vec::with_capacity(tokenized_chars.len() - 1);
+        Self::parse_tokenized_text(tokenized_text, &mut text, &mut chars, &mut boundaries)?;
 
-        let mut prev_boundary = false;
-        let mut escape = false;
-        for c in tokenized_chars {
-            match (escape, c) {
-                (false, '\\') => {
-                    escape = true;
-                }
-                (false, ' ') => {
-                    if chars.is_empty() {
-                        return Err(VaporettoError::invalid_argument(
-                            "tokenized_text",
-                            "starts with a whitespace",
-                        ));
-                    } else if prev_boundary {
-                        return Err(VaporettoError::invalid_argument(
-                            "tokenized_text",
-                            "contains consecutive whitespaces",
-                        ));
-                    }
-                    prev_boundary = true;
-                }
-                (_, _) => {
-                    if !chars.is_empty() {
-                        boundaries.push(if prev_boundary {
-                            BoundaryType::WordBoundary
-                        } else {
-                            BoundaryType::NotWordBoundary
-                        });
-                    }
-                    prev_boundary = false;
-                    escape = false;
-                    chars.push(c);
-                }
-            };
-        }
-        if prev_boundary {
-            return Err(VaporettoError::invalid_argument(
-                "tokenized_text",
-                "ends with a whitespace",
-            ));
-        }
+        Ok(Self::internal_new(text, chars, boundaries))
+    }
 
-        let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
-        Ok(Self {
-            text: chars.iter().collect(),
-            char_to_str_pos,
-            str_to_char_pos,
-            char_type,
-            boundaries,
-            boundary_scores: None,
-        })
+    /// Updates the [`Sentence`] using tokenized string.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokenized_text` - A tokenized string containing whitespaces for word boundaries.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error variant when:
+    ///
+    /// * `tokenized_text` is empty.
+    /// * `tokenized_text` starts/ends with a whitespace.
+    /// * `tokenized_text` contains consecutive whitespaces.
+    ///
+    /// When an error is occurred, the sentence will be replaced with a white space.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut s = Sentence::from_tokenized("How are you?").unwrap();
+    /// s.update_tokenized("I am fine").unwrap();
+    /// assert_eq!("Iamfine", s.to_raw_string());
+    /// ```
+    pub fn update_tokenized<S>(&mut self, tokenized_text: S) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let tokenized_text = tokenized_text.as_ref();
+
+        match Self::parse_tokenized_text(
+            tokenized_text,
+            &mut self.text,
+            &mut self.chars,
+            &mut self.boundaries,
+        ) {
+            Ok(_) => {
+                self.update_common_info();
+                Ok(())
+            }
+            Err(e) => {
+                self.clear();
+                Err(e)
+            }
+        }
     }
 
     /// Generates a string with whitespaces for word boundaries.
@@ -404,46 +599,60 @@ impl Sentence {
     {
         let labeled_text = labeled_text.as_ref();
 
-        if labeled_text.is_empty() {
-            return Err(VaporettoError::invalid_argument("labeled_text", "is empty"));
-        }
+        let mut text = String::with_capacity(0);
+        let mut chars = Vec::with_capacity(0);
+        let mut boundaries = Vec::with_capacity(0);
+        Self::parse_partial_annotation(labeled_text, &mut text, &mut chars, &mut boundaries)?;
 
-        let labeled_chars: Vec<char> = labeled_text.chars().collect();
-        if labeled_chars.len() & 0x01 == 0 {
-            return Err(VaporettoError::invalid_argument(
-                "labeled_text",
-                format!("invalid length: {}", labeled_chars.len()),
-            ));
-        }
-        let mut chars = Vec::with_capacity(labeled_chars.len() / 2 + 1);
-        let mut boundaries = Vec::with_capacity(labeled_chars.len() / 2);
+        Ok(Self::internal_new(text, chars, boundaries))
+    }
 
-        for c in labeled_chars.iter().skip(1).step_by(2) {
-            boundaries.push(match c {
-                ' ' => BoundaryType::Unknown,
-                '|' => BoundaryType::WordBoundary,
-                '-' => BoundaryType::NotWordBoundary,
-                _ => {
-                    return Err(VaporettoError::invalid_argument(
-                        "labeled_text",
-                        format!("contains invalid boundary character: '{}'", c),
-                    ))
-                }
-            });
-        }
-        for c in labeled_chars.into_iter().step_by(2) {
-            chars.push(c);
-        }
+    /// Updates the [`Sentence`] using a string with partial annotations.
+    ///
+    /// # Arguments
+    ///
+    /// * `labeled_text` - A string with partial annotations.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error variant when:
+    ///
+    /// * `labeled_text` is empty.
+    /// * The length of `lsbeled_text` is even numbers.
+    /// * `labeled_text` contains invalid boundary characters.
+    ///
+    /// When an error is occurred, the sentence will be replaced with a white space.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut s = Sentence::from_raw("g-o-o-d|i-d e-a").unwrap();
+    /// s.update_partial_annotation("h-e-l-l-o").unwrap();
+    /// assert_eq!("hello", s.to_raw_string());
+    /// ```
+    pub fn update_partial_annotation<S>(&mut self, labeled_text: S) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let labeled_text = labeled_text.as_ref();
 
-        let (char_to_str_pos, str_to_char_pos, char_type) = Self::common_info(&chars);
-        Ok(Self {
-            text: chars.iter().collect(),
-            char_to_str_pos,
-            str_to_char_pos,
-            char_type,
-            boundaries,
-            boundary_scores: None,
-        })
+        match Self::parse_partial_annotation(
+            labeled_text,
+            &mut self.text,
+            &mut self.chars,
+            &mut self.boundaries,
+        ) {
+            Ok(_) => {
+                self.update_common_info();
+                Ok(())
+            }
+            Err(e) => {
+                self.clear();
+                Err(e)
+            }
+        }
     }
 
     /// Generates a string with partial annotations.
@@ -504,6 +713,24 @@ impl Sentence {
     /// A mutable reference to the boundary information.
     pub fn boundaries_mut(&mut self) -> &mut [BoundaryType] {
         &mut self.boundaries
+    }
+
+    /// Gets a reference to the characters.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the characters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_raw("A1あエ漢?").unwrap();
+    /// assert_eq!(&['A', '1', 'あ', 'エ', '漢', '?'], s.chars());
+    /// ```
+    pub fn chars(&self) -> &[char] {
+        &self.chars
     }
 
     /// Gets a reference to the character type information.
@@ -576,11 +803,32 @@ mod tests {
     fn test_sentence_from_raw_empty() {
         let s = Sentence::from_raw("");
 
-        assert!(s.is_err());
         assert_eq!(
-            "InvalidArgumentError: text: is empty",
+            "InvalidArgumentError: raw_text: is empty",
             &s.err().unwrap().to_string()
         );
+    }
+
+    #[test]
+    fn test_sentence_update_raw_empty() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_raw("");
+
+        assert_eq!(
+            "InvalidArgumentError: raw_text: is empty",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: ct2u8vec![Other],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
     }
 
     #[test]
@@ -589,6 +837,7 @@ mod tests {
 
         let expected = Sentence {
             text: "あ".to_string(),
+            chars: vec!['あ'],
             str_to_char_pos: vec![0, 0, 0, 1],
             char_to_str_pos: vec![0, 3],
             char_type: ct2u8vec![Hiragana],
@@ -599,11 +848,32 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_raw_one() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_raw("あ").unwrap();
+
+        let expected = Sentence {
+            text: "あ".to_string(),
+            chars: vec!['あ'],
+            str_to_char_pos: vec![0, 0, 0, 1],
+            char_to_str_pos: vec![0, 3],
+            char_type: ct2u8vec![Hiragana],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_raw() {
         let s = Sentence::from_raw("Rustで良いプログラミング体験を！");
 
         let expected = Sentence {
             text: "Rustで良いプログラミング体験を！".to_string(),
+            chars: vec![
+                'R', 'u', 's', 't', 'で', '良', 'い', 'プ', 'ロ', 'グ', 'ラ', 'ミ', 'ン', 'グ',
+                '体', '験', 'を', '！',
+            ],
             str_to_char_pos: vec![
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
@@ -622,6 +892,34 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_raw() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_raw("Rustで良いプログラミング体験を！").unwrap();
+
+        let expected = Sentence {
+            text: "Rustで良いプログラミング体験を！".to_string(),
+            chars: vec![
+                'R', 'u', 's', 't', 'で', '良', 'い', 'プ', 'ロ', 'グ', 'ラ', 'ミ', 'ン', 'グ',
+                '体', '験', 'を', '！',
+            ],
+            str_to_char_pos: vec![
+                0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
+                0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
+            ],
+            char_to_str_pos: vec![
+                0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
+            ],
+            char_type: ct2u8vec![
+                Roman, Roman, Roman, Roman, Hiragana, Kanji, Hiragana, Katakana, Katakana,
+                Katakana, Katakana, Katakana, Katakana, Katakana, Kanji, Kanji, Hiragana, Other,
+            ],
+            boundaries: vec![Unknown; 17],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_to_raw() {
         let s = Sentence::from_raw("Rustで良いプログラミング体験を！");
 
@@ -635,7 +933,6 @@ mod tests {
     fn test_sentence_from_tokenized_empty() {
         let s = Sentence::from_tokenized("");
 
-        assert!(s.is_err());
         assert_eq!(
             "InvalidArgumentError: tokenized_text: is empty",
             &s.err().unwrap().to_string()
@@ -643,10 +940,31 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_tokenized_empty() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_tokenized("");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: is empty",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: ct2u8vec![Other],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_tokenized_start_with_space() {
         let s = Sentence::from_tokenized(" Rust で 良い プログラミング 体験 を ！");
 
-        assert!(s.is_err());
         assert_eq!(
             "InvalidArgumentError: tokenized_text: starts with a whitespace",
             &s.err().unwrap().to_string()
@@ -654,10 +972,31 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_tokenized_start_with_space() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_tokenized(" Rust で 良い プログラミング 体験 を ！");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: starts with a whitespace",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: ct2u8vec![Other],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_tokenized_end_with_space() {
         let s = Sentence::from_tokenized("Rust で 良い プログラミング 体験 を ！ ");
 
-        assert!(s.is_err());
         assert_eq!(
             "InvalidArgumentError: tokenized_text: ends with a whitespace",
             &s.err().unwrap().to_string()
@@ -665,14 +1004,57 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_tokenized_end_with_space() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_tokenized("Rust で 良い プログラミング 体験 を ！ ");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: ends with a whitespace",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: ct2u8vec![Other],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_tokenized_two_spaces() {
         let s = Sentence::from_tokenized("Rust で 良い  プログラミング 体験 を ！");
 
-        assert!(s.is_err());
         assert_eq!(
             "InvalidArgumentError: tokenized_text: contains consecutive whitespaces",
             &s.err().unwrap().to_string()
         );
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_two_spaces() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_tokenized("Rust で 良い  プログラミング 体験 を ！");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: contains consecutive whitespaces",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: ct2u8vec![Other],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
     }
 
     #[test]
@@ -681,6 +1063,7 @@ mod tests {
 
         let expected = Sentence {
             text: "あ".to_string(),
+            chars: vec!['あ'],
             str_to_char_pos: vec![0, 0, 0, 1],
             char_to_str_pos: vec![0, 3],
             char_type: ct2u8vec![Hiragana],
@@ -691,11 +1074,32 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_tokenized_one() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("あ").unwrap();
+
+        let expected = Sentence {
+            text: "あ".to_string(),
+            chars: vec!['あ'],
+            str_to_char_pos: vec![0, 0, 0, 1],
+            char_to_str_pos: vec![0, 3],
+            char_type: ct2u8vec![Hiragana],
+            boundaries: vec![],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_tokenized() {
         let s = Sentence::from_tokenized("Rust で 良い プログラミング 体験 を ！");
 
         let expected = Sentence {
             text: "Rustで良いプログラミング体験を！".to_string(),
+            chars: vec![
+                'R', 'u', 's', 't', 'で', '良', 'い', 'プ', 'ロ', 'グ', 'ラ', 'ミ', 'ン', 'グ',
+                '体', '験', 'を', '！',
+            ],
             str_to_char_pos: vec![
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
@@ -732,11 +1136,62 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_tokenized() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("Rust で 良い プログラミング 体験 を ！")
+            .unwrap();
+
+        let expected = Sentence {
+            text: "Rustで良いプログラミング体験を！".to_string(),
+            chars: vec![
+                'R', 'u', 's', 't', 'で', '良', 'い', 'プ', 'ロ', 'グ', 'ラ', 'ミ', 'ン', 'グ',
+                '体', '験', 'を', '！',
+            ],
+            str_to_char_pos: vec![
+                0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
+                0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
+            ],
+            char_to_str_pos: vec![
+                0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
+            ],
+            char_type: ct2u8vec![
+                Roman, Roman, Roman, Roman, Hiragana, Kanji, Hiragana, Katakana, Katakana,
+                Katakana, Katakana, Katakana, Katakana, Katakana, Kanji, Kanji, Hiragana, Other,
+            ],
+            boundaries: vec![
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_tokenized_with_escape_whitespace() {
-        let s = Sentence::from_tokenized("火星 猫 の 生態 ( M \\  et\\ al. )");
+        let s = Sentence::from_tokenized("火星 猫 の 生態 ( M \\  et\\ al. )").unwrap();
 
         let expected = Sentence {
             text: "火星猫の生態(M et al.)".to_string(),
+            chars: vec![
+                '火', '星', '猫', 'の', '生', '態', '(', 'M', ' ', 'e', 't', ' ', 'a', 'l', '.',
+                ')',
+            ],
             str_to_char_pos: vec![
                 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6, 7, 8, 9, 10, 11, 12, 13,
                 14, 15, 16,
@@ -767,7 +1222,52 @@ mod tests {
             ],
             boundary_scores: None,
         };
-        assert_eq!(expected, s.unwrap());
+        assert_eq!(expected, s);
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_escape_whitespace() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("火星 猫 の 生態 ( M \\  et\\ al. )")
+            .unwrap();
+
+        let expected = Sentence {
+            text: "火星猫の生態(M et al.)".to_string(),
+            chars: vec![
+                '火', '星', '猫', 'の', '生', '態', '(', 'M', ' ', 'e', 't', ' ', 'a', 'l', '.',
+                ')',
+            ],
+            str_to_char_pos: vec![
+                0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6, 7, 8, 9, 10, 11, 12, 13,
+                14, 15, 16,
+            ],
+            char_to_str_pos: vec![
+                0, 3, 6, 9, 12, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+            ],
+            char_type: ct2u8vec![
+                Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji, Other, Roman, Other, Roman, Roman,
+                Other, Roman, Roman, Other, Other,
+            ],
+            boundaries: vec![
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
     }
 
     #[test]
@@ -776,6 +1276,7 @@ mod tests {
 
         let expected = Sentence {
             text: "改行に\\nを用いる".to_string(),
+            chars: vec!['改', '行', 'に', '\\', 'n', 'を', '用', 'い', 'る'],
             str_to_char_pos: vec![
                 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9,
             ],
@@ -799,11 +1300,40 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_update_tokenized_with_escape_backslash() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("改行 に \\\\n を 用い る").unwrap();
+
+        let expected = Sentence {
+            text: "改行に\\nを用いる".to_string(),
+            chars: vec!['改', '行', 'に', '\\', 'n', 'を', '用', 'い', 'る'],
+            str_to_char_pos: vec![
+                0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9,
+            ],
+            char_to_str_pos: vec![0, 3, 6, 9, 10, 11, 14, 17, 20, 23],
+            char_type: ct2u8vec![
+                Kanji, Kanji, Hiragana, Other, Roman, Hiragana, Kanji, Hiragana, Hiragana,
+            ],
+            boundaries: vec![
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_to_tokenized_string_unknown() {
         let s = Sentence::from_partial_annotation("火-星 猫|の|生-態");
         let result = s.unwrap().to_tokenized_string();
 
-        assert!(result.is_err());
         assert_eq!(
             "InvalidSentenceError: contains an unknown boundary",
             result.err().unwrap().to_string()
@@ -835,7 +1365,6 @@ mod tests {
         let s = Sentence::from_partial_annotation("火-星 猫|の|生-態").unwrap();
         let result = s.to_tokenized_vec();
 
-        assert!(result.is_err());
         assert_eq!(
             "InvalidSentenceError: contains an unknown boundary",
             result.err().unwrap().to_string()
@@ -856,7 +1385,6 @@ mod tests {
     fn test_sentence_from_partial_annotation_empty() {
         let s = Sentence::from_partial_annotation("");
 
-        assert!(s.is_err());
         assert_eq!(
             "InvalidArgumentError: labeled_text: is empty",
             &s.err().unwrap().to_string()
@@ -864,13 +1392,34 @@ mod tests {
     }
 
     #[test]
-    fn test_sentence_from_partial_annotation_invalid_length() {
-        let s = Sentence::from_partial_annotation("火-星 猫|の|生-態 ");
+    fn test_sentence_update_partial_annotation_empty() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_partial_annotation("");
 
-        assert!(s.is_err());
+        assert_eq!(
+            "InvalidArgumentError: labeled_text: is empty",
+            &result.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_from_partial_annotation_invalid_length() {
+        let result = Sentence::from_partial_annotation("火-星 猫|の|生-態 ");
+
         assert_eq!(
             "InvalidArgumentError: labeled_text: invalid length: 12",
-            &s.err().unwrap().to_string()
+            &result.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_partial_annotation_invalid_length() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_partial_annotation("火-星 猫|の|生-態 ");
+
+        assert_eq!(
+            "InvalidArgumentError: labeled_text: invalid length: 12",
+            &result.err().unwrap().to_string()
         );
     }
 
@@ -878,10 +1427,20 @@ mod tests {
     fn test_sentence_from_partial_annotation_invalid_boundary_character() {
         let s = Sentence::from_partial_annotation("火-星?猫|の|生-態");
 
-        assert!(s.is_err());
         assert_eq!(
             "InvalidArgumentError: labeled_text: contains invalid boundary character: '?'",
             &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_partial_annotation_invalid_boundary_character() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_partial_annotation("火-星?猫|の|生-態");
+
+        assert_eq!(
+            "InvalidArgumentError: labeled_text: contains invalid boundary character: '?'",
+            &result.err().unwrap().to_string()
         );
     }
 
@@ -891,6 +1450,7 @@ mod tests {
 
         let expected = Sentence {
             text: "火星猫の生態".to_string(),
+            chars: vec!['火', '星', '猫', 'の', '生', '態'],
             str_to_char_pos: vec![0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
             char_to_str_pos: vec![0, 3, 6, 9, 12, 15, 18],
             char_type: ct2u8vec![Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji],
@@ -904,6 +1464,29 @@ mod tests {
             boundary_scores: None,
         };
         assert_eq!(expected, s.unwrap());
+    }
+
+    #[test]
+    fn test_sentence_update_partial_annotation_one() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_partial_annotation("火-星 猫|の|生-態").unwrap();
+
+        let expected = Sentence {
+            text: "火星猫の生態".to_string(),
+            chars: vec!['火', '星', '猫', 'の', '生', '態'],
+            str_to_char_pos: vec![0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
+            char_to_str_pos: vec![0, 3, 6, 9, 12, 15, 18],
+            char_type: ct2u8vec![Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji],
+            boundaries: vec![
+                NotWordBoundary,
+                Unknown,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+            ],
+            boundary_scores: None,
+        };
+        assert_eq!(expected, s);
     }
 
     #[test]
