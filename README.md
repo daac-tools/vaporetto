@@ -117,9 +117,9 @@ You can make the `メロンパン` into a single token by manipulating the model
    ```
 
    In this case, `-100000` will be added when the boundary is inside of the word `メロンパン`.
-   
+
    Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
-   
+
    In addition, The dictionary cannot contain duplicated words.
    When the word is already contained in the dictionary, you have to edit existing weights.
 
@@ -135,6 +135,8 @@ Now `メロンパン` is split into a single token.
 ```
 
 ## Speed Comparison of Various Tokenizers
+
+Vaporetto is 6.9 times faster than KyTea. With `feature=simd`, it becomes 7.8 times faster. (`simd` option requires Nightly Rust.)
 
 Details can be found [here](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison).
 
