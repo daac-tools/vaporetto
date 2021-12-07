@@ -34,7 +34,7 @@ impl DictScorerWordwise {
     pub fn new(model: DictModelWordwise) -> Result<Self> {
         let mut words = vec![];
         let mut weights = vec![];
-        for pair in model.data {
+        for pair in model.dict {
             words.push(pair.word);
             weights.push(pair.weights);
         }
@@ -54,7 +54,7 @@ impl DictScorerWordwise {
                 ys[m_start - 1] += dict_weight.right;
             }
             for y in &mut ys[m_start..m_end - 1] {
-                *y += dict_weight.inner;
+                *y += dict_weight.inside;
             }
             if m_end <= ys.len() {
                 ys[m_end - 1] += dict_weight.left;
@@ -95,7 +95,7 @@ impl DictScorerLengthwise {
                 ys[m_start - 1] += dict_weight.right;
             }
             for y in &mut ys[m_start..m_end - 1] {
-                *y += dict_weight.inner;
+                *y += dict_weight.inside;
             }
             if m_end <= ys.len() {
                 ys[m_end - 1] += dict_weight.left;

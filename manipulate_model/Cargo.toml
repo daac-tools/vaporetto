@@ -1,0 +1,11 @@
+[package]
+name = "manipulate_model"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+csv = "1.1"  # Unlicense OR MIT 
+serde = { version = "1.0", features = ["derive"] }  # MIT or Apache-2.0
+structopt = "0.3"  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
+zstd = "0.9"  # MIT

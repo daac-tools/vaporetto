@@ -3,7 +3,7 @@ use std::io::BufRead;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::dict_model::{DictModel, DictModelWordwise, DictWeight, WordwiseDictData};
+use crate::dict_model::{DictModel, DictModelWordwise, DictWeight, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
@@ -433,7 +433,7 @@ impl TryFrom<KyteaModel> for Model {
             });
         }
 
-        let mut dict_data = vec![];
+        let mut dict = vec![];
         if let Some(kytea_dict) = model.dict {
             for (w, data) in kytea_dict.dump_items() {
                 let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
@@ -442,11 +442,11 @@ impl TryFrom<KyteaModel> for Model {
                     if data.in_dict >> j & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * word_len;
                         weights.right += feature_lookup.dict_vec[offset] as i32;
-                        weights.inner += feature_lookup.dict_vec[offset + 1] as i32;
+                        weights.inside += feature_lookup.dict_vec[offset + 1] as i32;
                         weights.left += feature_lookup.dict_vec[offset + 2] as i32;
                     }
                 }
-                dict_data.push(WordwiseDictData {
+                dict.push(WordWeightRecord {
                     word: w.into_iter().collect(),
                     weights,
                 });
@@ -456,7 +456,7 @@ impl TryFrom<KyteaModel> for Model {
         Ok(Self {
             char_ngram_model: NgramModel::new(char_ngrams),
             type_ngram_model: NgramModel::new(type_ngrams),
-            dict_model: DictModel::Wordwise(DictModelWordwise { data: dict_data }),
+            dict_model: DictModel::Wordwise(DictModelWordwise { dict }),
 
             quantize_multiplier,
 

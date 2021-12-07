@@ -47,6 +47,7 @@ mod trainer;
 #[cfg(feature = "kytea")]
 mod kytea_model;
 
+pub use dict_model::WordWeightRecord;
 pub use model::Model;
 pub use predictor::Predictor;
 pub use sentence::{BoundaryType, CharacterType, Sentence};

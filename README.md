@@ -1,6 +1,7 @@
 # 🛥 VAporetto: POintwise pREdicTion based TOkenizer
 
 Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
+This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
@@ -8,9 +9,7 @@ Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 
 [Technical details](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (Japanese)
 
-## Overview
-
-This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
+## Example Usage
 
 ### Try Word Segmentation
 
@@ -36,12 +35,12 @@ Each model is compressed, so you need to decompress the downloaded model file li
 To convert a KyTea model into a Vaporetto model, run the following command in the Vaporetto root directory.
 If necessary, the Rust code will be compiled before the conversion process.
 ```
-% cargo run --release -p convert_kytea_model -- --model-in path/to/jp-0.4.7-5.mod --model-out path/to/jp-0.4.7-5-tokenize.model.zstd
+% cargo run --release -p convert_kytea_model -- --model-in path/to/jp-0.4.7-5.mod --model-out path/to/jp-0.4.7-5-tokenize.model.zst
 ```
 
 Now you can perform tokenization. Run the following command:
 ```
-% echo '火星猫の生態の調査結果' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zstd
+% echo '火星猫の生態の調査結果' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zst
 ```
 
 The following will be output:
@@ -75,7 +74,7 @@ Here is an example:
 To train a model, use the following command:
 
 ```
-% cargo run --release -p train -- --model ./your.model.zstd --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt
+% cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt
 ```
 
 `--tok` argument specifies a fully annotated corpus, and `--part` argument specifies a partially annotated corpus.
@@ -83,6 +82,57 @@ You can also specify a word dictionary with `--dict` argument.
 A word dictionary is a file with words per line.
 
 You can specify all arguments above multiple times.
+
+### Model Manipulation
+
+For example, `メロンパン` is split into two tokens in the following command:
+```
+% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zst
+朝食 は メロン パン 1 個 だっ た
+```
+
+Sometimes, the model outputs different results than what you expect.
+You can make the `メロンパン` into a single token by manipulating the model following the steps below:
+
+1. Dump a dictionary by the following command:
+   ```
+   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --dump-dict path/to/dictionary.csv
+   ```
+
+2. Edit the dictionary.
+
+   The dictionary is a csv file. Each row contains a word and corresponding weights in the following order:
+
+   * `right_weight` - A weight that is added when the word is found to the right of the boundary.
+   * `inside_weight` - A weight that is added when the word is overlapped on the boundary.
+   * `left_weight` - A weight that is added when the word is found to the left of the boundary.
+
+   Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
+   ```diff
+    メロレオストーシス,6944,-2553,5319
+    メロン,8924,-10861,7081
+   +メロンパン,0,-100000,0
+    メロン果実,4168,-1165,3558
+    メロヴィング,6999,-15413,7583
+   ```
+
+   In this case, `-100000` will be added when the boundary is inside of the word `メロンパン`.
+   
+   Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
+   
+   In addition, The dictionary cannot contain duplicated words.
+   When the word is already contained in the dictionary, you have to edit existing weights.
+
+3. Replaces weight data of a model file
+   ```
+   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/jp-0.4.7-5-tokenize-new.model.zst
+   ```
+
+Now `メロンパン` is split into a single token.
+```
+% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize-new.model.zst
+朝食 は メロンパン 1 個 だっ た
+```
 
 ## Speed Comparison of Various Tokenizers
 

@@ -3,6 +3,7 @@
 members = [
     "vaporetto",
     "vaporetto_rules",
+    "manipulate_model",
     "predict",
     "train",
     "evaluate",

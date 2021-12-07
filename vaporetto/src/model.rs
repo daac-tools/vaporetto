@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-use crate::dict_model::DictModel;
+use crate::dict_model::{DictModel, DictModelWordwise, WordWeightRecord};
 use crate::ngram_model::NgramModel;
 
 #[cfg(feature = "train")]
@@ -140,7 +140,7 @@ impl Model {
                 }
                 FeatureContent::DictionaryWord(size) => match feature.rel_position {
                     0 => dict_weights[size - 1].right = weight as i32,
-                    1 => dict_weights[size - 1].inner = weight as i32,
+                    1 => dict_weights[size - 1].inside = weight as i32,
                     2 => dict_weights[size - 1].left = weight as i32,
                     _ => panic!("Invalid rel_position"),
                 },
@@ -160,5 +160,13 @@ impl Model {
             char_window_size,
             type_window_size,
         }
+    }
+
+    pub fn dump_dictionary(&self) -> Vec<WordWeightRecord> {
+        self.dict_model.dump_dictionary()
+    }
+
+    pub fn replace_dictionary(&mut self, dict: Vec<WordWeightRecord>) {
+        self.dict_model = DictModel::Wordwise(DictModelWordwise { dict });
     }
 }

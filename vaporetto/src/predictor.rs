@@ -185,7 +185,7 @@ mod tests {
     use super::*;
 
     use crate::dict_model::{
-        DictModel, DictModelLengthwise, DictModelWordwise, DictWeight, WordwiseDictData,
+        DictModel, DictModelLengthwise, DictModelWordwise, DictWeight, WordWeightRecord,
     };
     use crate::ngram_model::{NgramData, NgramModel};
 
@@ -262,12 +262,12 @@ mod tests {
                 weights: vec![
                     DictWeight {
                         right: 40,
-                        inner: 41,
+                        inside: 41,
                         left: 42,
                     },
                     DictWeight {
                         right: 43,
-                        inner: 44,
+                        inside: 44,
                         left: 45,
                     },
                 ],
@@ -352,17 +352,17 @@ mod tests {
                 weights: vec![
                     DictWeight {
                         right: 38,
-                        inner: 39,
+                        inside: 39,
                         left: 40,
                     },
                     DictWeight {
                         right: 41,
-                        inner: 42,
+                        inside: 42,
                         left: 43,
                     },
                     DictWeight {
                         right: 44,
-                        inner: 45,
+                        inside: 45,
                         left: 46,
                     },
                 ],
@@ -443,28 +443,28 @@ mod tests {
                 },
             ]),
             dict_model: DictModel::Wordwise(DictModelWordwise {
-                data: vec![
-                    WordwiseDictData {
+                dict: vec![
+                    WordWeightRecord {
                         word: "国民".to_string(),
                         weights: DictWeight {
                             right: 38,
-                            inner: 39,
+                            inside: 39,
                             left: 40,
                         },
                     },
-                    WordwiseDictData {
+                    WordWeightRecord {
                         word: "世界".to_string(),
                         weights: DictWeight {
                             right: 41,
-                            inner: 42,
+                            inside: 42,
                             left: 43,
                         },
                     },
-                    WordwiseDictData {
+                    WordWeightRecord {
                         word: "世".to_string(),
                         weights: DictWeight {
                             right: 44,
-                            inner: 45,
+                            inside: 45,
                             left: 46,
                         },
                     },
