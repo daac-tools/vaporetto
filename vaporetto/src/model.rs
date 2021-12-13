@@ -31,9 +31,6 @@ pub struct Model {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
     pub(crate) dict_model: DictModel,
-
-    pub(crate) quantize_multiplier: f64,
-
     pub(crate) bias: i32,
     pub(crate) char_window_size: usize,
     pub(crate) type_window_size: usize,
@@ -153,9 +150,6 @@ impl Model {
                 words: dict,
                 weights: dict_weights,
             }),
-
-            quantize_multiplier,
-
             bias,
             char_window_size,
             type_window_size,

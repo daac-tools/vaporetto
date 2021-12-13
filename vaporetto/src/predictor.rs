@@ -16,8 +16,6 @@ pub struct Predictor {
     type_scorer: TypeScorer,
     dict_scorer: Option<DictScorer>,
 
-    quantize_multiplier: f64,
-
     #[cfg(feature = "simd")]
     padding: usize,
 }
@@ -55,8 +53,6 @@ impl Predictor {
             char_scorer,
             type_scorer,
             dict_scorer,
-
-            quantize_multiplier: model.quantize_multiplier,
 
             #[cfg(feature = "simd")]
             padding: model.char_window_size.max(model.type_window_size),
@@ -133,23 +129,14 @@ impl Predictor {
         if boundaries_size != 0 {
             let mut ys = vec![0; boundaries_size];
             self.predict_impl(&sentence, 0, &mut ys);
-            let mut scores = sentence
-                .boundary_scores
-                .take()
-                .unwrap_or_else(|| vec![0.; boundaries_size]);
-            for (y, (b, s)) in ys
-                .into_iter()
-                .zip(sentence.boundaries.iter_mut().zip(scores.iter_mut()))
-            {
+            for (&y, b) in ys.iter().zip(sentence.boundaries.iter_mut()) {
                 *b = if y >= 0 {
                     BoundaryType::WordBoundary
                 } else {
                     BoundaryType::NotWordBoundary
                 };
-
-                *s = y as f64 * self.quantize_multiplier;
             }
-            sentence.boundary_scores.replace(scores);
+            sentence.boundary_scores.replace(ys);
         }
 
         #[cfg(feature = "simd")]
@@ -160,7 +147,7 @@ impl Predictor {
             let mut scores = sentence
                 .boundary_scores
                 .take()
-                .unwrap_or_else(|| vec![0.; boundaries_size]);
+                .unwrap_or_else(|| vec![0; boundaries_size]);
             for (&y, (b, s)) in ys[self.padding..]
                 .into_iter()
                 .zip(sentence.boundaries.iter_mut().zip(scores.iter_mut()))
@@ -171,7 +158,7 @@ impl Predictor {
                     BoundaryType::NotWordBoundary
                 };
 
-                *s = y as f64 * self.quantize_multiplier;
+                *s = y;
             }
             sentence.boundary_scores.replace(scores);
         }
@@ -272,7 +259,6 @@ mod tests {
                     },
                 ],
             }),
-            quantize_multiplier: 0.5,
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
@@ -367,7 +353,6 @@ mod tests {
                     },
                 ],
             }),
-            quantize_multiplier: 0.25,
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
@@ -470,7 +455,6 @@ mod tests {
                     },
                 ],
             }),
-            quantize_multiplier: 0.25,
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
@@ -560,7 +544,7 @@ mod tests {
             s.boundaries(),
         );
         assert_eq!(
-            &[-38.5, -2.5, 22.5, 66.0, 66.5, 72.0, 25.0, -16.0],
+            &[-77, -5, 45, 132, 133, 144, 50, -32],
             s.boundary_scores().unwrap(),
         );
     }
@@ -585,7 +569,7 @@ mod tests {
             s.boundaries(),
         );
         assert_eq!(
-            &[-34.5, -27.25, -9.75, 14.25, 26.0, 8.5, -19.75, -28.5],
+            &[-138, -109, -39, 57, 104, 34, -79, -114],
             s.boundary_scores().unwrap(),
         );
     }
@@ -610,7 +594,7 @@ mod tests {
             s.boundaries(),
         );
         assert_eq!(
-            &[-34.5, -27.25, -20.75, 4.5, 16.25, -3.0, -10.25, -18.75],
+            &[-138, -109, -83, 18, 65, -12, -41, -75],
             s.boundary_scores().unwrap(),
         );
     }

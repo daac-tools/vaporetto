@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let line = if opt.no_norm {
                 line
             } else {
-                fullwidth_filter.filter(line)
+                fullwidth_filter.filter(&line)
             };
             dictionary.insert(line);
         }

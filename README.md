@@ -85,14 +85,27 @@ You can specify all arguments above multiple times.
 
 ### Model Manipulation
 
-For example, `メロンパン` is split into two tokens in the following command:
+Sometimes, your model will output different results than what you expect.
+For example, `メロンパン` is split into two tokens in the following command.
+We use `--scores` option to show the score of each character boundary:
 ```
-% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zst
+% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
 朝食 は メロン パン 1 個 だっ た
+0:朝食 -15398
+1:食は 24623
+2:はメ 30261
+3:メロ -26885
+4:ロン -38896
+5:ンパ 8162
+6:パン -23416
+7:ン１ 23513
+8:１個 18435
+9:個だ 24964
+10:だっ -15065
+11:った 14178
 ```
 
-Sometimes, the model outputs different results than what you expect.
-You can make the `メロンパン` into a single token by manipulating the model following the steps below:
+To concatenate `メロンパン` into a single token, manipulate the model in the following steps so that the score of `ンパ` becomes negative:
 
 1. Dump a dictionary by the following command:
    ```
@@ -130,8 +143,20 @@ You can make the `メロンパン` into a single token by manipulating the model
 
 Now `メロンパン` is split into a single token.
 ```
-% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize-new.model.zst
+% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize-new.model.zst
 朝食 は メロンパン 1 個 だっ た
+0:朝食 -15398
+1:食は 24623
+2:はメ 30261
+3:メロ -126885
+4:ロン -138896
+5:ンパ -91838
+6:パン -123416
+7:ン１ 23513
+8:１個 18435
+9:個だ 24964
+10:だっ -15065
+11:った 14178
 ```
 
 ## Speed Comparison of Various Tokenizers

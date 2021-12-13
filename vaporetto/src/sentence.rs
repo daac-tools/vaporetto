@@ -85,7 +85,7 @@ pub struct Sentence {
     pub(crate) char_to_str_pos: Vec<usize>,
     pub(crate) char_type: Vec<u8>,
     pub(crate) boundaries: Vec<BoundaryType>,
-    pub(crate) boundary_scores: Option<Vec<f64>>,
+    pub(crate) boundary_scores: Option<Vec<i32>>,
 }
 
 impl Sentence {
@@ -756,7 +756,7 @@ impl Sentence {
     /// # Returns
     ///
     /// If the predictor inserted, the boundary score information is returned. Otherwise, None.
-    pub fn boundary_scores(&self) -> Option<&[f64]> {
+    pub fn boundary_scores(&self) -> Option<&[i32]> {
         self.boundary_scores.as_deref()
     }
 

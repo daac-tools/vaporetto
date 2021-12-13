@@ -240,7 +240,7 @@ struct LinearModel {
     _solver_type: u8,
     _labels: Vec<i32>,
     _bias: bool,
-    multiplier: f64,
+    _multiplier: f64,
     feature_lookup: Option<FeatureLookup<i16>>,
 }
 
@@ -264,7 +264,7 @@ impl Readable for Option<LinearModel> {
             _solver_type: solver_type,
             _labels: labels,
             _bias: bias,
-            multiplier,
+            _multiplier: multiplier,
             feature_lookup,
         }))
     }
@@ -399,7 +399,6 @@ impl TryFrom<KyteaModel> for Model {
         let wordseg_model = model
             .wordseg_model
             .ok_or_else(|| VaporettoError::invalid_model("no word segmentation model."))?;
-        let quantize_multiplier = wordseg_model.multiplier;
         let feature_lookup = wordseg_model
             .feature_lookup
             .ok_or_else(|| VaporettoError::invalid_model("no lookup data."))?;
@@ -457,9 +456,6 @@ impl TryFrom<KyteaModel> for Model {
             char_ngram_model: NgramModel::new(char_ngrams),
             type_ngram_model: NgramModel::new(type_ngrams),
             dict_model: DictModel::Wordwise(DictModelWordwise { dict }),
-
-            quantize_multiplier,
-
             bias,
             char_window_size: config.char_w as usize,
             type_window_size: config.type_w as usize,
