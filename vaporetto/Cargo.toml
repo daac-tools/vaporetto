@@ -1,7 +1,7 @@
 [package]
 name = "vaporetto"
 version = "0.2.0"
-edition = "2018"
+edition = "2021"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto: a pointwise prediction based tokenizer"
 license = "MIT OR Apache-2.0"
@@ -13,16 +13,14 @@ categories = ["text-processing"]
 autotests = false
 
 [dependencies]
-bincode = "1.3.3"  # MIT
 daachorse = "0.2.0"  # MIT or Apache-2.0
-serde = { version = "1.0", features = ["derive"] }  # MIT or Apache-2.0
+byteorder = "1.4"  # Unlicense or MIT
 
-byteorder = { version = "1.4", optional = true }  # Unlicense or MIT
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
 default = []
-kytea = ["byteorder"]
+kytea = []
 train = ["liblinear"]
 simd = []
 

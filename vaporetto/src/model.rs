@@ -1,8 +1,9 @@
 use std::io::{Read, Write};
 
-use serde::{Deserialize, Serialize};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::dict_model::{DictModel, DictModelWordwise, WordWeightRecord};
+use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 
 #[cfg(feature = "train")]
@@ -26,7 +27,6 @@ const EPSILON: f64 = 1e-6;
 const QUANTIZE_BIT_DEPTH: u8 = 16;
 
 /// Model data.
-#[derive(Serialize, Deserialize)]
 pub struct Model {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
@@ -46,11 +46,17 @@ impl Model {
     /// # Errors
     ///
     /// When `wtr` generates an error, it will be returned as is.
-    pub fn write<W>(&self, wtr: &mut W) -> Result<(), bincode::Error>
+    pub fn write<W>(&self, mut wtr: W) -> Result<()>
     where
         W: Write,
     {
-        bincode::serialize_into(wtr, self)
+        self.char_ngram_model.serialize(&mut wtr)?;
+        self.type_ngram_model.serialize(&mut wtr)?;
+        self.dict_model.serialize(&mut wtr)?;
+        wtr.write_i32::<LittleEndian>(self.bias)?;
+        wtr.write_u32::<LittleEndian>(self.char_window_size.try_into().unwrap())?;
+        wtr.write_u32::<LittleEndian>(self.type_window_size.try_into().unwrap())?;
+        Ok(())
     }
 
     /// Creates a model from a reader.
@@ -66,11 +72,18 @@ impl Model {
     /// # Errors
     ///
     /// When `rdr` generates an error, it will be returned as is.
-    pub fn read<R>(rdr: &mut R) -> Result<Self, bincode::Error>
+    pub fn read<R>(mut rdr: R) -> Result<Self>
     where
         R: Read,
     {
-        bincode::deserialize_from(rdr)
+        Ok(Self {
+            char_ngram_model: NgramModel::<String>::deserialize(&mut rdr)?,
+            type_ngram_model: NgramModel::<Vec<u8>>::deserialize(&mut rdr)?,
+            dict_model: DictModel::deserialize(&mut rdr)?,
+            bias: rdr.read_i32::<LittleEndian>()?,
+            char_window_size: rdr.read_u32::<LittleEndian>()?.try_into().unwrap(),
+            type_window_size: rdr.read_u32::<LittleEndian>()?.try_into().unwrap(),
+        })
     }
 
     #[cfg(feature = "train")]

@@ -3,6 +3,8 @@
 use std::error::Error;
 use std::fmt;
 
+pub type Result<T, E = VaporettoError> = std::result::Result<T, E>;
+
 #[derive(Debug)]
 pub enum VaporettoError {
     InvalidModel(InvalidModelError),
@@ -51,8 +53,6 @@ impl fmt::Display for VaporettoError {
 }
 
 impl Error for VaporettoError {}
-
-pub type Result<T, E = VaporettoError> = std::result::Result<T, E>;
 
 /// Error used when the model is invalid.
 #[derive(Debug)]
