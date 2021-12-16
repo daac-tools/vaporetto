@@ -114,19 +114,20 @@ To concatenate `メロンパン` into a single token, manipulate the model in th
 
 2. Edit the dictionary.
 
-   The dictionary is a csv file. Each row contains a word and corresponding weights in the following order:
+   The dictionary is a csv file. Each row contains a word, corresponding weights, and a comment in the following order:
 
    * `right_weight` - A weight that is added when the word is found to the right of the boundary.
    * `inside_weight` - A weight that is added when the word is overlapped on the boundary.
    * `left_weight` - A weight that is added when the word is found to the left of the boundary.
+   * `comment` - A comment that does not affect the behaviour.
 
    Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
    ```diff
-    メロレオストーシス,6944,-2553,5319
-    メロン,8924,-10861,7081
-   +メロンパン,0,-100000,0
-    メロン果実,4168,-1165,3558
-    メロヴィング,6999,-15413,7583
+    メロレオストーシス,6944,-2553,5319,
+    メロン,8924,-10861,7081,
+   +メロンパン,0,-100000,0,melon🍈 in English.
+    メロン果実,4168,-1165,3558,
+    メロヴィング,6999,-15413,7583,
    ```
 
    In this case, `-100000` will be added when the boundary is inside of the word `メロンパン`.

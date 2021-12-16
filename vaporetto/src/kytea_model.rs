@@ -448,6 +448,7 @@ impl TryFrom<KyteaModel> for Model {
                 dict.push(WordWeightRecord {
                     word: w.into_iter().collect(),
                     weights,
+                    comment: "".to_string(),
                 });
             }
         }

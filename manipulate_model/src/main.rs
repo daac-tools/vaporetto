@@ -34,6 +34,7 @@ struct WordWeightRecordFlatten {
     right: i32,
     inside: i32,
     left: i32,
+    comment: String,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,6 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 right: data.get_right_weight(),
                 inside: data.get_inside_weight(),
                 left: data.get_left_weight(),
+                comment: data.get_comment().to_string(),
             })?;
         }
     }
@@ -69,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 record.right,
                 record.inside,
                 record.left,
+                record.comment,
             ));
         }
         model.replace_dictionary(dict);

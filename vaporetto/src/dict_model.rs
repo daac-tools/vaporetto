@@ -110,6 +110,7 @@ impl DictModel {
 pub struct WordWeightRecord {
     pub(crate) word: String,
     pub(crate) weights: DictWeight,
+    pub(crate) comment: String,
 }
 
 impl WordWeightRecord {
@@ -118,10 +119,13 @@ impl WordWeightRecord {
         W: Write,
     {
         let word_size = self.word.len();
+        let comment_size = self.comment.len();
         buf.write_u32::<LittleEndian>(word_size.try_into().unwrap())?;
+        buf.write_u32::<LittleEndian>(comment_size.try_into().unwrap())?;
         buf.write_all(self.word.as_bytes())?;
+        buf.write_all(self.comment.as_bytes())?;
         let weights_size = self.weights.serialize(&mut buf)?;
-        Ok(mem::size_of::<u32>() + word_size + weights_size)
+        Ok(mem::size_of::<u32>() * 2 + word_size + weights_size + comment_size)
     }
 
     pub fn deserialize<R>(mut buf: R) -> Result<Self>
@@ -129,11 +133,15 @@ impl WordWeightRecord {
         R: Read,
     {
         let word_size = buf.read_u32::<LittleEndian>()?;
-        let mut str_bytes = vec![0; word_size.try_into().unwrap()];
-        buf.read_exact(&mut str_bytes)?;
+        let comment_size = buf.read_u32::<LittleEndian>()?;
+        let mut word_bytes = vec![0; word_size.try_into().unwrap()];
+        buf.read_exact(&mut word_bytes)?;
+        let mut comment_bytes = vec![0; comment_size.try_into().unwrap()];
+        buf.read_exact(&mut comment_bytes)?;
         Ok(Self {
-            word: String::from_utf8(str_bytes)?,
+            word: String::from_utf8(word_bytes)?,
             weights: DictWeight::deserialize(&mut buf)?,
+            comment: String::from_utf8(comment_bytes)?,
         })
     }
 }
@@ -147,11 +155,12 @@ impl WordWeightRecord {
     /// * `right` - A weight of the boundary when the word is found at right.
     /// * `inside` - A weight of the boundary when the word is overlapped on the boundary.
     /// * `left` - A weight of the boundary when the word is found at left.
+    /// * `comment` - A comment that does not affect the behaviour.
     ///
     /// # Returns
     ///
     /// A new record.
-    pub const fn new(word: String, right: i32, inside: i32, left: i32) -> Self {
+    pub const fn new(word: String, right: i32, inside: i32, left: i32, comment: String) -> Self {
         Self {
             word,
             weights: DictWeight {
@@ -159,6 +168,7 @@ impl WordWeightRecord {
                 inside,
                 left,
             },
+            comment,
         }
     }
 
@@ -180,6 +190,11 @@ impl WordWeightRecord {
     /// Gets a `left` weight.
     pub const fn get_left_weight(&self) -> i32 {
         self.weights.left
+    }
+
+    /// Gets a reference to the comment.
+    pub fn get_comment(&self) -> &str {
+        &self.comment
     }
 }
 
@@ -309,7 +324,11 @@ impl DictModelLengthwise {
             let word_size = word.chars().count();
             let word_size_idx = word_size.min(self.weights.len()) - 1;
             let weights = self.weights[word_size_idx];
-            result.push(WordWeightRecord { word, weights });
+            result.push(WordWeightRecord {
+                word,
+                weights,
+                comment: "".to_string(),
+            });
         }
         result
     }

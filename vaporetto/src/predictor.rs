@@ -436,6 +436,7 @@ mod tests {
                             inside: 39,
                             left: 40,
                         },
+                        comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世界".to_string(),
@@ -444,6 +445,7 @@ mod tests {
                             inside: 42,
                             left: 43,
                         },
+                        comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世".to_string(),
@@ -452,6 +454,7 @@ mod tests {
                             inside: 45,
                             left: 46,
                         },
+                        comment: "".to_string(),
                     },
                 ],
             }),
