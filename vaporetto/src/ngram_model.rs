@@ -96,27 +96,40 @@ where
             return;
         }
         self.merged = true;
-        let ngrams = self
+        let mut check = vec![false; self.data.len()];
+        let ngram_ids: HashMap<_, _> = self
             .data
             .iter()
             .cloned()
-            .map(|d| (d.ngram.as_ref().to_vec(), d.weights))
-            .collect::<HashMap<_, _>>();
-        for NgramData { ngram, weights } in &mut self.data {
-            let ngram = ngram.as_ref();
-            let mut new_weights: Option<Vec<_>> = None;
-            for st in (0..ngram.len()).rev() {
-                if let Some(weights) = ngrams.get(&ngram[st..]) {
-                    if let Some(new_weights) = new_weights.as_mut() {
-                        for (w_new, w) in new_weights.iter_mut().zip(weights) {
-                            *w_new += *w;
-                        }
-                    } else {
-                        new_weights.replace(weights.clone());
+            .enumerate()
+            .map(|(i, d)| (d.ngram.as_ref().to_vec(), i))
+            .collect();
+        let mut stack = vec![];
+        for i in 0..self.data.len() {
+            if check[i] {
+                continue;
+            }
+            stack.push(i);
+            let ngram = self.data[i].ngram.as_ref();
+            for j in 1..ngram.len() {
+                if let Some(&k) = ngram_ids.get(&ngram[j..]) {
+                    stack.push(k);
+                    if check[k] {
+                        break;
                     }
                 }
             }
-            *weights = new_weights.unwrap();
+            let mut idx_from = stack.pop().unwrap();
+            check[idx_from] = true;
+            while let Some(idx_to) = stack.pop() {
+                let mut new_weights = self.data[idx_from].weights.clone();
+                for (w1, w2) in new_weights.iter_mut().zip(&self.data[idx_to].weights) {
+                    *w1 += w2;
+                }
+                self.data[idx_to].weights = new_weights;
+                idx_from = idx_to;
+                check[idx_to] = true;
+            }
         }
     }
 
