@@ -126,7 +126,10 @@ impl Sentence {
         boundaries: &mut Vec<BoundaryType>,
     ) -> Result<()> {
         if raw_text.is_empty() {
-            return Err(VaporettoError::invalid_argument("raw_text", "is empty"));
+            return Err(VaporettoError::invalid_argument(
+                "raw_text",
+                "must contain at least one character",
+            ));
         }
 
         chars.clear();
@@ -149,7 +152,7 @@ impl Sentence {
         if tokenized_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
                 "tokenized_text",
-                "is empty",
+                "must contain at least one character",
             ));
         }
 
@@ -169,12 +172,12 @@ impl Sentence {
                     if chars.is_empty() {
                         return Err(VaporettoError::invalid_argument(
                             "tokenized_text",
-                            "starts with a whitespace",
+                            "must not start with a whitespace",
                         ));
                     } else if prev_boundary {
                         return Err(VaporettoError::invalid_argument(
                             "tokenized_text",
-                            "contains consecutive whitespaces",
+                            "must not contain consecutive whitespaces",
                         ));
                     }
                     prev_boundary = true;
@@ -198,7 +201,7 @@ impl Sentence {
         if prev_boundary {
             return Err(VaporettoError::invalid_argument(
                 "tokenized_text",
-                "ends with a whitespace",
+                "must not end with a whitespace",
             ));
         }
 
@@ -212,14 +215,17 @@ impl Sentence {
         boundaries: &mut Vec<BoundaryType>,
     ) -> Result<()> {
         if labeled_text.is_empty() {
-            return Err(VaporettoError::invalid_argument("labeled_text", "is empty"));
+            return Err(VaporettoError::invalid_argument(
+                "labeled_text",
+                "must contain at least one character",
+            ));
         }
 
         let labeled_chars: Vec<char> = labeled_text.chars().collect();
         if labeled_chars.len() % 2 == 0 {
             return Err(VaporettoError::invalid_argument(
                 "labeled_text",
-                format!("invalid length: {}", labeled_chars.len()),
+                "must contain odd number of characters",
             ));
         }
 
@@ -236,7 +242,7 @@ impl Sentence {
                 _ => {
                     return Err(VaporettoError::invalid_argument(
                         "labeled_text",
-                        format!("contains invalid boundary character: '{}'", c),
+                        format!("contains an invalid boundary character: '{}'", c),
                     ))
                 }
             });
@@ -804,7 +810,7 @@ mod tests {
         let s = Sentence::from_raw("");
 
         assert_eq!(
-            "InvalidArgumentError: raw_text: is empty",
+            "InvalidArgumentError: raw_text: must contain at least one character",
             &s.err().unwrap().to_string()
         );
     }
@@ -815,7 +821,7 @@ mod tests {
         let result = s.update_raw("");
 
         assert_eq!(
-            "InvalidArgumentError: raw_text: is empty",
+            "InvalidArgumentError: raw_text: must contain at least one character",
             &result.err().unwrap().to_string()
         );
 
@@ -934,7 +940,7 @@ mod tests {
         let s = Sentence::from_tokenized("");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: is empty",
+            "InvalidArgumentError: tokenized_text: must contain at least one character",
             &s.err().unwrap().to_string()
         );
     }
@@ -945,7 +951,7 @@ mod tests {
         let result = s.update_tokenized("");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: is empty",
+            "InvalidArgumentError: tokenized_text: must contain at least one character",
             &result.err().unwrap().to_string()
         );
 
@@ -966,7 +972,7 @@ mod tests {
         let s = Sentence::from_tokenized(" Rust で 良い プログラミング 体験 を ！");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: starts with a whitespace",
+            "InvalidArgumentError: tokenized_text: must not start with a whitespace",
             &s.err().unwrap().to_string()
         );
     }
@@ -977,7 +983,7 @@ mod tests {
         let result = s.update_tokenized(" Rust で 良い プログラミング 体験 を ！");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: starts with a whitespace",
+            "InvalidArgumentError: tokenized_text: must not start with a whitespace",
             &result.err().unwrap().to_string()
         );
 
@@ -998,7 +1004,7 @@ mod tests {
         let s = Sentence::from_tokenized("Rust で 良い プログラミング 体験 を ！ ");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: ends with a whitespace",
+            "InvalidArgumentError: tokenized_text: must not end with a whitespace",
             &s.err().unwrap().to_string()
         );
     }
@@ -1009,7 +1015,7 @@ mod tests {
         let result = s.update_tokenized("Rust で 良い プログラミング 体験 を ！ ");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: ends with a whitespace",
+            "InvalidArgumentError: tokenized_text: must not end with a whitespace",
             &result.err().unwrap().to_string()
         );
 
@@ -1030,7 +1036,7 @@ mod tests {
         let s = Sentence::from_tokenized("Rust で 良い  プログラミング 体験 を ！");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: contains consecutive whitespaces",
+            "InvalidArgumentError: tokenized_text: must not contain consecutive whitespaces",
             &s.err().unwrap().to_string()
         );
     }
@@ -1041,7 +1047,7 @@ mod tests {
         let result = s.update_tokenized("Rust で 良い  プログラミング 体験 を ！");
 
         assert_eq!(
-            "InvalidArgumentError: tokenized_text: contains consecutive whitespaces",
+            "InvalidArgumentError: tokenized_text: must not contain consecutive whitespaces",
             &result.err().unwrap().to_string()
         );
 
@@ -1386,7 +1392,7 @@ mod tests {
         let s = Sentence::from_partial_annotation("");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: is empty",
+            "InvalidArgumentError: labeled_text: must contain at least one character",
             &s.err().unwrap().to_string()
         );
     }
@@ -1397,7 +1403,7 @@ mod tests {
         let result = s.update_partial_annotation("");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: is empty",
+            "InvalidArgumentError: labeled_text: must contain at least one character",
             &result.err().unwrap().to_string()
         );
     }
@@ -1407,7 +1413,7 @@ mod tests {
         let result = Sentence::from_partial_annotation("火-星 猫|の|生-態 ");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: invalid length: 12",
+            "InvalidArgumentError: labeled_text: must contain odd number of characters",
             &result.err().unwrap().to_string()
         );
     }
@@ -1418,7 +1424,7 @@ mod tests {
         let result = s.update_partial_annotation("火-星 猫|の|生-態 ");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: invalid length: 12",
+            "InvalidArgumentError: labeled_text: must contain odd number of characters",
             &result.err().unwrap().to_string()
         );
     }
@@ -1428,7 +1434,7 @@ mod tests {
         let s = Sentence::from_partial_annotation("火-星?猫|の|生-態");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: contains invalid boundary character: '?'",
+            "InvalidArgumentError: labeled_text: contains an invalid boundary character: '?'",
             &s.err().unwrap().to_string()
         );
     }
@@ -1439,7 +1445,7 @@ mod tests {
         let result = s.update_partial_annotation("火-星?猫|の|生-態");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: contains invalid boundary character: '?'",
+            "InvalidArgumentError: labeled_text: contains an invalid boundary character: '?'",
             &result.err().unwrap().to_string()
         );
     }

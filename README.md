@@ -81,6 +81,9 @@ To train a model, use the following command:
 You can also specify a word dictionary with `--dict` argument.
 A word dictionary is a file with words per line.
 
+The trainer does not accept empty lines.
+Therefore, remove all empty lines from the corpus before training.
+
 You can specify all arguments above multiple times.
 
 ### Model Manipulation
