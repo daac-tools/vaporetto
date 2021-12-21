@@ -129,7 +129,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf1 = Sentence::from_raw(" ")?;
     let mut buf2 = Sentence::from_raw(" ")?;
     for line in stdin().lock().lines() {
-        let ret = tokenize(&predictor, line?, buf1, buf2, &pre_filters, &post_filters)?;
+        let line = line?;
+        if line.is_empty() {
+            println!();
+            continue;
+        }
+        let ret = tokenize(&predictor, line, buf1, buf2, &pre_filters, &post_filters)?;
         let result = ret.0;
         buf1 = ret.1;
         buf2 = ret.2;

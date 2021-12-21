@@ -101,7 +101,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut results = vec![];
     for line in stdin().lock().lines() {
-        let s = Sentence::from_tokenized(line?)?;
+        let line = line?;
+        if line.is_empty() {
+            continue;
+        }
+        let s = Sentence::from_tokenized(line)?;
         let s = if opt.no_norm {
             s
         } else {
