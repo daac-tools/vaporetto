@@ -4,7 +4,7 @@ use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", feature = "portable-simd"))]
 use std::simd::i32x8;
 
 pub enum CharScorer {
@@ -89,7 +89,12 @@ impl CharScorerNaive {
 #[cfg(feature = "simd")]
 pub struct CharScorerSimd {
     pma: DoubleArrayAhoCorasick,
+
+    #[cfg(feature = "portable-simd")]
     weights: Vec<i32x8>,
+    #[cfg(not(feature = "portable-simd"))]
+    weights: Vec<[i32; 8]>,
+
     window_size: usize,
 }
 
@@ -109,7 +114,10 @@ impl CharScorerSimd {
                     "invalid size of weight vector",
                 ));
             }
+            #[cfg(feature = "portable-simd")]
             weights.push(i32x8::from_array(s));
+            #[cfg(not(feature = "portable-simd"))]
+            weights.push(s);
         }
         Ok(Self {
             pma,
@@ -126,9 +134,17 @@ impl CharScorerSimd {
             // Therefore, the following code is safe.
             let weights = unsafe { self.weights.get_unchecked(m.pattern()) };
             let ys_slice = &mut ys[offset as usize..offset as usize + 8];
-            let mut target = i32x8::from_slice(ys_slice);
-            target += weights;
-            ys_slice.copy_from_slice(target.as_array());
+
+            #[cfg(feature = "portable-simd")]
+            {
+                let mut target = i32x8::from_slice(ys_slice);
+                target += weights;
+                ys_slice.copy_from_slice(target.as_array());
+            }
+            #[cfg(not(feature = "portable-simd"))]
+            for (y, w) in ys_slice.iter_mut().zip(weights) {
+                *y += w;
+            }
         }
     }
 

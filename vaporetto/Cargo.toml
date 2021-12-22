@@ -23,6 +23,7 @@ default = []
 kytea = []
 train = ["liblinear"]
 simd = []
+portable-simd = ["simd"]
 
 [package.metadata.docs.rs]
 all-features = true

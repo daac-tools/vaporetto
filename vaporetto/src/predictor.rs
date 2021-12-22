@@ -99,7 +99,7 @@ impl Predictor {
             let mut ys = vec![0; ys_size];
             self.predict_impl(&sentence, self.padding, &mut ys);
             for (&y, b) in ys[self.padding..]
-                .into_iter()
+                .iter()
                 .zip(sentence.boundaries.iter_mut())
             {
                 *b = if y >= 0 {
@@ -148,8 +148,9 @@ impl Predictor {
                 .boundary_scores
                 .take()
                 .unwrap_or_else(|| vec![0; boundaries_size]);
+            scores.resize(boundaries_size, 0);
             for (&y, (b, s)) in ys[self.padding..]
-                .into_iter()
+                .iter()
                 .zip(sentence.boundaries.iter_mut().zip(scores.iter_mut()))
             {
                 *b = if y >= 0 {

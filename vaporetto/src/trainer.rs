@@ -147,11 +147,7 @@ impl<'a> Dataset<'a> {
             let mut feature_ids = BTreeMap::new();
             for f in example.features {
                 let fid = self.fid_manager.get_id(f) + 1;
-                if let Some(v) = feature_ids.get_mut(&fid) {
-                    *v += 1.0;
-                } else {
-                    feature_ids.insert(fid, 1.0);
-                }
+                *feature_ids.entry(fid).or_insert(0.0) += 1.0;
             }
             self.xs.push(feature_ids.into_iter().collect());
             self.ys.push(example.label as u8 as f64);
