@@ -20,7 +20,7 @@ vaporetto_bccwj_suw_small().then((Vaporetto) => {
         }
         for (let c of text) {
             if (i >= 0) {
-                tokenized.appendChild(createTextSpan(c, scores[i][0], scores[i][1]));
+                tokenized.appendChild(createTextSpan(c, scores[i][0], scores[i][1] / 10000));
             } else {
                 tokenized.appendChild(createTextSpan(c, false, 0));
             }

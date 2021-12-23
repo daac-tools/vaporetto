@@ -120,8 +120,8 @@ impl Vaporetto {
         if let Some(boundaries) = s.boundary_scores() {
             for (&score, &b) in boundaries.iter().zip(s.boundaries()) {
                 let boundary = Array::new();
-                boundary.push(&JsValue::from_bool(b == BoundaryType::WordBoundary));
-                boundary.push(&JsValue::from_f64(score));
+                boundary.push(&(b == BoundaryType::WordBoundary).into());
+                boundary.push(&score.into());
                 result.push(&boundary);
             }
         }
