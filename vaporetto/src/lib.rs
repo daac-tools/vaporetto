@@ -28,9 +28,6 @@
 //!
 //! Training requires **crate feature** `train`. For more details, see [`Trainer`].
 
-#[macro_use]
-mod utils;
-
 mod char_scorer;
 mod dict_model;
 mod dict_scorer;
@@ -56,7 +53,7 @@ pub use predictor::Predictor;
 pub use sentence::{BoundaryType, CharacterType, Sentence};
 
 #[cfg(feature = "train")]
-pub use trainer::{Dataset, SolverType, Trainer};
+pub use trainer::{SolverType, Trainer};
 
 #[cfg(feature = "kytea")]
 pub use kytea_model::KyteaModel;

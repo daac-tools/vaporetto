@@ -792,18 +792,12 @@ impl Sentence {
         let end = self.char_to_str_pos[end];
         &self.text.as_str()[begin..end]
     }
-
-    #[cfg(feature = "train")]
-    pub(crate) fn type_substring(&self, start: usize, end: usize) -> &[u8] {
-        &self.char_type[start..end]
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use BoundaryType::*;
-    use CharacterType::*;
 
     #[test]
     fn test_sentence_from_raw_empty() {
@@ -830,7 +824,7 @@ mod tests {
             chars: vec![' '],
             str_to_char_pos: vec![0, 1],
             char_to_str_pos: vec![0, 1],
-            char_type: ct2u8vec![Other],
+            char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -846,7 +840,7 @@ mod tests {
             chars: vec!['あ'],
             str_to_char_pos: vec![0, 0, 0, 1],
             char_to_str_pos: vec![0, 3],
-            char_type: ct2u8vec![Hiragana],
+            char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -863,7 +857,7 @@ mod tests {
             chars: vec!['あ'],
             str_to_char_pos: vec![0, 0, 0, 1],
             char_to_str_pos: vec![0, 3],
-            char_type: ct2u8vec![Hiragana],
+            char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -887,10 +881,7 @@ mod tests {
             char_to_str_pos: vec![
                 0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
             ],
-            char_type: ct2u8vec![
-                Roman, Roman, Roman, Roman, Hiragana, Kanji, Hiragana, Katakana, Katakana,
-                Katakana, Katakana, Katakana, Katakana, Katakana, Kanji, Kanji, Hiragana, Other,
-            ],
+            char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
             boundary_scores: None,
         };
@@ -915,10 +906,7 @@ mod tests {
             char_to_str_pos: vec![
                 0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
             ],
-            char_type: ct2u8vec![
-                Roman, Roman, Roman, Roman, Hiragana, Kanji, Hiragana, Katakana, Katakana,
-                Katakana, Katakana, Katakana, Katakana, Katakana, Kanji, Kanji, Hiragana, Other,
-            ],
+            char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
             boundary_scores: None,
         };
@@ -960,7 +948,7 @@ mod tests {
             chars: vec![' '],
             str_to_char_pos: vec![0, 1],
             char_to_str_pos: vec![0, 1],
-            char_type: ct2u8vec![Other],
+            char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -992,7 +980,7 @@ mod tests {
             chars: vec![' '],
             str_to_char_pos: vec![0, 1],
             char_to_str_pos: vec![0, 1],
-            char_type: ct2u8vec![Other],
+            char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -1024,7 +1012,7 @@ mod tests {
             chars: vec![' '],
             str_to_char_pos: vec![0, 1],
             char_to_str_pos: vec![0, 1],
-            char_type: ct2u8vec![Other],
+            char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -1056,7 +1044,7 @@ mod tests {
             chars: vec![' '],
             str_to_char_pos: vec![0, 1],
             char_to_str_pos: vec![0, 1],
-            char_type: ct2u8vec![Other],
+            char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -1072,7 +1060,7 @@ mod tests {
             chars: vec!['あ'],
             str_to_char_pos: vec![0, 0, 0, 1],
             char_to_str_pos: vec![0, 3],
-            char_type: ct2u8vec![Hiragana],
+            char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -1089,7 +1077,7 @@ mod tests {
             chars: vec!['あ'],
             str_to_char_pos: vec![0, 0, 0, 1],
             char_to_str_pos: vec![0, 3],
-            char_type: ct2u8vec![Hiragana],
+            char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
         };
@@ -1113,10 +1101,7 @@ mod tests {
             char_to_str_pos: vec![
                 0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
             ],
-            char_type: ct2u8vec![
-                Roman, Roman, Roman, Roman, Hiragana, Kanji, Hiragana, Katakana, Katakana,
-                Katakana, Katakana, Katakana, Katakana, Katakana, Kanji, Kanji, Hiragana, Other,
-            ],
+            char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 NotWordBoundary,
@@ -1160,10 +1145,7 @@ mod tests {
             char_to_str_pos: vec![
                 0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
             ],
-            char_type: ct2u8vec![
-                Roman, Roman, Roman, Roman, Hiragana, Kanji, Hiragana, Katakana, Katakana,
-                Katakana, Katakana, Katakana, Katakana, Katakana, Kanji, Kanji, Hiragana, Other,
-            ],
+            char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 NotWordBoundary,
@@ -1205,10 +1187,7 @@ mod tests {
             char_to_str_pos: vec![
                 0, 3, 6, 9, 12, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
             ],
-            char_type: ct2u8vec![
-                Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji, Other, Roman, Other, Roman, Roman,
-                Other, Roman, Roman, Other, Other,
-            ],
+            char_type: b"KKKHKKORORRORROO".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 WordBoundary,
@@ -1250,10 +1229,7 @@ mod tests {
             char_to_str_pos: vec![
                 0, 3, 6, 9, 12, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
             ],
-            char_type: ct2u8vec![
-                Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji, Other, Roman, Other, Roman, Roman,
-                Other, Roman, Roman, Other, Other,
-            ],
+            char_type: b"KKKHKKORORRORROO".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 WordBoundary,
@@ -1287,9 +1263,7 @@ mod tests {
                 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9,
             ],
             char_to_str_pos: vec![0, 3, 6, 9, 10, 11, 14, 17, 20, 23],
-            char_type: ct2u8vec![
-                Kanji, Kanji, Hiragana, Other, Roman, Hiragana, Kanji, Hiragana, Hiragana,
-            ],
+            char_type: b"KKHORHKHH".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 WordBoundary,
@@ -1317,9 +1291,7 @@ mod tests {
                 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9,
             ],
             char_to_str_pos: vec![0, 3, 6, 9, 10, 11, 14, 17, 20, 23],
-            char_type: ct2u8vec![
-                Kanji, Kanji, Hiragana, Other, Roman, Hiragana, Kanji, Hiragana, Hiragana,
-            ],
+            char_type: b"KKHORHKHH".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 WordBoundary,
@@ -1459,7 +1431,7 @@ mod tests {
             chars: vec!['火', '星', '猫', 'の', '生', '態'],
             str_to_char_pos: vec![0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
             char_to_str_pos: vec![0, 3, 6, 9, 12, 15, 18],
-            char_type: ct2u8vec![Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji],
+            char_type: b"KKKHKK".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 Unknown,
@@ -1482,7 +1454,7 @@ mod tests {
             chars: vec!['火', '星', '猫', 'の', '生', '態'],
             str_to_char_pos: vec![0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
             char_to_str_pos: vec![0, 3, 6, 9, 12, 15, 18],
-            char_type: ct2u8vec![Kanji, Kanji, Kanji, Hiragana, Kanji, Kanji],
+            char_type: b"KKKHKK".to_vec(),
             boundaries: vec![
                 NotWordBoundary,
                 Unknown,

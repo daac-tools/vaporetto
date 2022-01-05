@@ -4,7 +4,7 @@ use std::io::{prelude::*, stderr, BufReader};
 use std::path::PathBuf;
 
 use structopt::{clap::ArgGroup, StructOpt};
-use vaporetto::{Dataset, Sentence, SolverType, Trainer};
+use vaporetto::{Sentence, SolverType, Trainer};
 use vaporetto_rules::{string_filters::KyteaFullwidthFilter, StringFilter};
 
 #[derive(StructOpt, Debug)]
@@ -57,10 +57,6 @@ struct Opt {
     /// The cost hyperparameter for classifier training
     #[structopt(long, default_value = "1.0")]
     cost: f64,
-
-    /// Whether to use a bias value in classifier training
-    #[structopt(long)]
-    no_bias: bool,
 
     /// The solver. {0, 1, 2, 3, 4, 5, 6, 7} (see LIBLINEAR documentation for more details)
     #[structopt(long, default_value = "1")]
@@ -147,21 +143,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dictionary: Vec<String> = dictionary.into_iter().collect();
 
     eprintln!("Extracting into features...");
-    let mut dataset = Dataset::new(
+    let mut trainer = Trainer::new(
         opt.charn, opt.charw, opt.typen, opt.typew, dictionary, opt.dictn,
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
-            eprint!("# of features: {}\r", dataset.n_features());
+            eprint!("# of features: {}\r", trainer.n_features());
             stderr().flush()?;
         }
-        dataset.push_sentence(s);
+        trainer.push_sentence(s)?;
     }
-    eprintln!("# of features: {}", dataset.n_features());
+    eprintln!("# of features: {}", trainer.n_features());
 
     eprintln!("Start training...");
-    let trainer = Trainer::new(opt.eps, opt.cost, if opt.no_bias { 0. } else { 1. });
-    let model = trainer.train(dataset, opt.solver)?;
+    let model = trainer.train(opt.eps, opt.cost, opt.solver)?;
     eprintln!("Finish training.");
 
     let mut f = zstd::Encoder::new(File::create(opt.model)?, 19)?;
