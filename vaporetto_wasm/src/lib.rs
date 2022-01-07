@@ -73,9 +73,9 @@ impl Vaporetto {
             .iter()
             .fold(s, |s, filter| filter.filter(s));
 
-        if let Ok(words) = s.to_tokenized_vec() {
-            for word in words {
-                result.push(&JsValue::from_str(word));
+        if let Ok(tokens) = s.to_tokenized_vec() {
+            for token in tokens {
+                result.push(&JsValue::from_str(token.surface));
             }
         }
         result.into()

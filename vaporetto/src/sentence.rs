@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::errors::{Result, VaporettoError};
 
 /// Character type.
@@ -76,6 +78,16 @@ pub enum BoundaryType {
     Unknown = 2,
 }
 
+/// Token information.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Token<'a> {
+    /// A surface of this token.
+    pub surface: &'a str,
+
+    /// A part-of-speech tag of this token.
+    pub tag: Option<&'a str>,
+}
+
 /// Sentence with boundary annotations.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Sentence {
@@ -86,10 +98,16 @@ pub struct Sentence {
     pub(crate) char_type: Vec<u8>,
     pub(crate) boundaries: Vec<BoundaryType>,
     pub(crate) boundary_scores: Option<Vec<i32>>,
+    pub(crate) tags: Vec<Option<Rc<String>>>,
 }
 
 impl Sentence {
-    fn internal_new(text: String, chars: Vec<char>, boundaries: Vec<BoundaryType>) -> Self {
+    fn internal_new(
+        text: String,
+        chars: Vec<char>,
+        boundaries: Vec<BoundaryType>,
+        tags: Vec<Option<Rc<String>>>,
+    ) -> Self {
         let mut s = Self {
             text,
             chars,
@@ -98,6 +116,7 @@ impl Sentence {
             char_type: Vec::with_capacity(0),
             boundaries,
             boundary_scores: None,
+            tags,
         };
         s.update_common_info();
         s
@@ -117,13 +136,15 @@ impl Sentence {
         self.char_type.clear();
         self.char_type.push(CharacterType::Other as u8);
         self.boundaries.clear();
-        self.boundary_scores = None;
+        self.boundary_scores.take();
+        self.tags.clear();
     }
 
     fn parse_raw_text(
         raw_text: &str,
         chars: &mut Vec<char>,
         boundaries: &mut Vec<BoundaryType>,
+        tags: &mut Vec<Option<Rc<String>>>,
     ) -> Result<()> {
         if raw_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
@@ -139,6 +160,7 @@ impl Sentence {
         }
         boundaries.clear();
         boundaries.resize(chars.len() - 1, BoundaryType::Unknown);
+        tags.clear();
 
         Ok(())
     }
@@ -148,6 +170,7 @@ impl Sentence {
         text: &mut String,
         chars: &mut Vec<char>,
         boundaries: &mut Vec<BoundaryType>,
+        tags: &mut Vec<Option<Rc<String>>>,
     ) -> Result<()> {
         if tokenized_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
@@ -160,35 +183,64 @@ impl Sentence {
         text.reserve(tokenized_text.len());
         chars.clear();
         boundaries.clear();
+        tags.clear();
 
+        let mut tag_str_tmp = None;
+        let mut tag_str = None;
         let mut prev_boundary = false;
         let mut escape = false;
         for c in tokenized_text.chars() {
             match (escape, c) {
+                // escape a following character
                 (false, '\\') => {
                     escape = true;
                 }
+                // token boundary
                 (false, ' ') => {
                     if chars.is_empty() {
                         return Err(VaporettoError::invalid_argument(
                             "tokenized_text",
                             "must not start with a whitespace",
                         ));
-                    } else if prev_boundary {
+                    }
+                    if prev_boundary {
                         return Err(VaporettoError::invalid_argument(
                             "tokenized_text",
                             "must not contain consecutive whitespaces",
                         ));
                     }
                     prev_boundary = true;
+                    tag_str = tag_str_tmp.take();
                 }
+                // POS tag
+                (false, '/') => {
+                    if chars.is_empty() {
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "must not start with a slash",
+                        ));
+                    }
+                    if prev_boundary {
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "a slash must follow a character",
+                        ));
+                    }
+                    tag_str_tmp.replace("".to_string());
+                }
+                // escaped character or other character
                 (_, _) => {
+                    if let Some(tag) = tag_str_tmp.as_mut() {
+                        tag.push(c);
+                        continue;
+                    }
                     if !chars.is_empty() {
                         boundaries.push(if prev_boundary {
                             BoundaryType::WordBoundary
                         } else {
                             BoundaryType::NotWordBoundary
                         });
+                        tags.push(tag_str.take().map(Rc::new));
                     }
                     prev_boundary = false;
                     escape = false;
@@ -204,6 +256,7 @@ impl Sentence {
                 "must not end with a whitespace",
             ));
         }
+        tags.push(tag_str_tmp.take().map(Rc::new));
 
         Ok(())
     }
@@ -213,6 +266,7 @@ impl Sentence {
         text: &mut String,
         chars: &mut Vec<char>,
         boundaries: &mut Vec<BoundaryType>,
+        tags: &mut Vec<Option<Rc<String>>>,
     ) -> Result<()> {
         if labeled_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
@@ -222,34 +276,82 @@ impl Sentence {
         }
 
         let labeled_chars: Vec<char> = labeled_text.chars().collect();
-        if labeled_chars.len() % 2 == 0 {
-            return Err(VaporettoError::invalid_argument(
-                "labeled_text",
-                "must contain odd number of characters",
-            ));
-        }
 
         text.clear();
-        text.reserve(labeled_text.len() - labeled_chars.len() / 2);
         chars.clear();
         boundaries.clear();
 
-        for c in labeled_chars.iter().skip(1).step_by(2) {
-            boundaries.push(match c {
-                ' ' => BoundaryType::Unknown,
-                '|' => BoundaryType::WordBoundary,
-                '-' => BoundaryType::NotWordBoundary,
-                _ => {
-                    return Err(VaporettoError::invalid_argument(
-                        "labeled_text",
-                        format!("contains an invalid boundary character: '{}'", c),
-                    ))
+        let mut tag_str = None;
+        let mut is_char = true;
+        let mut fixed_token = true;
+        for &c in &labeled_chars {
+            if is_char {
+                text.push(c);
+                chars.push(c);
+                is_char = false;
+                continue;
+            }
+            match c {
+                // unannotated boundary
+                ' ' => {
+                    if tag_str.is_some() {
+                        return Err(VaporettoError::invalid_argument(
+                            "labeled_text",
+                            "POS tag must be annotated to a token".to_string(),
+                        ));
+                    }
+                    tags.push(None);
+                    boundaries.push(BoundaryType::Unknown);
+                    is_char = true;
+                    fixed_token = false;
                 }
-            });
+                // token boundary
+                '|' => {
+                    if !fixed_token && tag_str.is_some() {
+                        return Err(VaporettoError::invalid_argument(
+                            "labeled_text",
+                            "POS tag must be annotated to a token".to_string(),
+                        ));
+                    }
+                    tags.push(tag_str.take().map(Rc::new));
+                    boundaries.push(BoundaryType::WordBoundary);
+                    is_char = true;
+                    fixed_token = true;
+                }
+                // not token boundary
+                '-' => {
+                    if tag_str.is_some() {
+                        return Err(VaporettoError::invalid_argument(
+                            "labeled_text",
+                            "POS tag must be annotated to a token".to_string(),
+                        ));
+                    }
+                    tags.push(None);
+                    boundaries.push(BoundaryType::NotWordBoundary);
+                    is_char = true;
+                }
+                // POS tag
+                '/' => {
+                    tag_str.replace("".to_string());
+                }
+                _ => {
+                    if let Some(tag) = tag_str.as_mut() {
+                        tag.push(c);
+                    } else {
+                        return Err(VaporettoError::invalid_argument(
+                            "labeled_text",
+                            format!("contains an invalid boundary character: '{}'", c),
+                        ));
+                    }
+                }
+            }
         }
-        for c in labeled_chars.into_iter().step_by(2) {
-            text.push(c);
-            chars.push(c);
+        tags.push(tag_str.take().map(Rc::new));
+        if chars.len() != boundaries.len() + 1 {
+            return Err(VaporettoError::invalid_argument(
+                "labeled_text",
+                "invalid annotation".to_string(),
+            ));
         }
 
         Ok(())
@@ -279,7 +381,6 @@ impl Sentence {
 
         debug_assert!(pos == self.text.len());
 
-        self.str_to_char_pos.fill(0);
         self.str_to_char_pos.resize(self.text.len() + 1, 0);
         for (i, &j) in self.char_to_str_pos.iter().enumerate() {
             // j is always lower than pos + 1, so the following is safe.
@@ -322,9 +423,10 @@ impl Sentence {
 
         let mut chars = Vec::with_capacity(0);
         let mut boundaries = Vec::with_capacity(0);
-        Self::parse_raw_text(&raw_text, &mut chars, &mut boundaries)?;
+        let mut tags = Vec::with_capacity(0);
+        Self::parse_raw_text(&raw_text, &mut chars, &mut boundaries, &mut tags)?;
 
-        Ok(Self::internal_new(raw_text, chars, boundaries))
+        Ok(Self::internal_new(raw_text, chars, boundaries, tags))
     }
 
     /// Updates the [`Sentence`] using a given string.
@@ -353,7 +455,12 @@ impl Sentence {
     {
         let raw_text = raw_text.into();
 
-        match Self::parse_raw_text(&raw_text, &mut self.chars, &mut self.boundaries) {
+        match Self::parse_raw_text(
+            &raw_text,
+            &mut self.chars,
+            &mut self.boundaries,
+            &mut self.tags,
+        ) {
             Ok(_) => {
                 self.text = raw_text;
                 self.update_common_info();
@@ -388,7 +495,10 @@ impl Sentence {
     ///
     /// # Arguments
     ///
-    /// * `tokenized_text` - A tokenized string containing whitespaces for word boundaries.
+    /// * `tokenized_text` - A tokenized text that is annotated by the following rules:
+    ///   - A whitespace (`' '`) is inserted to each token boundary.
+    ///   - If necessary, a POS tag following a slash (`'/'`) can be added to each token.
+    ///   - Each character following a back slash (`'\\'`) is escaped.
     ///
     /// # Returns
     ///
@@ -410,6 +520,9 @@ impl Sentence {
     /// let s = Sentence::from_tokenized("How are you?");
     /// assert!(s.is_ok());
     ///
+    /// let s = Sentence::from_tokenized("How/WRB are/VBP you?");
+    /// assert!(s.is_ok());
+    ///
     /// let s = Sentence::from_tokenized("How  are you?");
     /// assert!(s.is_err());
     /// ```
@@ -422,17 +535,27 @@ impl Sentence {
         let mut text = String::with_capacity(0);
         let mut chars = Vec::with_capacity(0);
         let mut boundaries = Vec::with_capacity(0);
+        let mut tags = Vec::with_capacity(0);
 
-        Self::parse_tokenized_text(tokenized_text, &mut text, &mut chars, &mut boundaries)?;
+        Self::parse_tokenized_text(
+            tokenized_text,
+            &mut text,
+            &mut chars,
+            &mut boundaries,
+            &mut tags,
+        )?;
 
-        Ok(Self::internal_new(text, chars, boundaries))
+        Ok(Self::internal_new(text, chars, boundaries, tags))
     }
 
     /// Updates the [`Sentence`] using tokenized string.
     ///
     /// # Arguments
     ///
-    /// * `tokenized_text` - A tokenized string containing whitespaces for word boundaries.
+    /// * `tokenized_text` - A tokenized text that is annotated by the following rules:
+    ///   - A whitespace (`' '`) is inserted to each token boundary.
+    ///   - If necessary, a POS tag following a slash (`'/'`) can be added to each token.
+    ///   - Each character following a back slash (`'\\'`) is escaped.
     ///
     /// # Errors
     ///
@@ -450,8 +573,12 @@ impl Sentence {
     /// use vaporetto::Sentence;
     ///
     /// let mut s = Sentence::from_tokenized("How are you?").unwrap();
+    ///
     /// s.update_tokenized("I am fine").unwrap();
     /// assert_eq!("Iamfine", s.to_raw_string());
+    ///
+    /// s.update_tokenized("How/WRB are/VBP you ?/.").unwrap();
+    /// assert_eq!("Howareyou?", s.to_raw_string());
     /// ```
     pub fn update_tokenized<S>(&mut self, tokenized_text: S) -> Result<()>
     where
@@ -464,6 +591,7 @@ impl Sentence {
             &mut self.text,
             &mut self.chars,
             &mut self.boundaries,
+            &mut self.tags,
         ) {
             Ok(_) => {
                 self.update_common_info();
@@ -493,6 +621,9 @@ impl Sentence {
     ///
     /// let s = Sentence::from_tokenized("How are you?").unwrap();
     /// assert_eq!("How are you?", s.to_tokenized_string().unwrap());
+    ///
+    /// let s = Sentence::from_tokenized("How/WRB are/VBP you?").unwrap();
+    /// assert_eq!("How/WRB are/VBP you?", s.to_tokenized_string().unwrap());
     /// ```
     pub fn to_tokenized_string(&self) -> Result<String> {
         let chars: Vec<char> = self.text.chars().collect();
@@ -502,9 +633,15 @@ impl Sentence {
             _ => (),
         }
         result.push(chars[0]);
-        for (&c, b) in chars[1..].iter().zip(&self.boundaries) {
+        for (i, (&c, b)) in chars[1..].iter().zip(&self.boundaries).enumerate() {
             match b {
                 BoundaryType::WordBoundary => {
+                    if !self.tags.is_empty() {
+                        if let Some(tag) = self.tags.get(i).and_then(|x| x.as_ref()) {
+                            result.push('/');
+                            result.push_str(tag);
+                        }
+                    }
                     result.push(' ');
                 }
                 BoundaryType::NotWordBoundary => (),
@@ -520,14 +657,18 @@ impl Sentence {
             }
             result.push(c);
         }
+        if let Some(tag) = self.tags.last().and_then(|x| x.as_ref()) {
+            result.push('/');
+            result.push_str(tag);
+        }
         Ok(result)
     }
 
-    /// Generates a vector of words.
+    /// Generates a vector of tokens.
     ///
     /// # Returns
     ///
-    /// A newly allocated vector of words.
+    /// A newly allocated vector of tokens.
     ///
     /// # Errors
     ///
@@ -536,37 +677,72 @@ impl Sentence {
     /// # Examples
     ///
     /// ```
-    /// use vaporetto::Sentence;
+    /// use vaporetto::{Sentence, Token};
     ///
     /// let s = Sentence::from_tokenized("How are you ?").unwrap();
     /// assert_eq!(vec![
-    ///     "How",
-    ///     "are",
-    ///     "you",
-    ///     "?",
+    ///     Token { surface: "How", tag: None },
+    ///     Token { surface: "are", tag: None },
+    ///     Token { surface: "you", tag: None },
+    ///     Token { surface: "?", tag: None },
+    /// ], s.to_tokenized_vec().unwrap());
+    ///
+    /// let s = Sentence::from_tokenized("How/WRB are/VBP you/PRP ?/.").unwrap();
+    /// assert_eq!(vec![
+    ///     Token { surface: "How", tag: Some("WRB") },
+    ///     Token { surface: "are", tag: Some("VBP") },
+    ///     Token { surface: "you", tag: Some("PRP") },
+    ///     Token { surface: "?", tag: Some(".") },
     /// ], s.to_tokenized_vec().unwrap());
     /// ```
-    pub fn to_tokenized_vec(&self) -> Result<Vec<&str>> {
+    pub fn to_tokenized_vec(&self) -> Result<Vec<Token>> {
         let mut result = vec![];
         let mut start = 0;
-        for (i, b) in self.boundaries.iter().enumerate() {
-            match b {
-                BoundaryType::WordBoundary => {
-                    let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
-                    let word = unsafe { self.text.get_unchecked(start..end) };
-                    result.push(word);
-                    start = end;
-                }
-                BoundaryType::NotWordBoundary => (),
-                BoundaryType::Unknown => {
-                    return Err(VaporettoError::invalid_sentence(
-                        "contains an unknown boundary",
-                    ));
+        if self.tags.is_empty() {
+            for (i, b) in self.boundaries.iter().enumerate() {
+                match b {
+                    BoundaryType::WordBoundary => {
+                        let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
+                        let surface = unsafe { self.text.get_unchecked(start..end) };
+                        result.push(Token { surface, tag: None });
+                        start = end;
+                    }
+                    BoundaryType::NotWordBoundary => (),
+                    BoundaryType::Unknown => {
+                        return Err(VaporettoError::invalid_sentence(
+                            "contains an unknown boundary",
+                        ));
+                    }
                 }
             }
+            let surface = unsafe { self.text.get_unchecked(start..) };
+            result.push(Token { surface, tag: None });
+        } else {
+            for (i, (b, tag)) in self.boundaries.iter().zip(&self.tags).enumerate() {
+                match b {
+                    BoundaryType::WordBoundary => {
+                        let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
+                        let surface = unsafe { self.text.get_unchecked(start..end) };
+                        let tag = tag.as_ref().map(|x| x.as_str());
+                        result.push(Token { surface, tag });
+                        start = end;
+                    }
+                    BoundaryType::NotWordBoundary => (),
+                    BoundaryType::Unknown => {
+                        return Err(VaporettoError::invalid_sentence(
+                            "contains an unknown boundary",
+                        ));
+                    }
+                }
+            }
+            let surface = unsafe { self.text.get_unchecked(start..) };
+            let tag = self
+                .tags
+                .last()
+                .and_then(|x| x.as_ref())
+                .map(|x| x.as_str());
+            result.push(Token { surface, tag });
         }
-        let word = unsafe { self.text.get_unchecked(start..) };
-        result.push(word);
         Ok(result)
     }
 
@@ -574,7 +750,12 @@ impl Sentence {
     ///
     /// # Arguments
     ///
-    /// * `labeled_text` - A string with partial annotations.
+    /// * `labeled_text` - A partially annotated text. Each character boundary is annotated by the following rules:
+    ///   - If the boundary is a token boundary, a pipe symbol (`'|'`) is inserted.
+    ///   - If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
+    ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
+    ///
+    ///   In addition, a POS tag following a slash (`'/'`) can be inserted to each token.
     ///
     /// # Returns
     ///
@@ -596,6 +777,9 @@ impl Sentence {
     /// let s = Sentence::from_partial_annotation("g-o-o-d|i-d e-a");
     /// assert!(s.is_ok());
     ///
+    /// let s = Sentence::from_partial_annotation("I-t/PRP|'-s/VBZ|o-k-a-y/JJ|./.");
+    /// assert!(s.is_ok());
+    ///
     /// let s = Sentence::from_partial_annotation("b-a-d/i-d-e-a");
     /// assert!(s.is_err());
     /// ```
@@ -608,16 +792,28 @@ impl Sentence {
         let mut text = String::with_capacity(0);
         let mut chars = Vec::with_capacity(0);
         let mut boundaries = Vec::with_capacity(0);
-        Self::parse_partial_annotation(labeled_text, &mut text, &mut chars, &mut boundaries)?;
+        let mut tags = Vec::with_capacity(0);
+        Self::parse_partial_annotation(
+            labeled_text,
+            &mut text,
+            &mut chars,
+            &mut boundaries,
+            &mut tags,
+        )?;
 
-        Ok(Self::internal_new(text, chars, boundaries))
+        Ok(Self::internal_new(text, chars, boundaries, tags))
     }
 
     /// Updates the [`Sentence`] using a string with partial annotations.
     ///
     /// # Arguments
     ///
-    /// * `labeled_text` - A string with partial annotations.
+    /// * `labeled_text` - A partially annotated text. Each character boundary is annotated by the following rules:
+    ///   - If the boundary is a token boundary, a pipe symbol (`'|'`) is inserted.
+    ///   - If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
+    ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
+    ///
+    ///   In addition, a POS tag following a slash (`'/'`) can be inserted to each token.
     ///
     /// # Errors
     ///
@@ -637,6 +833,9 @@ impl Sentence {
     /// let mut s = Sentence::from_raw("g-o-o-d|i-d e-a").unwrap();
     /// s.update_partial_annotation("h-e-l-l-o").unwrap();
     /// assert_eq!("hello", s.to_raw_string());
+    ///
+    /// s.update_partial_annotation("I-t/PRP|'-s/VBZ|o-k-a-y/JJ|./.").unwrap();
+    /// assert_eq!("It'sokay.", s.to_raw_string());
     /// ```
     pub fn update_partial_annotation<S>(&mut self, labeled_text: S) -> Result<()>
     where
@@ -649,6 +848,7 @@ impl Sentence {
             &mut self.text,
             &mut self.chars,
             &mut self.boundaries,
+            &mut self.tags,
         ) {
             Ok(_) => {
                 self.update_common_info();
@@ -674,18 +874,35 @@ impl Sentence {
     ///
     /// let s = Sentence::from_tokenized("How are you ?").unwrap();
     /// assert_eq!("H-o-w|a-r-e|y-o-u|?", &s.to_partial_annotation_string());
+    ///
+    /// let s = Sentence::from_tokenized("How/WRB are you/PRP ?").unwrap();
+    /// assert_eq!("H-o-w/WRB|a-r-e|y-o-u/PRP|?", &s.to_partial_annotation_string());
     /// ```
     pub fn to_partial_annotation_string(&self) -> String {
         let chars: Vec<char> = self.text.chars().collect();
         let mut result = String::with_capacity(self.text.len() + chars.len() - 1);
         result.push(chars[0]);
-        for (&c, b) in chars[1..].iter().zip(&self.boundaries) {
-            result.push(match b {
-                BoundaryType::WordBoundary => '|',
-                BoundaryType::NotWordBoundary => '-',
-                BoundaryType::Unknown => ' ',
-            });
+        for (i, (&c, b)) in chars[1..].iter().zip(&self.boundaries).enumerate() {
+            match b {
+                BoundaryType::WordBoundary => {
+                    if let Some(tag) = self.tags.get(i).and_then(|x| x.as_ref()) {
+                        result.push('/');
+                        result.push_str(tag);
+                    }
+                    result.push('|');
+                }
+                BoundaryType::NotWordBoundary => {
+                    result.push('-');
+                }
+                BoundaryType::Unknown => {
+                    result.push(' ');
+                }
+            }
             result.push(c);
+        }
+        if let Some(tag) = self.tags.last().and_then(|x| x.as_ref()) {
+            result.push('/');
+            result.push_str(tag);
         }
         result
     }
@@ -827,6 +1044,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -843,6 +1061,7 @@ mod tests {
             char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -860,6 +1079,7 @@ mod tests {
             char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -884,6 +1104,7 @@ mod tests {
             char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -909,6 +1130,7 @@ mod tests {
             char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -951,6 +1173,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -983,6 +1206,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -1015,6 +1239,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -1047,6 +1272,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![],
         };
         assert_eq!(expected, s);
     }
@@ -1063,6 +1289,7 @@ mod tests {
             char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![None],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -1080,6 +1307,7 @@ mod tests {
             char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: None,
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }
@@ -1122,6 +1350,70 @@ mod tests {
                 WordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 18],
+        };
+        assert_eq!(expected, s.unwrap());
+    }
+
+    #[test]
+    fn test_sentence_from_tokenized_with_tags() {
+        let s =
+            Sentence::from_tokenized("Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号");
+
+        let expected = Sentence {
+            text: "Rustで良いプログラミング体験を！".to_string(),
+            chars: vec![
+                'R', 'u', 's', 't', 'で', '良', 'い', 'プ', 'ロ', 'グ', 'ラ', 'ミ', 'ン', 'グ',
+                '体', '験', 'を', '！',
+            ],
+            str_to_char_pos: vec![
+                0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
+                0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
+            ],
+            char_to_str_pos: vec![
+                0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
+            ],
+            char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
+            boundaries: vec![
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+            tags: vec![
+                None,
+                None,
+                None,
+                Some(Rc::new("名詞".to_string())),
+                None,
+                None,
+                Some(Rc::new("形容詞".to_string())),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Rc::new("補助記号".to_string())),
+            ],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -1166,6 +1458,71 @@ mod tests {
                 WordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 18],
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_with_tags() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号")
+            .unwrap();
+
+        let expected = Sentence {
+            text: "Rustで良いプログラミング体験を！".to_string(),
+            chars: vec![
+                'R', 'u', 's', 't', 'で', '良', 'い', 'プ', 'ロ', 'グ', 'ラ', 'ミ', 'ン', 'グ',
+                '体', '験', 'を', '！',
+            ],
+            str_to_char_pos: vec![
+                0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
+                0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
+            ],
+            char_to_str_pos: vec![
+                0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
+            ],
+            char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
+            boundaries: vec![
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+            tags: vec![
+                None,
+                None,
+                None,
+                Some(Rc::new("名詞".to_string())),
+                None,
+                None,
+                Some(Rc::new("形容詞".to_string())),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Rc::new("補助記号".to_string())),
+            ],
         };
         assert_eq!(expected, s);
     }
@@ -1206,6 +1563,7 @@ mod tests {
                 WordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 16],
         };
         assert_eq!(expected, s);
     }
@@ -1248,6 +1606,7 @@ mod tests {
                 WordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 16],
         };
         assert_eq!(expected, s);
     }
@@ -1275,6 +1634,7 @@ mod tests {
                 WordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 9],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -1303,6 +1663,62 @@ mod tests {
                 WordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 9],
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
+    fn test_sentence_from_tokenized_escape_slash() {
+        let s = Sentence::from_tokenized("品詞 に \\/ を 用い る");
+
+        let expected = Sentence {
+            text: "品詞に/を用いる".to_string(),
+            chars: vec!['品', '詞', 'に', '/', 'を', '用', 'い', 'る'],
+            str_to_char_pos: vec![
+                0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8,
+            ],
+            char_to_str_pos: vec![0, 3, 6, 9, 10, 13, 16, 19, 22],
+            char_type: b"KKHOHKHH".to_vec(),
+            boundaries: vec![
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+            tags: vec![None; 8],
+        };
+        assert_eq!(expected, s.unwrap());
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_escape_slash() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("品詞 に \\/ を 用い る").unwrap();
+
+        let expected = Sentence {
+            text: "品詞に/を用いる".to_string(),
+            chars: vec!['品', '詞', 'に', '/', 'を', '用', 'い', 'る'],
+            str_to_char_pos: vec![
+                0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8,
+            ],
+            char_to_str_pos: vec![0, 3, 6, 9, 10, 13, 16, 19, 22],
+            char_type: b"KKHOHKHH".to_vec(),
+            boundaries: vec![
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+            ],
+            boundary_scores: None,
+            tags: vec![None; 8],
         };
         assert_eq!(expected, s);
     }
@@ -1324,6 +1740,17 @@ mod tests {
 
         assert_eq!(
             "Rust で 良い プログラミング 体験 を ！",
+            s.unwrap().to_tokenized_string().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_sentence_to_tokenized_string_with_tags() {
+        let s =
+            Sentence::from_tokenized("Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号");
+
+        assert_eq!(
+            "Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号",
             s.unwrap().to_tokenized_string().unwrap()
         );
     }
@@ -1354,7 +1781,77 @@ mod tests {
         let s = Sentence::from_tokenized("Rust で 良い プログラミング 体験 を ！").unwrap();
 
         assert_eq!(
-            vec!["Rust", "で", "良い", "プログラミング", "体験", "を", "！"],
+            vec![
+                Token {
+                    surface: "Rust",
+                    tag: None
+                },
+                Token {
+                    surface: "で",
+                    tag: None
+                },
+                Token {
+                    surface: "良い",
+                    tag: None
+                },
+                Token {
+                    surface: "プログラミング",
+                    tag: None
+                },
+                Token {
+                    surface: "体験",
+                    tag: None
+                },
+                Token {
+                    surface: "を",
+                    tag: None
+                },
+                Token {
+                    surface: "！",
+                    tag: None
+                },
+            ],
+            s.to_tokenized_vec().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_sentence_to_tokenized_vec_with_tags() {
+        let s =
+            Sentence::from_tokenized("Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号")
+                .unwrap();
+
+        assert_eq!(
+            vec![
+                Token {
+                    surface: "Rust",
+                    tag: Some("名詞"),
+                },
+                Token {
+                    surface: "で",
+                    tag: None,
+                },
+                Token {
+                    surface: "良い",
+                    tag: Some("形容詞"),
+                },
+                Token {
+                    surface: "プログラミング",
+                    tag: None,
+                },
+                Token {
+                    surface: "体験",
+                    tag: None,
+                },
+                Token {
+                    surface: "を",
+                    tag: None,
+                },
+                Token {
+                    surface: "！",
+                    tag: Some("補助記号"),
+                },
+            ],
             s.to_tokenized_vec().unwrap()
         );
     }
@@ -1385,7 +1882,7 @@ mod tests {
         let result = Sentence::from_partial_annotation("火-星 猫|の|生-態 ");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: must contain odd number of characters",
+            "InvalidArgumentError: labeled_text: invalid annotation",
             &result.err().unwrap().to_string()
         );
     }
@@ -1396,7 +1893,7 @@ mod tests {
         let result = s.update_partial_annotation("火-星 猫|の|生-態 ");
 
         assert_eq!(
-            "InvalidArgumentError: labeled_text: must contain odd number of characters",
+            "InvalidArgumentError: labeled_text: invalid annotation",
             &result.err().unwrap().to_string()
         );
     }
@@ -1440,6 +1937,7 @@ mod tests {
                 NotWordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 6],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -1463,6 +1961,7 @@ mod tests {
                 NotWordBoundary,
             ],
             boundary_scores: None,
+            tags: vec![None; 6],
         };
         assert_eq!(expected, s);
     }
@@ -1473,6 +1972,16 @@ mod tests {
 
         assert_eq!(
             "火-星 猫|の|生-態",
+            s.unwrap().to_partial_annotation_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_to_partial_annotation_string_with_tags() {
+        let s = Sentence::from_partial_annotation("火-星 猫|の/助詞|生-態/名詞");
+
+        assert_eq!(
+            "火-星 猫|の/助詞|生-態/名詞",
             s.unwrap().to_partial_annotation_string()
         );
     }

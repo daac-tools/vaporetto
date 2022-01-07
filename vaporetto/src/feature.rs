@@ -160,7 +160,6 @@ impl BoundaryExampleGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sentence::CharacterType::*;
     use BoundaryFeature::*;
     use BoundaryType::*;
 

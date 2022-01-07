@@ -50,7 +50,7 @@ mod kytea_model;
 pub use dict_model::WordWeightRecord;
 pub use model::Model;
 pub use predictor::Predictor;
-pub use sentence::{BoundaryType, CharacterType, Sentence};
+pub use sentence::{BoundaryType, CharacterType, Sentence, Token};
 
 #[cfg(feature = "train")]
 pub use trainer::{SolverType, Trainer};
