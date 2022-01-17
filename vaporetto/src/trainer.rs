@@ -14,8 +14,6 @@ use crate::ngram_model::{NgramData, NgramModel};
 use crate::sentence::{BoundaryType, Sentence};
 use liblinear::LibLinearModel;
 
-const EPSILON: f64 = 1e-6;
-
 // Bit depth for weight quantization.
 const QUANTIZE_BIT_DEPTH: u8 = 16;
 
@@ -275,11 +273,11 @@ impl<'a> Trainer<'a> {
             .unwrap() as i32;
 
         let bias = model.label_bias(wb_idx);
-        let mut char_ngrams = vec![];
-        let mut type_ngrams = vec![];
+
+        // Uses BTreeMap to increase compression ratio.
+        let mut char_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        let mut type_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
         let mut dict_weights = vec![DictWeight::default(); self.dict_max_word_size];
-        let mut char_ngram_ids = Indexer::new();
-        let mut type_ngram_ids = Indexer::new();
 
         let mut weight_max = bias.abs();
         for fid in 0..model.num_features() {
@@ -293,62 +291,64 @@ impl<'a> Trainer<'a> {
         let bias = (bias / quantize_multiplier) as i32;
 
         for (fid, feature) in self.feature_ids.keys().iter().enumerate() {
-            let weight = model.feature_coefficient(fid as i32 + 1, wb_idx);
-            if weight > -EPSILON && weight < EPSILON {
+            let raw_weight = model.feature_coefficient(fid as i32 + 1, wb_idx);
+            let weight = (raw_weight / quantize_multiplier) as i32;
+
+            if weight == 0 {
                 continue;
             }
-
-            let weight = weight / quantize_multiplier;
 
             match feature {
                 BoundaryFeature::CharacterNgram(StringNgramFeature {
                     rel_position,
                     ngram,
                 }) => {
-                    let id = char_ngram_ids.get_id(ngram);
                     let len = ngram.chars().count();
-                    if id == char_ngrams.len() {
-                        char_ngrams.push(NgramData {
-                            ngram: ngram.to_string(),
-                            weights: vec![0; self.char_window_size * 2 - len + 1],
-                        });
-                    }
                     let pos = self.char_window_size as isize - len as isize - rel_position;
-                    char_ngrams[id].weights[pos as usize] = weight as i32;
+                    if let Some(weights) = char_ngram_weights.get_mut(*ngram) {
+                        weights[pos as usize] = weight;
+                    } else {
+                        let mut weights = vec![0; self.char_window_size * 2 - len + 1];
+                        weights[pos as usize] = weight;
+                        char_ngram_weights.insert(ngram.to_string(), weights);
+                    }
                 }
                 BoundaryFeature::CharacterTypeNgram(BytesNgramFeature {
                     rel_position,
                     ngram,
                 }) => {
-                    let id = type_ngram_ids.get_id(ngram) as usize;
                     let len = ngram.len();
-                    if id == type_ngrams.len() {
-                        type_ngrams.push(NgramData {
-                            ngram: ngram.to_vec(),
-                            weights: vec![0; self.type_window_size * 2 - len + 1],
-                        });
+                    let pos = self.char_window_size as isize - len as isize - rel_position;
+                    if let Some(weights) = type_ngram_weights.get_mut(*ngram) {
+                        weights[pos as usize] = weight;
+                    } else {
+                        let mut weights = vec![0; self.char_window_size * 2 - len + 1];
+                        weights[pos as usize] = weight;
+                        type_ngram_weights.insert(ngram.to_vec(), weights);
                     }
-                    let pos = self.type_window_size as isize - len as isize - rel_position;
-                    type_ngrams[id].weights[pos as usize] = weight as i32;
                 }
                 BoundaryFeature::DictionaryWord(DictionaryWordFeature { position, length }) => {
                     match position {
-                        DictionaryWordPosition::Right => {
-                            dict_weights[length - 1].right = weight as i32
-                        }
-                        DictionaryWordPosition::Inside => {
-                            dict_weights[length - 1].inside = weight as i32
-                        }
-                        DictionaryWordPosition::Left => {
-                            dict_weights[length - 1].left = weight as i32
-                        }
+                        DictionaryWordPosition::Right => dict_weights[length - 1].right = weight,
+                        DictionaryWordPosition::Inside => dict_weights[length - 1].inside = weight,
+                        DictionaryWordPosition::Left => dict_weights[length - 1].left = weight,
                     }
                 }
             };
         }
         Ok(Model {
-            char_ngram_model: NgramModel::new(char_ngrams),
-            type_ngram_model: NgramModel::new(type_ngrams),
+            char_ngram_model: NgramModel::new(
+                char_ngram_weights
+                    .into_iter()
+                    .map(|(ngram, weights)| NgramData { ngram, weights })
+                    .collect(),
+            ),
+            type_ngram_model: NgramModel::new(
+                type_ngram_weights
+                    .into_iter()
+                    .map(|(ngram, weights)| NgramData { ngram, weights })
+                    .collect(),
+            ),
             dict_model: DictModel::new(
                 self.dictionary
                     .into_iter()
