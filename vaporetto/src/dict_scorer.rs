@@ -49,7 +49,7 @@ impl DictScorerWordwise {
             let m_end = sentence.str_to_char_pos[m.end()];
             // Both the weights and the PMA always have the same number of items.
             // Therefore, the following code is safe.
-            let dict_weight = unsafe { self.weights.get_unchecked(m.pattern()) };
+            let dict_weight = unsafe { self.weights.get_unchecked(m.value()) };
             if m_start != 0 {
                 ys[m_start - 1] += dict_weight.right;
             }
