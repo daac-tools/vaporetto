@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use crate::dict_model::{DictModel, DictModelWordwise, WordWeightRecord};
+use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 
@@ -66,11 +66,11 @@ impl Model {
         })
     }
 
-    pub fn dump_dictionary(&self) -> Vec<WordWeightRecord> {
-        self.dict_model.dump_dictionary()
+    pub fn dictionary(&self) -> &[WordWeightRecord] {
+        self.dict_model.dictionary()
     }
 
     pub fn replace_dictionary(&mut self, dict: Vec<WordWeightRecord>) {
-        self.dict_model = DictModel::Wordwise(DictModelWordwise { dict });
+        self.dict_model = DictModel::new(dict);
     }
 }

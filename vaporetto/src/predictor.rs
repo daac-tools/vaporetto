@@ -172,9 +172,7 @@ impl Predictor {
 mod tests {
     use super::*;
 
-    use crate::dict_model::{
-        DictModel, DictModelLengthwise, DictModelWordwise, DictWeight, WordWeightRecord,
-    };
+    use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
 
     /// Input:  我  ら  は  全  世  界  の  国  民
@@ -245,21 +243,37 @@ mod tests {
                     weights: vec![37, 38, 39],
                 },
             ]),
-            dict_model: DictModel::Lengthwise(DictModelLengthwise {
-                words: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
-                weights: vec![
-                    DictWeight {
-                        right: 40,
-                        inside: 41,
-                        left: 42,
+            dict_model: DictModel {
+                dict: vec![
+                    WordWeightRecord {
+                        word: "全世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
                     },
-                    DictWeight {
-                        right: 43,
-                        inside: 44,
-                        left: 45,
+                    WordWeightRecord {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 40,
+                            inside: 41,
+                            left: 42,
+                        },
+                        comment: "".to_string(),
                     },
                 ],
-            }),
+            },
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
@@ -334,26 +348,37 @@ mod tests {
                     weights: vec![33, 34, 35, 36, 37],
                 },
             ]),
-            dict_model: DictModel::Lengthwise(DictModelLengthwise {
-                words: vec!["全世界".to_string(), "世界".to_string(), "世".to_string()],
-                weights: vec![
-                    DictWeight {
-                        right: 38,
-                        inside: 39,
-                        left: 40,
+            dict_model: DictModel {
+                dict: vec![
+                    WordWeightRecord {
+                        word: "全世界".to_string(),
+                        weights: DictWeight {
+                            right: 44,
+                            inside: 45,
+                            left: 46,
+                        },
+                        comment: "".to_string(),
                     },
-                    DictWeight {
-                        right: 41,
-                        inside: 42,
-                        left: 43,
+                    WordWeightRecord {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 41,
+                            inside: 42,
+                            left: 43,
+                        },
+                        comment: "".to_string(),
                     },
-                    DictWeight {
-                        right: 44,
-                        inside: 45,
-                        left: 46,
+                    WordWeightRecord {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 38,
+                            inside: 39,
+                            left: 40,
+                        },
+                        comment: "".to_string(),
                     },
                 ],
-            }),
+            },
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
@@ -428,7 +453,7 @@ mod tests {
                     weights: vec![33, 34, 35, 36, 37],
                 },
             ]),
-            dict_model: DictModel::Wordwise(DictModelWordwise {
+            dict_model: DictModel {
                 dict: vec![
                     WordWeightRecord {
                         word: "国民".to_string(),
@@ -458,7 +483,7 @@ mod tests {
                         comment: "".to_string(),
                     },
                 ],
-            }),
+            },
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,

@@ -3,7 +3,7 @@ use std::io::BufRead;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::dict_model::{DictModel, DictModelWordwise, DictWeight, WordWeightRecord};
+use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
@@ -456,7 +456,7 @@ impl TryFrom<KyteaModel> for Model {
         Ok(Self {
             char_ngram_model: NgramModel::new(char_ngrams),
             type_ngram_model: NgramModel::new(type_ngrams),
-            dict_model: DictModel::Wordwise(DictModelWordwise { dict }),
+            dict_model: DictModel::new(dict),
             bias,
             char_window_size: config.char_w as usize,
             type_window_size: config.type_w as usize,

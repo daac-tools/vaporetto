@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Saving dictionary file...");
         let file = fs::File::create(path)?;
         let mut wtr = csv::Writer::from_writer(file);
-        for data in model.dump_dictionary() {
+        for data in model.dictionary() {
             wtr.serialize(WordWeightRecordFlatten {
                 word: data.get_word().to_string(),
                 right: data.get_right_weight(),

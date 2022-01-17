@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
 
-use crate::dict_model::{DictModel, DictModelLengthwise, DictWeight};
+use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::feature::{
     BoundaryExampleGenerator, BoundaryFeature, BytesNgramFeature, DictionaryWordFeature,
@@ -349,10 +349,19 @@ impl<'a> Trainer<'a> {
         Ok(Model {
             char_ngram_model: NgramModel::new(char_ngrams),
             type_ngram_model: NgramModel::new(type_ngrams),
-            dict_model: DictModel::Lengthwise(DictModelLengthwise {
-                words: self.dictionary,
-                weights: dict_weights,
-            }),
+            dict_model: DictModel::new(
+                self.dictionary
+                    .into_iter()
+                    .map(|word| {
+                        let idx = word.chars().count().min(dict_weights.len()) - 1;
+                        WordWeightRecord {
+                            word,
+                            weights: dict_weights[idx],
+                            comment: "".to_string(),
+                        }
+                    })
+                    .collect(),
+            ),
             bias,
             char_window_size: self.char_window_size,
             type_window_size: self.type_window_size,

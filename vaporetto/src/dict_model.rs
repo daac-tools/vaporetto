@@ -4,7 +4,7 @@ use std::mem;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use crate::errors::{Result, VaporettoError};
+use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 
 #[derive(Clone, Copy, Default)]
@@ -34,74 +34,6 @@ impl DictWeight {
             inside: buf.read_i32::<LittleEndian>()?,
             left: buf.read_i32::<LittleEndian>()?,
         })
-    }
-}
-
-pub enum DictModel {
-    Wordwise(DictModelWordwise),
-    Lengthwise(DictModelLengthwise),
-}
-
-impl DictModel {
-    const TYPE_ID_WORDWISE: u8 = 0;
-    const TYPE_ID_LENGTHWISE: u8 = 1;
-
-    pub fn merge_dict_weights(
-        &mut self,
-        char_ngram_model: &mut NgramModel<String>,
-        char_window_size: usize,
-    ) {
-        match self {
-            Self::Wordwise(model) => model.merge_dict_weights(char_ngram_model, char_window_size),
-            Self::Lengthwise(model) => model.merge_dict_weights(char_ngram_model, char_window_size),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Wordwise(model) => model.is_empty(),
-            Self::Lengthwise(model) => model.is_empty(),
-        }
-    }
-
-    pub fn dump_dictionary(&self) -> Vec<WordWeightRecord> {
-        match self {
-            Self::Wordwise(model) => model.dump_dictionary(),
-            Self::Lengthwise(model) => model.dump_dictionary(),
-        }
-    }
-
-    pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
-    where
-        W: Write,
-    {
-        let size = match self {
-            Self::Wordwise(model) => {
-                buf.write_u8(Self::TYPE_ID_WORDWISE)?;
-                model.serialize(buf)?
-            }
-            Self::Lengthwise(model) => {
-                buf.write_u8(Self::TYPE_ID_LENGTHWISE)?;
-                model.serialize(buf)?
-            }
-        };
-        Ok(mem::size_of::<u8>() + size)
-    }
-
-    pub fn deserialize<R>(mut buf: R) -> Result<Self>
-    where
-        R: Read,
-    {
-        let type_id = buf.read_u8()?;
-        match type_id {
-            Self::TYPE_ID_WORDWISE => Ok(Self::Wordwise(DictModelWordwise::deserialize(buf)?)),
-            Self::TYPE_ID_LENGTHWISE => {
-                Ok(Self::Lengthwise(DictModelLengthwise::deserialize(buf)?))
-            }
-            _ => Err(VaporettoError::invalid_model(
-                "invalid type_id of dict_model",
-            )),
-        }
     }
 }
 
@@ -198,11 +130,15 @@ impl WordWeightRecord {
     }
 }
 
-pub struct DictModelWordwise {
+pub struct DictModel {
     pub(crate) dict: Vec<WordWeightRecord>,
 }
 
-impl DictModelWordwise {
+impl DictModel {
+    pub fn new(dict: Vec<WordWeightRecord>) -> Self {
+        Self { dict }
+    }
+
     pub fn merge_dict_weights(
         &mut self,
         char_ngram_model: &mut NgramModel<String>,
@@ -242,8 +178,8 @@ impl DictModelWordwise {
         self.dict.is_empty()
     }
 
-    pub fn dump_dictionary(&self) -> Vec<WordWeightRecord> {
-        self.dict.clone()
+    pub fn dictionary(&self) -> &[WordWeightRecord] {
+        &self.dict
     }
 
     pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
@@ -269,108 +205,5 @@ impl DictModelWordwise {
             dict.push(WordWeightRecord::deserialize(&mut buf)?);
         }
         Ok(Self { dict })
-    }
-}
-
-pub struct DictModelLengthwise {
-    pub(crate) words: Vec<String>,
-    pub(crate) weights: Vec<DictWeight>,
-}
-
-impl DictModelLengthwise {
-    pub fn merge_dict_weights(
-        &mut self,
-        char_ngram_model: &mut NgramModel<String>,
-        char_window_size: usize,
-    ) {
-        let mut word_map = HashMap::new();
-        for (i, word) in char_ngram_model
-            .data
-            .iter()
-            .map(|d| d.ngram.clone())
-            .enumerate()
-        {
-            word_map.insert(word, i);
-        }
-        let mut new_words = vec![];
-        for word in self.words.drain(..) {
-            let word_size = word.chars().count();
-            match word_map.get(&word) {
-                Some(&idx) if char_window_size >= word_size => {
-                    let start = char_window_size - word_size;
-                    let end = start + word_size;
-                    let word_size_idx = word_size.min(self.weights.len()) - 1;
-                    let weight = &self.weights[word_size_idx];
-                    char_ngram_model.data[idx].weights[start] += weight.right;
-                    for i in start + 1..end {
-                        char_ngram_model.data[idx].weights[i] += weight.inside;
-                    }
-                    char_ngram_model.data[idx].weights[end] += weight.left;
-                }
-                _ => new_words.push(word),
-            }
-        }
-        self.words = new_words;
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.words.is_empty()
-    }
-
-    pub fn dump_dictionary(&self) -> Vec<WordWeightRecord> {
-        let mut result = vec![];
-        for word in &self.words {
-            let word = word.clone();
-            let word_size = word.chars().count();
-            let word_size_idx = word_size.min(self.weights.len()) - 1;
-            let weights = self.weights[word_size_idx];
-            result.push(WordWeightRecord {
-                word,
-                weights,
-                comment: "".to_string(),
-            });
-        }
-        result
-    }
-
-    pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
-    where
-        W: Write,
-    {
-        let words_size = self.words.len();
-        let weights_size = self.weights.len();
-        buf.write_u32::<LittleEndian>(words_size.try_into().unwrap())?;
-        buf.write_u32::<LittleEndian>(weights_size.try_into().unwrap())?;
-        let mut total_size = mem::size_of::<u32>() * 2;
-        for word in &self.words {
-            let word_size = word.len();
-            buf.write_u32::<LittleEndian>(word_size.try_into().unwrap())?;
-            buf.write_all(word.as_bytes())?;
-            total_size += mem::size_of::<u32>() + word_size;
-        }
-        for weight in &self.weights {
-            total_size += weight.serialize(&mut buf)?;
-        }
-        Ok(total_size)
-    }
-
-    pub fn deserialize<R>(mut buf: R) -> Result<Self>
-    where
-        R: Read,
-    {
-        let words_size = buf.read_u32::<LittleEndian>()?;
-        let weights_size = buf.read_u32::<LittleEndian>()?;
-        let mut words = Vec::with_capacity(words_size.try_into().unwrap());
-        for _ in 0..words_size {
-            let word_size = buf.read_u32::<LittleEndian>()?;
-            let mut word_bytes = vec![0; word_size.try_into().unwrap()];
-            buf.read_exact(&mut word_bytes)?;
-            words.push(String::from_utf8(word_bytes)?);
-        }
-        let mut weights = Vec::with_capacity(weights_size.try_into().unwrap());
-        for _ in 0..weights_size {
-            weights.push(DictWeight::deserialize(&mut buf)?);
-        }
-        Ok(Self { words, weights })
     }
 }
