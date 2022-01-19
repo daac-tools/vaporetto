@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::errors::{Result, VaporettoError};
@@ -33,19 +36,48 @@ pub struct TypeScorerPma {
 }
 
 impl TypeScorerPma {
-    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
-        model.merge_weights();
-        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
-            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
-        let mut weights = vec![];
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+        // key: ngram, value: (weight, check)
+        let mut weights_map: BTreeMap<Vec<u8>, RefCell<(Vec<i32>, bool)>> = BTreeMap::new();
+
         for d in model.data {
-            if d.weights.len() <= 2 * window_size - d.ngram.len() {
-                return Err(VaporettoError::invalid_model(
-                    "invalid size of weight vector",
-                ));
-            }
-            weights.push(d.weights);
+            weights_map.insert(d.ngram, RefCell::new((d.weights, false)));
         }
+
+        let mut stack = vec![];
+        for (ngram, data) in &weights_map {
+            if data.borrow().1 {
+                continue;
+            }
+            stack.push(data);
+            for j in 1..ngram.len() {
+                if let Some(data) = weights_map.get(&ngram[j..]) {
+                    stack.push(data);
+                    if data.borrow().1 {
+                        break;
+                    }
+                }
+            }
+            let mut data_from = stack.pop().unwrap();
+            data_from.borrow_mut().1 = true;
+            while let Some(data_to) = stack.pop() {
+                let mut new_weight = data_from.borrow().0.clone();
+                for (w1, w2) in new_weight.iter_mut().zip(&data_to.borrow().0) {
+                    *w1 += w2;
+                }
+                let new_data = (new_weight, true);
+                *data_to.borrow_mut() = new_data;
+                data_from = data_to;
+            }
+        }
+        let mut ngrams = vec![];
+        let mut weights = vec![];
+        for (ngram, data) in weights_map {
+            ngrams.push(ngram);
+            weights.push(data.into_inner().0);
+        }
+        let pma = DoubleArrayAhoCorasick::new(ngrams)
+            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
         Ok(Self {
             pma,
             weights,
@@ -82,8 +114,7 @@ pub struct TypeScorerCache {
 }
 
 impl TypeScorerCache {
-    pub fn new(mut model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
-        model.merge_weights();
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
         let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
             .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
         let mut weights = vec![];
@@ -107,7 +138,7 @@ impl TypeScorerCache {
                 continue;
             }
             let mut y = 0;
-            for m in pma.find_overlapping_no_suffix_iter(&sequence) {
+            for m in pma.find_overlapping_iter(&sequence) {
                 y += weights[m.value()][sequence_size - m.end()];
             }
             *score = y;

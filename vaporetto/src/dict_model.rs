@@ -1,11 +1,9 @@
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::mem;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::errors::Result;
-use crate::ngram_model::NgramModel;
 
 #[derive(Clone, Copy, Default)]
 pub struct DictWeight {
@@ -137,45 +135,6 @@ pub struct DictModel {
 impl DictModel {
     pub fn new(dict: Vec<WordWeightRecord>) -> Self {
         Self { dict }
-    }
-
-    pub fn merge_dict_weights(
-        &mut self,
-        char_ngram_model: &mut NgramModel<String>,
-        char_window_size: usize,
-    ) {
-        let mut word_map = HashMap::new();
-        for (i, word) in char_ngram_model
-            .data
-            .iter()
-            .map(|d| d.ngram.clone())
-            .enumerate()
-        {
-            word_map.insert(word, i);
-        }
-        let mut new_dict = vec![];
-        for data in self.dict.drain(..) {
-            let word_size = data.word.chars().count();
-            match word_map.get(&data.word) {
-                Some(&idx) if char_window_size >= word_size => {
-                    let start = char_window_size - word_size;
-                    let end = start + word_size;
-                    char_ngram_model.data[idx].weights[start] += data.weights.right;
-                    for i in start + 1..end {
-                        char_ngram_model.data[idx].weights[i] += data.weights.inside;
-                    }
-                    char_ngram_model.data[idx].weights[end] += data.weights.left;
-                }
-                _ => {
-                    new_dict.push(data);
-                }
-            }
-        }
-        self.dict = new_dict;
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.dict.is_empty()
     }
 
     pub fn dictionary(&self) -> &[WordWeightRecord] {

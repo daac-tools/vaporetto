@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::mem;
 
@@ -76,7 +75,6 @@ where
     T: Clone,
 {
     pub(crate) data: Vec<NgramData<T>>,
-    merged: bool,
 }
 
 impl<T> NgramModel<T>
@@ -85,52 +83,7 @@ where
 {
     #[cfg(any(feature = "train", feature = "kytea", test))]
     pub fn new(data: Vec<NgramData<T>>) -> Self {
-        Self {
-            data,
-            merged: false,
-        }
-    }
-
-    pub fn merge_weights(&mut self) {
-        if self.merged {
-            return;
-        }
-        self.merged = true;
-        let mut check = vec![false; self.data.len()];
-        let ngram_ids: HashMap<_, _> = self
-            .data
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(i, d)| (d.ngram.as_ref().to_vec(), i))
-            .collect();
-        let mut stack = vec![];
-        for i in 0..self.data.len() {
-            if check[i] {
-                continue;
-            }
-            stack.push(i);
-            let ngram = self.data[i].ngram.as_ref();
-            for j in 1..ngram.len() {
-                if let Some(&k) = ngram_ids.get(&ngram[j..]) {
-                    stack.push(k);
-                    if check[k] {
-                        break;
-                    }
-                }
-            }
-            let mut idx_from = stack.pop().unwrap();
-            check[idx_from] = true;
-            while let Some(idx_to) = stack.pop() {
-                let mut new_weights = self.data[idx_from].weights.clone();
-                for (w1, w2) in new_weights.iter_mut().zip(&self.data[idx_to].weights) {
-                    *w1 += w2;
-                }
-                self.data[idx_to].weights = new_weights;
-                idx_from = idx_to;
-                check[idx_to] = true;
-            }
-        }
+        Self { data }
     }
 
     pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
@@ -143,7 +96,6 @@ where
         for d in &self.data {
             total_size += d.serialize(&mut buf)?;
         }
-        buf.write_u8(self.merged.into())?;
         Ok(total_size + mem::size_of::<u8>())
     }
 }
@@ -158,11 +110,7 @@ impl NgramModel<String> {
         for _ in 0..data_size {
             data.push(NgramData::<String>::deserialize(&mut buf)?);
         }
-        let merged_u8 = buf.read_u8()?;
-        Ok(Self {
-            data,
-            merged: merged_u8 != 0,
-        })
+        Ok(Self { data })
     }
 }
 
@@ -176,10 +124,6 @@ impl NgramModel<Vec<u8>> {
         for _ in 0..data_size {
             data.push(NgramData::<Vec<u8>>::deserialize(&mut buf)?);
         }
-        let merged_u8 = buf.read_u8()?;
-        Ok(Self {
-            data,
-            merged: merged_u8 != 0,
-        })
+        Ok(Self { data })
     }
 }
