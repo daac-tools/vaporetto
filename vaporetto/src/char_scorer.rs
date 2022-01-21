@@ -158,18 +158,15 @@ impl CharScorer {
             // Therefore, the following code is safe.
             let pos_weights = unsafe { self.weights.get_unchecked(m.value()) };
 
+            let offset = padding as isize + m_end as isize + pos_weights.offset as isize - 1;
             match &pos_weights.weight {
                 WeightVector::Array(weight) => {
-                    let offset = m_end as isize + pos_weights.offset as isize - 1;
                     if offset >= 0 {
-                        for (w, y) in weight.iter().zip(&mut ys[padding + offset as usize..]) {
+                        for (w, y) in weight.iter().zip(&mut ys[offset as usize..]) {
                             *y += w;
                         }
                     } else {
-                        for (w, y) in weight[-offset as usize..]
-                            .iter()
-                            .zip(ys[padding..].iter_mut())
-                        {
+                        for (w, y) in weight[-offset as usize..].iter().zip(ys.iter_mut()) {
                             *y += w;
                         }
                     }
@@ -177,8 +174,6 @@ impl CharScorer {
 
                 #[cfg(feature = "simd")]
                 WeightVector::Simd(weight) => {
-                    let offset =
-                        padding as isize + m_end as isize + pos_weights.offset as isize - 1;
                     let ys_slice = &mut ys[offset as usize..offset as usize + SIMD_SIZE];
                     #[cfg(feature = "portable-simd")]
                     {
