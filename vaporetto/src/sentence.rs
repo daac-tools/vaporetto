@@ -97,7 +97,7 @@ pub struct Sentence {
     pub(crate) char_to_str_pos: Vec<usize>,
     pub(crate) char_type: Vec<u8>,
     pub(crate) boundaries: Vec<BoundaryType>,
-    pub(crate) boundary_scores: Option<Vec<i32>>,
+    pub(crate) boundary_scores: Vec<i32>,
     pub(crate) tags: Vec<Option<Rc<String>>>,
 }
 
@@ -111,11 +111,11 @@ impl Sentence {
         let mut s = Self {
             text,
             chars,
-            str_to_char_pos: Vec::with_capacity(0),
-            char_to_str_pos: Vec::with_capacity(0),
-            char_type: Vec::with_capacity(0),
+            str_to_char_pos: vec![],
+            char_to_str_pos: vec![],
+            char_type: vec![],
             boundaries,
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags,
         };
         s.update_common_info();
@@ -136,7 +136,7 @@ impl Sentence {
         self.char_type.clear();
         self.char_type.push(CharacterType::Other as u8);
         self.boundaries.clear();
-        self.boundary_scores.take();
+        self.boundary_scores.clear();
         self.tags.clear();
     }
 
@@ -979,8 +979,8 @@ impl Sentence {
     /// # Returns
     ///
     /// If the predictor inserted, the boundary score information is returned. Otherwise, None.
-    pub fn boundary_scores(&self) -> Option<&[i32]> {
-        self.boundary_scores.as_deref()
+    pub fn boundary_scores(&self) -> &[i32] {
+        &self.boundary_scores
     }
 
     /// Gets a character position in the code point unit.
@@ -1043,7 +1043,7 @@ mod tests {
             char_to_str_pos: vec![0, 1],
             char_type: b"O".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1060,7 +1060,7 @@ mod tests {
             char_to_str_pos: vec![0, 3],
             char_type: b"H".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s.unwrap());
@@ -1078,7 +1078,7 @@ mod tests {
             char_to_str_pos: vec![0, 3],
             char_type: b"H".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1103,7 +1103,7 @@ mod tests {
             ],
             char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s.unwrap());
@@ -1129,7 +1129,7 @@ mod tests {
             ],
             char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1172,7 +1172,7 @@ mod tests {
             char_to_str_pos: vec![0, 1],
             char_type: b"O".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1205,7 +1205,7 @@ mod tests {
             char_to_str_pos: vec![0, 1],
             char_type: b"O".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1238,7 +1238,7 @@ mod tests {
             char_to_str_pos: vec![0, 1],
             char_type: b"O".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1271,7 +1271,7 @@ mod tests {
             char_to_str_pos: vec![0, 1],
             char_type: b"O".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![],
         };
         assert_eq!(expected, s);
@@ -1288,7 +1288,7 @@ mod tests {
             char_to_str_pos: vec![0, 3],
             char_type: b"H".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None],
         };
         assert_eq!(expected, s.unwrap());
@@ -1306,7 +1306,7 @@ mod tests {
             char_to_str_pos: vec![0, 3],
             char_type: b"H".to_vec(),
             boundaries: vec![],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None],
         };
         assert_eq!(expected, s);
@@ -1349,7 +1349,7 @@ mod tests {
                 WordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 18],
         };
         assert_eq!(expected, s.unwrap());
@@ -1393,7 +1393,7 @@ mod tests {
                 WordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![
                 None,
                 None,
@@ -1457,7 +1457,7 @@ mod tests {
                 WordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 18],
         };
         assert_eq!(expected, s);
@@ -1502,7 +1502,7 @@ mod tests {
                 WordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![
                 None,
                 None,
@@ -1562,7 +1562,7 @@ mod tests {
                 NotWordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 16],
         };
         assert_eq!(expected, s);
@@ -1605,7 +1605,7 @@ mod tests {
                 NotWordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 16],
         };
         assert_eq!(expected, s);
@@ -1633,7 +1633,7 @@ mod tests {
                 NotWordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 9],
         };
         assert_eq!(expected, s.unwrap());
@@ -1662,7 +1662,7 @@ mod tests {
                 NotWordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 9],
         };
         assert_eq!(expected, s);
@@ -1689,7 +1689,7 @@ mod tests {
                 NotWordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 8],
         };
         assert_eq!(expected, s.unwrap());
@@ -1717,7 +1717,7 @@ mod tests {
                 NotWordBoundary,
                 WordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 8],
         };
         assert_eq!(expected, s);
@@ -1936,7 +1936,7 @@ mod tests {
                 WordBoundary,
                 NotWordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 6],
         };
         assert_eq!(expected, s.unwrap());
@@ -1960,7 +1960,7 @@ mod tests {
                 WordBoundary,
                 NotWordBoundary,
             ],
-            boundary_scores: None,
+            boundary_scores: vec![],
             tags: vec![None; 6],
         };
         assert_eq!(expected, s);

@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::char_scorer::CharScorer;
 use crate::errors::Result;
 use crate::model::Model;
@@ -66,21 +68,25 @@ impl Predictor {
 
         #[cfg(not(feature = "simd"))]
         if boundaries_size != 0 {
-            let mut ys = vec![0; boundaries_size];
+            let mut ys = mem::take(&mut sentence.boundary_scores);
+            ys.resize(boundaries_size, 0);
             self.predict_impl(&sentence, 0, &mut ys);
-            for (y, b) in ys.into_iter().zip(sentence.boundaries.iter_mut()) {
+            for (&y, b) in ys.iter().zip(sentence.boundaries.iter_mut()) {
                 *b = if y >= 0 {
                     BoundaryType::WordBoundary
                 } else {
                     BoundaryType::NotWordBoundary
                 };
             }
+            sentence.boundary_scores = ys;
+            sentence.boundary_scores.clear();
         }
 
         #[cfg(feature = "simd")]
         if boundaries_size != 0 {
             let ys_size = boundaries_size + self.padding + crate::char_scorer::SIMD_SIZE - 1;
-            let mut ys = vec![0; ys_size];
+            let mut ys = mem::take(&mut sentence.boundary_scores);
+            ys.resize(ys_size, 0);
             self.predict_impl(&sentence, self.padding, &mut ys);
             for (&y, b) in ys[self.padding..]
                 .iter()
@@ -92,6 +98,8 @@ impl Predictor {
                     BoundaryType::NotWordBoundary
                 };
             }
+            sentence.boundary_scores = ys;
+            sentence.boundary_scores.clear();
         }
 
         sentence
@@ -111,7 +119,8 @@ impl Predictor {
 
         #[cfg(not(feature = "simd"))]
         if boundaries_size != 0 {
-            let mut ys = vec![0; boundaries_size];
+            let mut ys = mem::take(&mut sentence.boundary_scores);
+            ys.resize(boundaries_size, 0);
             self.predict_impl(&sentence, 0, &mut ys);
             for (&y, b) in ys.iter().zip(sentence.boundaries.iter_mut()) {
                 *b = if y >= 0 {
@@ -120,7 +129,7 @@ impl Predictor {
                     BoundaryType::NotWordBoundary
                 };
             }
-            sentence.boundary_scores.replace(ys);
+            sentence.boundary_scores = ys;
         }
 
         #[cfg(feature = "simd")]
@@ -128,15 +137,13 @@ impl Predictor {
             let ys_size = boundaries_size + self.padding + crate::char_scorer::SIMD_SIZE - 1;
             let mut ys = vec![0; ys_size];
             self.predict_impl(&sentence, self.padding, &mut ys);
-            let mut scores = sentence
-                .boundary_scores
-                .take()
-                .unwrap_or_else(|| vec![0; boundaries_size]);
-            scores.resize(boundaries_size, 0);
-            for (&y, (b, s)) in ys[self.padding..]
-                .iter()
-                .zip(sentence.boundaries.iter_mut().zip(scores.iter_mut()))
-            {
+            sentence.boundary_scores.resize(boundaries_size, 0);
+            for (&y, (b, s)) in ys[self.padding..].iter().zip(
+                sentence
+                    .boundaries
+                    .iter_mut()
+                    .zip(sentence.boundary_scores.iter_mut()),
+            ) {
                 *b = if y >= 0 {
                     BoundaryType::WordBoundary
                 } else {
@@ -145,7 +152,6 @@ impl Predictor {
 
                 *s = y;
             }
-            sentence.boundary_scores.replace(scores);
         }
 
         sentence
@@ -696,10 +702,7 @@ mod tests {
         let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
-        assert_eq!(
-            &[-77, -5, 45, 132, 133, 144, 50, -32],
-            s.boundary_scores().unwrap(),
-        );
+        assert_eq!(&[-77, -5, 45, 132, 133, 144, 50, -32], s.boundary_scores(),);
         assert_eq!(
             &[
                 BoundaryType::NotWordBoundary,
@@ -723,7 +726,7 @@ mod tests {
         let s = p.predict_with_score(s);
         assert_eq!(
             &[-138, -109, -39, 57, 104, 34, -79, -114],
-            s.boundary_scores().unwrap(),
+            s.boundary_scores(),
         );
         assert_eq!(
             &[
@@ -748,7 +751,7 @@ mod tests {
         let s = p.predict_with_score(s);
         assert_eq!(
             &[-138, -109, -83, 18, 65, -12, -41, -75],
-            s.boundary_scores().unwrap(),
+            s.boundary_scores(),
         );
         assert_eq!(
             &[
@@ -771,10 +774,7 @@ mod tests {
         let p = Predictor::new(model).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
-        assert_eq!(
-            &[-77, 38, 89, 219, 221, 233, 94, 12],
-            s.boundary_scores().unwrap(),
-        );
+        assert_eq!(&[-77, 38, 89, 219, 221, 233, 94, 12], s.boundary_scores(),);
         assert_eq!(
             &[
                 BoundaryType::NotWordBoundary,

@@ -57,8 +57,8 @@ struct Opt {
 }
 
 fn print_scores(s: &Sentence) {
-    if let Some(scores) = s.boundary_scores().as_ref() {
-        for (i, score) in scores.iter().enumerate() {
+    if !s.boundary_scores().is_empty() {
+        for (i, score) in s.boundary_scores().iter().enumerate() {
             println!("{}:{}{} {}", i, s.chars()[i], s.chars()[i + 1], score);
         }
         println!();
