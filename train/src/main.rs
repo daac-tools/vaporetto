@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let new_line = fullwidth_filter.filter(s.to_raw_string());
                 let mut new_s = Sentence::from_raw(new_line)?;
                 new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s.tags_mut().clone_from_slice(s.tags());
                 new_s
             };
             train_sents.push(s);
@@ -112,7 +113,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 let new_line = fullwidth_filter.filter(s.to_raw_string());
                 let mut new_s = Sentence::from_raw(new_line)?;
-                new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s.boundaries_mut().copy_from_slice(s.boundaries());
+                new_s.tags_mut().clone_from_slice(s.tags());
                 new_s
             };
             train_sents.push(s);

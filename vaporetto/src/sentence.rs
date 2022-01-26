@@ -138,6 +138,7 @@ impl Sentence {
         self.boundaries.clear();
         self.boundary_scores.clear();
         self.tags.clear();
+        self.tags.push(None);
     }
 
     fn parse_raw_text(
@@ -161,6 +162,7 @@ impl Sentence {
         boundaries.clear();
         boundaries.resize(chars.len() - 1, BoundaryType::Unknown);
         tags.clear();
+        tags.resize(chars.len(), None);
 
         Ok(())
     }
@@ -280,6 +282,7 @@ impl Sentence {
         text.clear();
         chars.clear();
         boundaries.clear();
+        tags.clear();
 
         let mut tag_str = None;
         let mut is_char = true;
@@ -938,6 +941,48 @@ impl Sentence {
         &mut self.boundaries
     }
 
+    /// Gets a reference to the part-of-speech information.
+    ///
+    /// Each tag is placed at the last of the corresponding token. For example, when the first token
+    /// containing three characters has a tag, that tag will be placed at the third element of the
+    /// returned slice.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the POS information.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// use vaporetto::{BoundaryType, Sentence};
+    ///
+    /// let s = Sentence::from_tokenized("I/PRP am a/DT cat/NN ./.").unwrap();
+    /// assert_eq!(&[
+    ///     Some(Rc::new("PRP".to_string())), // 'I'
+    ///     None,                             // 'a'
+    ///     None,                             // 'm'
+    ///     Some(Rc::new("DT".to_string())),  // 'a'
+    ///     None,                             // 'c'
+    ///     None,                             // 'a'
+    ///     Some(Rc::new("NN".to_string())),  // 't'
+    ///     Some(Rc::new(".".to_string())),   // '.'
+    /// ], s.tags());
+    /// ```
+    pub fn tags(&self) -> &[Option<Rc<String>>] {
+        &self.tags
+    }
+
+    /// Gets a mutable reference to the part-of-speech information.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the part-of-speech information.
+    pub fn tags_mut(&mut self) -> &mut [Option<Rc<String>>] {
+        &mut self.tags
+    }
+
     /// Gets a reference to the characters.
     ///
     /// # Returns
@@ -1044,7 +1089,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }
@@ -1061,7 +1106,7 @@ mod tests {
             char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -1079,7 +1124,7 @@ mod tests {
             char_type: b"H".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }
@@ -1104,7 +1149,7 @@ mod tests {
             char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None; 18],
         };
         assert_eq!(expected, s.unwrap());
     }
@@ -1130,7 +1175,7 @@ mod tests {
             char_type: b"RRRRHKHTTTTTTTKKHO".to_vec(),
             boundaries: vec![Unknown; 17],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None; 18],
         };
         assert_eq!(expected, s);
     }
@@ -1173,7 +1218,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }
@@ -1206,7 +1251,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }
@@ -1239,7 +1284,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }
@@ -1272,7 +1317,7 @@ mod tests {
             char_type: b"O".to_vec(),
             boundaries: vec![],
             boundary_scores: vec![],
-            tags: vec![],
+            tags: vec![None],
         };
         assert_eq!(expected, s);
     }

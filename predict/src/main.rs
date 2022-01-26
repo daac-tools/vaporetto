@@ -94,6 +94,7 @@ fn tokenize(
         buf1.to_tokenized_string()?
     } else {
         buf2.boundaries_mut().copy_from_slice(buf1.boundaries());
+        buf2.tags_mut().clone_from_slice(buf1.tags());
         buf2.to_tokenized_string()?
     };
     Ok((result, buf1, buf2))

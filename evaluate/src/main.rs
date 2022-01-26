@@ -106,18 +106,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let s = Sentence::from_tokenized(line)?;
+        let ref_boundaries = s.boundaries().to_vec();
+        let ref_tags = s.tags().to_vec();
         let s = if opt.no_norm {
             s
         } else {
             let new_line = fullwidth_filter.filter(s.to_raw_string());
-            let mut new_s = Sentence::from_raw(new_line)?;
-            new_s.boundaries_mut().clone_from_slice(s.boundaries());
-            new_s
+            Sentence::from_raw(new_line)?
         };
-        let reference = s.boundaries().to_vec();
         let s = predictor.predict(s);
         let s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
-        results.push((reference, s.boundaries().to_vec()));
+        let hyp_boundaries = s.boundaries().to_vec();
+        let hyp_tags = s.tags().to_vec();
+        results.push((ref_boundaries, ref_tags, hyp_boundaries, hyp_tags));
     }
 
     match opt.metric {
@@ -126,8 +127,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut n_tn = 0;
             let mut n_fp = 0;
             let mut n_fn = 0;
-            for (rs, hs) in results {
-                for (r, h) in rs.into_iter().zip(hs) {
+            for (rs_b, _, hs_b, _) in results {
+                for (r, h) in rs_b.into_iter().zip(hs_b) {
                     if r == h {
                         if h == BoundaryType::WordBoundary {
                             n_tp += 1;
@@ -157,12 +158,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut n_sys = 0;
             let mut n_ref = 0;
             let mut n_cor = 0;
-            for (rs, hs) in results {
+            for (rs_b, rs_t, hs_b, hs_t) in results {
                 let mut matched = true;
-                for (r, h) in rs.into_iter().zip(hs) {
-                    if r == h {
-                        if h == BoundaryType::WordBoundary {
-                            if matched {
+                for (((r_b, r_t), h_b), h_t) in rs_b.iter().zip(&rs_t).zip(&hs_b).zip(&hs_t) {
+                    if r_b == h_b {
+                        if *h_b == BoundaryType::WordBoundary {
+                            if matched && r_t == h_t {
                                 n_cor += 1;
                             }
                             matched = true;
@@ -170,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             n_sys += 1;
                         }
                     } else {
-                        if h == BoundaryType::WordBoundary {
+                        if *h_b == BoundaryType::WordBoundary {
                             n_sys += 1;
                         } else {
                             n_ref += 1;
@@ -178,7 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         matched = false;
                     }
                 }
-                if matched {
+                if matched && rs_t.last().unwrap() == hs_t.last().unwrap() {
                     n_cor += 1;
                 }
                 n_sys += 1;
