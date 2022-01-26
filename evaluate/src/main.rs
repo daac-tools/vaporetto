@@ -157,8 +157,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut n_sys = 0;
             let mut n_ref = 0;
             let mut n_cor = 0;
-            let mut matched = true;
             for (rs, hs) in results {
+                let mut matched = true;
                 for (r, h) in rs.into_iter().zip(hs) {
                     if r == h {
                         if h == BoundaryType::WordBoundary {
@@ -178,12 +178,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         matched = false;
                     }
                 }
+                if matched {
+                    n_cor += 1;
+                }
+                n_sys += 1;
+                n_ref += 1;
             }
-            if matched {
-                n_cor += 1;
-            }
-            n_sys += 1;
-            n_ref += 1;
             let precision = n_cor as f64 / n_sys as f64;
             let recall = n_cor as f64 / n_ref as f64;
             let f1 = 2. * precision * recall / (precision + recall);
