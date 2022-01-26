@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::rc::Rc;
 
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -6,7 +7,7 @@ use crate::errors::{Result, VaporettoError};
 use crate::sentence::BoundaryType;
 use crate::sentence::Sentence;
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StringNgramFeature<'a> {
     pub(crate) rel_position: isize,
     pub(crate) ngram: &'a str,
@@ -157,6 +158,118 @@ impl BoundaryExampleGenerator {
     }
 }
 
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TagFeature<'a> {
+    LeftCharacterNgram(StringNgramFeature<'a>),
+    RightCharacterNgram(StringNgramFeature<'a>),
+    Character(&'a str),
+}
+
+impl<'a> TagFeature<'a> {
+    pub const fn left_char_ngram(rel_position: isize, ngram: &'a str) -> Self {
+        Self::LeftCharacterNgram(StringNgramFeature {
+            rel_position,
+            ngram,
+        })
+    }
+
+    pub const fn right_char_ngram(rel_position: isize, ngram: &'a str) -> Self {
+        Self::RightCharacterNgram(StringNgramFeature {
+            rel_position,
+            ngram,
+        })
+    }
+
+    pub const fn chars(chars: &'a str) -> Self {
+        Self::Character(chars)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TagExample<'a> {
+    pub features: Vec<TagFeature<'a>>,
+    pub tag: Rc<String>,
+}
+
+pub struct TagExampleGenerator {
+    char_ngram_size: usize,
+    char_window_size: usize,
+}
+
+#[allow(dead_code)]
+impl TagExampleGenerator {
+    pub const fn new(char_ngram_size: usize, char_window_size: usize) -> Self {
+        Self {
+            char_ngram_size,
+            char_window_size,
+        }
+    }
+
+    pub fn generate<'a>(&self, sentence: &'a Sentence) -> Result<Vec<TagExample<'a>>> {
+        let mut result = vec![];
+        let mut features = vec![];
+        let mut current_tag: Option<Rc<String>> =
+            sentence.tags.last().and_then(|x| x.as_ref()).map(Rc::clone);
+        let mut tag_right_pos = sentence.chars.len();
+        for (i, (t, b)) in sentence
+            .tags
+            .iter()
+            .zip(sentence.boundaries())
+            .enumerate()
+            .rev()
+        {
+            match b {
+                BoundaryType::WordBoundary => {
+                    if let Some(tag) = current_tag.take() {
+                        for j in (i + 1).saturating_sub(self.char_window_size)..i + 1 {
+                            let rel_position = j as isize - i as isize - 1;
+                            for end in j + 1..sentence.chars.len().min(j + self.char_ngram_size) + 1
+                            {
+                                features.push(TagFeature::left_char_ngram(
+                                    rel_position,
+                                    sentence.char_substring(j, end),
+                                ));
+                            }
+                        }
+                        features.push(TagFeature::chars(
+                            sentence.char_substring(i + 1, tag_right_pos),
+                        ));
+                        result.push(TagExample { features, tag });
+                        features = vec![];
+                    }
+                    if let Some(tag) = t.as_ref() {
+                        current_tag.replace(Rc::clone(tag));
+                        tag_right_pos = i + 1;
+                        for j in (i + 2)..(i + 2 + self.char_window_size).min(sentence.chars.len())
+                        {
+                            for start in j.saturating_sub(self.char_ngram_size)..j {
+                                let rel_position = j as isize - i as isize - 1;
+                                features.push(TagFeature::right_char_ngram(
+                                    rel_position,
+                                    sentence.char_substring(start, j),
+                                ));
+                            }
+                        }
+                    }
+                }
+                BoundaryType::NotWordBoundary => (),
+                BoundaryType::Unknown => {
+                    if current_tag.is_some() {
+                        return Err(VaporettoError::invalid_argument("sentence", ""));
+                    }
+                }
+            }
+        }
+        if let Some(tag) = current_tag.take() {
+            features.push(TagFeature::Character(
+                sentence.char_substring(0, tag_right_pos),
+            ));
+            result.push(TagExample { features, tag });
+        }
+        Ok(result)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +388,216 @@ mod tests {
         let examples = gen.generate(&s);
 
         assert_eq!(7, examples.len());
+    }
+
+    #[test]
+    fn test_tag_example_generate_33() {
+        let gen = TagExampleGenerator::new(3, 3);
+
+        let s =
+            Sentence::from_partial_annotation("A-r-i-a/名詞|は/助詞|火-星 猫|だ/助動詞").unwrap();
+        let mut examples = gen.generate(&s).unwrap();
+
+        // The order of examples is unimportant.
+        examples
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        examples.sort_unstable();
+
+        let mut expected = vec![
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "iaは"),
+                    TagFeature::right_char_ngram(1, "aは"),
+                    TagFeature::right_char_ngram(1, "は"),
+                    TagFeature::right_char_ngram(2, "aは火"),
+                    TagFeature::right_char_ngram(2, "は火"),
+                    TagFeature::right_char_ngram(2, "火"),
+                    TagFeature::right_char_ngram(3, "は火星"),
+                    TagFeature::right_char_ngram(3, "火星"),
+                    TagFeature::right_char_ngram(3, "星"),
+                    TagFeature::chars("Aria"),
+                ],
+                tag: Rc::new("名詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "aは火"),
+                    TagFeature::right_char_ngram(1, "は火"),
+                    TagFeature::right_char_ngram(1, "火"),
+                    TagFeature::right_char_ngram(2, "は火星"),
+                    TagFeature::right_char_ngram(2, "火星"),
+                    TagFeature::right_char_ngram(2, "星"),
+                    TagFeature::right_char_ngram(3, "火星猫"),
+                    TagFeature::right_char_ngram(3, "星猫"),
+                    TagFeature::right_char_ngram(3, "猫"),
+                    TagFeature::left_char_ngram(-3, "r"),
+                    TagFeature::left_char_ngram(-3, "ri"),
+                    TagFeature::left_char_ngram(-3, "ria"),
+                    TagFeature::left_char_ngram(-2, "i"),
+                    TagFeature::left_char_ngram(-2, "ia"),
+                    TagFeature::left_char_ngram(-2, "iaは"),
+                    TagFeature::left_char_ngram(-1, "a"),
+                    TagFeature::left_char_ngram(-1, "aは"),
+                    TagFeature::left_char_ngram(-1, "aは火"),
+                    TagFeature::chars("は"),
+                ],
+                tag: Rc::new("助詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::left_char_ngram(-3, "火"),
+                    TagFeature::left_char_ngram(-3, "火星"),
+                    TagFeature::left_char_ngram(-3, "火星猫"),
+                    TagFeature::left_char_ngram(-2, "星"),
+                    TagFeature::left_char_ngram(-2, "星猫"),
+                    TagFeature::left_char_ngram(-2, "星猫だ"),
+                    TagFeature::left_char_ngram(-1, "猫"),
+                    TagFeature::left_char_ngram(-1, "猫だ"),
+                    TagFeature::chars("だ"),
+                ],
+                tag: Rc::new("助動詞".to_string()),
+            },
+        ];
+
+        expected
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        expected.sort_unstable();
+
+        assert_eq!(expected, examples);
+    }
+
+    #[test]
+    fn test_tag_example_generate_32() {
+        let gen = TagExampleGenerator::new(3, 2);
+
+        let s =
+            Sentence::from_partial_annotation("A-r-i-a/名詞|は/助詞|火-星 猫|だ/助動詞").unwrap();
+        let mut examples = gen.generate(&s).unwrap();
+
+        // The order of examples is unimportant.
+        examples
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        examples.sort_unstable();
+
+        let mut expected = vec![
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "iaは"),
+                    TagFeature::right_char_ngram(1, "aは"),
+                    TagFeature::right_char_ngram(1, "は"),
+                    TagFeature::right_char_ngram(2, "aは火"),
+                    TagFeature::right_char_ngram(2, "は火"),
+                    TagFeature::right_char_ngram(2, "火"),
+                    TagFeature::chars("Aria"),
+                ],
+                tag: Rc::new("名詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "aは火"),
+                    TagFeature::right_char_ngram(1, "は火"),
+                    TagFeature::right_char_ngram(1, "火"),
+                    TagFeature::right_char_ngram(2, "は火星"),
+                    TagFeature::right_char_ngram(2, "火星"),
+                    TagFeature::right_char_ngram(2, "星"),
+                    TagFeature::left_char_ngram(-2, "i"),
+                    TagFeature::left_char_ngram(-2, "ia"),
+                    TagFeature::left_char_ngram(-2, "iaは"),
+                    TagFeature::left_char_ngram(-1, "a"),
+                    TagFeature::left_char_ngram(-1, "aは"),
+                    TagFeature::left_char_ngram(-1, "aは火"),
+                    TagFeature::chars("は"),
+                ],
+                tag: Rc::new("助詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::left_char_ngram(-2, "星"),
+                    TagFeature::left_char_ngram(-2, "星猫"),
+                    TagFeature::left_char_ngram(-2, "星猫だ"),
+                    TagFeature::left_char_ngram(-1, "猫"),
+                    TagFeature::left_char_ngram(-1, "猫だ"),
+                    TagFeature::chars("だ"),
+                ],
+                tag: Rc::new("助動詞".to_string()),
+            },
+        ];
+
+        expected
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        expected.sort_unstable();
+
+        assert_eq!(expected, examples);
+    }
+
+    #[test]
+    fn test_tag_example_generate_23() {
+        let gen = TagExampleGenerator::new(2, 3);
+
+        let s =
+            Sentence::from_partial_annotation("A-r-i-a/名詞|は/助詞|火-星 猫|だ/助動詞").unwrap();
+        let mut examples = gen.generate(&s).unwrap();
+
+        // The order of examples is unimportant.
+        examples
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        examples.sort_unstable();
+
+        let mut expected = vec![
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "aは"),
+                    TagFeature::right_char_ngram(1, "は"),
+                    TagFeature::right_char_ngram(2, "は火"),
+                    TagFeature::right_char_ngram(2, "火"),
+                    TagFeature::right_char_ngram(3, "火星"),
+                    TagFeature::right_char_ngram(3, "星"),
+                    TagFeature::chars("Aria"),
+                ],
+                tag: Rc::new("名詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "は火"),
+                    TagFeature::right_char_ngram(1, "火"),
+                    TagFeature::right_char_ngram(2, "火星"),
+                    TagFeature::right_char_ngram(2, "星"),
+                    TagFeature::right_char_ngram(3, "星猫"),
+                    TagFeature::right_char_ngram(3, "猫"),
+                    TagFeature::left_char_ngram(-3, "r"),
+                    TagFeature::left_char_ngram(-3, "ri"),
+                    TagFeature::left_char_ngram(-2, "i"),
+                    TagFeature::left_char_ngram(-2, "ia"),
+                    TagFeature::left_char_ngram(-1, "a"),
+                    TagFeature::left_char_ngram(-1, "aは"),
+                    TagFeature::chars("は"),
+                ],
+                tag: Rc::new("助詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::left_char_ngram(-3, "火"),
+                    TagFeature::left_char_ngram(-3, "火星"),
+                    TagFeature::left_char_ngram(-2, "星"),
+                    TagFeature::left_char_ngram(-2, "星猫"),
+                    TagFeature::left_char_ngram(-1, "猫"),
+                    TagFeature::left_char_ngram(-1, "猫だ"),
+                    TagFeature::chars("だ"),
+                ],
+                tag: Rc::new("助動詞".to_string()),
+            },
+        ];
+
+        expected
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        expected.sort_unstable();
+
+        assert_eq!(expected, examples);
     }
 }
