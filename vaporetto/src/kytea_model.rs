@@ -7,6 +7,7 @@ use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
+use crate::tag_model::TagModel;
 
 struct KyteaConfig {
     _model_tag: String,
@@ -458,6 +459,7 @@ impl TryFrom<KyteaModel> for Model {
             type_ngram_model: NgramModel::new(type_ngrams),
             dict_model: DictModel::new(dict),
             bias,
+            tag_model: TagModel::default(),
             char_window_size: config.char_w as usize,
             type_window_size: config.type_w as usize,
         })

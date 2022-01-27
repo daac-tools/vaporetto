@@ -70,6 +70,7 @@ impl NgramData<Vec<u8>> {
     }
 }
 
+#[derive(Default)]
 pub struct NgramModel<T>
 where
     T: Clone,

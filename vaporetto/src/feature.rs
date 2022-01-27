@@ -196,7 +196,6 @@ pub struct TagExampleGenerator {
     char_window_size: usize,
 }
 
-#[allow(dead_code)]
 impl TagExampleGenerator {
     pub const fn new(char_ngram_size: usize, char_window_size: usize) -> Self {
         Self {
@@ -261,9 +260,7 @@ impl TagExampleGenerator {
             }
         }
         if let Some(tag) = current_tag.take() {
-            features.push(TagFeature::Character(
-                sentence.char_substring(0, tag_right_pos),
-            ));
+            features.push(TagFeature::chars(sentence.char_substring(0, tag_right_pos)));
             result.push(TagExample { features, tag });
         }
         Ok(result)

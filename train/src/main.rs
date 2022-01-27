@@ -150,12 +150,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
-            eprint!("# of features: {}\r", trainer.n_features());
+            eprint!(
+                "# of features: {}, # of tag features: {}\r",
+                trainer.n_features(),
+                trainer.n_tag_features()
+            );
             stderr().flush()?;
         }
         trainer.push_sentence(s)?;
     }
-    eprintln!("# of features: {}", trainer.n_features());
+    eprintln!(
+        "# of features: {}, # of tag features: {}",
+        trainer.n_features(),
+        trainer.n_tag_features()
+    );
 
     eprintln!("Start training...");
     let model = trainer.train(opt.eps, opt.cost, opt.solver)?;

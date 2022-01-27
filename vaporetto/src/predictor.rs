@@ -164,6 +164,7 @@ mod tests {
 
     use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
+    use crate::tag_model::TagModel;
 
     /// Input:  我  ら  は  全  世  界  の  国  民
     /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
@@ -267,6 +268,7 @@ mod tests {
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
+            tag_model: TagModel::default(),
         }
     }
 
@@ -372,6 +374,7 @@ mod tests {
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
+            tag_model: TagModel::default(),
         }
     }
 
@@ -477,6 +480,7 @@ mod tests {
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
+            tag_model: TagModel::default(),
         }
     }
 
@@ -609,6 +613,7 @@ mod tests {
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
+            tag_model: TagModel::default(),
         }
     }
 

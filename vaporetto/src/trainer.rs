@@ -1,7 +1,10 @@
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
+
+use liblinear::LibLinearModel;
 
 use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
@@ -12,17 +15,20 @@ use crate::feature::{
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
 use crate::sentence::{BoundaryType, Sentence};
-use liblinear::LibLinearModel;
+use crate::tag_trainer::TagTrainer;
 
 // Bit depth for weight quantization.
-const QUANTIZE_BIT_DEPTH: u8 = 16;
+pub const QUANTIZE_BIT_DEPTH: u8 = 16;
 
 pub struct Indexer<K> {
     ids: HashMap<K, usize>,
     keys: Vec<K>,
 }
 
-impl<K> Indexer<K> {
+impl<K> Indexer<K>
+where
+    K: Eq + Hash,
+{
     pub fn new() -> Self {
         Self {
             ids: HashMap::new(),
@@ -30,16 +36,17 @@ impl<K> Indexer<K> {
         }
     }
 
-    pub fn get_id(&mut self, key: &K) -> usize
+    pub fn get_id<Q: ?Sized>(&mut self, key: &Q) -> usize
     where
-        K: Clone + Eq + Hash,
+        K: Borrow<Q>,
+        Q: ToOwned<Owned = K> + Eq + Hash,
     {
         if let Some(&id) = self.ids.get(key) {
             id
         } else {
             let id = self.ids.len();
-            self.keys.push(key.clone());
-            self.ids.insert(key.clone(), id);
+            self.keys.push(key.to_owned());
+            self.ids.insert(key.to_owned(), id);
             id
         }
     }
@@ -150,6 +157,7 @@ pub struct Trainer<'a> {
     feature_ids: Indexer<BoundaryFeature<'a>>,
     xs: Vec<Vec<(u32, f64)>>,
     ys: Vec<f64>,
+    tag_trainer: TagTrainer<'a>,
 }
 
 impl<'a> Trainer<'a> {
@@ -203,6 +211,7 @@ impl<'a> Trainer<'a> {
             feature_ids: Indexer::new(),
             xs: vec![],
             ys: vec![],
+            tag_trainer: TagTrainer::new(char_ngram_size, char_window_size),
         })
     }
 
@@ -229,6 +238,7 @@ impl<'a> Trainer<'a> {
             self.xs.push(feature_ids.into_iter().collect());
             self.ys.push(example.label as u8 as f64);
         }
+        self.tag_trainer.push_sentence(s)?;
         Ok(())
     }
 
@@ -239,6 +249,15 @@ impl<'a> Trainer<'a> {
     /// The number of features.
     pub fn n_features(&self) -> usize {
         self.feature_ids.len()
+    }
+
+    /// Gets the number of tag features.
+    ///
+    /// # Returns
+    ///
+    /// The number of tag features.
+    pub fn n_tag_features(&self) -> usize {
+        self.tag_trainer.n_features()
     }
 
     /// Trains word boundaries.
@@ -336,6 +355,7 @@ impl<'a> Trainer<'a> {
                 }
             };
         }
+        let tag_model = self.tag_trainer.train(epsilon, cost, solver)?;
         Ok(Model {
             char_ngram_model: NgramModel::new(
                 char_ngram_weights
@@ -363,6 +383,7 @@ impl<'a> Trainer<'a> {
                     .collect(),
             ),
             bias,
+            tag_model,
             char_window_size: self.char_window_size,
             type_window_size: self.type_window_size,
         })

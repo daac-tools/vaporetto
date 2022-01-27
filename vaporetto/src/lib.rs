@@ -34,12 +34,15 @@ mod model;
 mod ngram_model;
 mod predictor;
 mod sentence;
+mod tag_model;
 mod type_scorer;
 
 pub mod errors;
 
 #[cfg(feature = "train")]
 mod feature;
+#[cfg(feature = "train")]
+mod tag_trainer;
 #[cfg(feature = "train")]
 mod trainer;
 

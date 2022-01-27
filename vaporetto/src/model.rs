@@ -5,6 +5,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
+use crate::tag_model::TagModel;
 
 /// Model data.
 pub struct Model {
@@ -14,6 +15,7 @@ pub struct Model {
     pub(crate) bias: i32,
     pub(crate) char_window_size: usize,
     pub(crate) type_window_size: usize,
+    pub(crate) tag_model: TagModel,
 }
 
 impl Model {
@@ -36,6 +38,7 @@ impl Model {
         wtr.write_i32::<LittleEndian>(self.bias)?;
         wtr.write_u32::<LittleEndian>(self.char_window_size.try_into().unwrap())?;
         wtr.write_u32::<LittleEndian>(self.type_window_size.try_into().unwrap())?;
+        self.tag_model.serialize(&mut wtr)?;
         Ok(())
     }
 
@@ -63,6 +66,7 @@ impl Model {
             bias: rdr.read_i32::<LittleEndian>()?,
             char_window_size: rdr.read_u32::<LittleEndian>()?.try_into().unwrap(),
             type_window_size: rdr.read_u32::<LittleEndian>()?.try_into().unwrap(),
+            tag_model: TagModel::deserialize(&mut rdr)?,
         })
     }
 
