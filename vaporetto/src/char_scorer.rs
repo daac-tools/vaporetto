@@ -8,12 +8,11 @@ use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
-#[cfg(all(feature = "simd", feature = "portable-simd"))]
+#[cfg(feature = "portable-simd")]
 use std::simd::i32x8;
 
-#[cfg(feature = "simd")]
 pub const SIMD_SIZE: usize = 8;
-#[cfg(all(feature = "simd", feature = "portable-simd"))]
+#[cfg(feature = "portable-simd")]
 type I32Vec = i32x8;
 
 struct PositionalWeight<W> {
@@ -50,9 +49,9 @@ impl NaivePositionalWeight {
 enum WeightVector {
     Array(Vec<i32>),
 
-    #[cfg(all(feature = "simd", not(feature = "portable-simd")))]
+    #[cfg(not(feature = "portable-simd"))]
     Simd([i32; SIMD_SIZE]),
-    #[cfg(all(feature = "simd", feature = "portable-simd"))]
+    #[cfg(feature = "portable-simd")]
     Simd(I32Vec),
 }
 
@@ -123,12 +122,6 @@ impl CharScorer {
             let PositionalWeight { offset, weight } = data.into_inner().0;
 
             let weight = {
-                #[cfg(not(feature = "simd"))]
-                {
-                    WeightVector::Array(weight)
-                }
-
-                #[cfg(feature = "simd")]
                 if weight.len() <= SIMD_SIZE {
                     let mut s = [0i32; SIMD_SIZE];
                     s[..weight.len()].copy_from_slice(weight.as_slice());
@@ -171,8 +164,6 @@ impl CharScorer {
                         }
                     }
                 }
-
-                #[cfg(feature = "simd")]
                 WeightVector::Simd(weight) => {
                     let ys_slice = &mut ys[offset as usize..offset as usize + SIMD_SIZE];
                     #[cfg(feature = "portable-simd")]

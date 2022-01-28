@@ -1,8 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(
-    all(feature = "simd", feature = "portable-simd"),
-    feature(portable_simd)
-)]
+#![cfg_attr(feature = "portable-simd", feature(portable_simd))]
 
 //! # Vaporetto
 //!

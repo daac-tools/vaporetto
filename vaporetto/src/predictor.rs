@@ -13,7 +13,6 @@ pub struct Predictor {
     char_scorer: CharScorer,
     type_scorer: TypeScorer,
 
-    #[cfg(feature = "simd")]
     padding: usize,
 }
 
@@ -43,7 +42,6 @@ impl Predictor {
             char_scorer,
             type_scorer,
 
-            #[cfg(feature = "simd")]
             padding: model.char_window_size.max(model.type_window_size),
         })
     }
@@ -66,23 +64,6 @@ impl Predictor {
     pub fn predict(&self, mut sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
 
-        #[cfg(not(feature = "simd"))]
-        if boundaries_size != 0 {
-            let mut ys = mem::take(&mut sentence.boundary_scores);
-            ys.resize(boundaries_size, 0);
-            self.predict_impl(&sentence, 0, &mut ys);
-            for (&y, b) in ys.iter().zip(sentence.boundaries.iter_mut()) {
-                *b = if y >= 0 {
-                    BoundaryType::WordBoundary
-                } else {
-                    BoundaryType::NotWordBoundary
-                };
-            }
-            sentence.boundary_scores = ys;
-            sentence.boundary_scores.clear();
-        }
-
-        #[cfg(feature = "simd")]
         if boundaries_size != 0 {
             let ys_size = boundaries_size + self.padding + crate::char_scorer::SIMD_SIZE - 1;
             let mut ys = mem::take(&mut sentence.boundary_scores);
@@ -117,22 +98,6 @@ impl Predictor {
     pub fn predict_with_score(&self, mut sentence: Sentence) -> Sentence {
         let boundaries_size = sentence.boundaries.len();
 
-        #[cfg(not(feature = "simd"))]
-        if boundaries_size != 0 {
-            let mut ys = mem::take(&mut sentence.boundary_scores);
-            ys.resize(boundaries_size, 0);
-            self.predict_impl(&sentence, 0, &mut ys);
-            for (&y, b) in ys.iter().zip(sentence.boundaries.iter_mut()) {
-                *b = if y >= 0 {
-                    BoundaryType::WordBoundary
-                } else {
-                    BoundaryType::NotWordBoundary
-                };
-            }
-            sentence.boundary_scores = ys;
-        }
-
-        #[cfg(feature = "simd")]
         if boundaries_size != 0 {
             let ys_size = boundaries_size + self.padding + crate::char_scorer::SIMD_SIZE - 1;
             let mut ys = vec![0; ys_size];

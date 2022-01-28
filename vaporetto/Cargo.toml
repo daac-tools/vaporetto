@@ -22,8 +22,7 @@ liblinear = { version = "1", optional = true }  # MIT
 default = []
 kytea = []
 train = ["liblinear"]
-simd = []
-portable-simd = ["simd"]
+portable-simd = []
 
 [package.metadata.docs.rs]
 all-features = true
