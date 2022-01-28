@@ -1,12 +1,10 @@
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
+use crate::utils::{AddWeight, MergableWeight, WeightMerger};
 
 #[cfg(feature = "portable-simd")]
 use std::simd::i32x8;
@@ -26,7 +24,9 @@ impl NaivePositionalWeight {
     fn new(offset: i32, weight: Vec<i32>) -> Self {
         Self { offset, weight }
     }
+}
 
+impl MergableWeight for NaivePositionalWeight {
     fn from_two_weights(weight1: &Self, weight2: &Self) -> Self {
         let (weight1, weight2) = if weight1.offset > weight2.offset {
             (weight2, weight1)
@@ -55,6 +55,48 @@ enum WeightVector {
     Simd(I32Vec),
 }
 
+impl WeightVector {
+    pub fn new(weight: Vec<i32>) -> Self {
+        if weight.len() <= SIMD_SIZE {
+            let mut s = [0i32; SIMD_SIZE];
+            s[..weight.len()].copy_from_slice(weight.as_slice());
+            #[cfg(not(feature = "portable-simd"))]
+            {
+                Self::Simd(s)
+            }
+            #[cfg(feature = "portable-simd")]
+            {
+                Self::Simd(I32Vec::from_array(s))
+            }
+        } else {
+            Self::Array(weight)
+        }
+    }
+}
+
+impl AddWeight for WeightVector {
+    fn add_weight(&self, ys: &mut [i32], offset: isize) {
+        match self {
+            WeightVector::Array(weight) => {
+                weight.add_weight(ys, offset);
+            }
+            WeightVector::Simd(weight) => {
+                let ys_slice = &mut ys[offset as usize..offset as usize + SIMD_SIZE];
+                #[cfg(feature = "portable-simd")]
+                {
+                    let mut target = I32Vec::from_slice(ys_slice);
+                    target += weight;
+                    ys_slice.copy_from_slice(target.as_array());
+                }
+                #[cfg(not(feature = "portable-simd"))]
+                for (y, w) in ys_slice.iter_mut().zip(weight) {
+                    *y += w;
+                }
+            }
+        }
+    }
+}
+
 pub struct CharScorer {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<PositionalWeight<WeightVector>>,
@@ -62,18 +104,11 @@ pub struct CharScorer {
 
 impl CharScorer {
     pub fn new(model: NgramModel<String>, window_size: usize, dict: DictModel) -> Result<Self> {
-        // key: ngram, value: (weight, check)
-        let mut weights_map: BTreeMap<String, RefCell<(NaivePositionalWeight, bool)>> =
-            BTreeMap::new();
+        let mut weight_merger = WeightMerger::new();
 
         for d in model.data {
             let weight = PositionalWeight::new(-(window_size as i32), d.weights);
-            if let Some(data) = weights_map.get_mut(&d.ngram) {
-                let (prev_weight, _) = &mut *data.borrow_mut();
-                *prev_weight = PositionalWeight::from_two_weights(&weight, prev_weight);
-            } else {
-                weights_map.insert(d.ngram, RefCell::new((weight, false)));
-            }
+            weight_merger.add(&d.ngram, weight);
         }
         for d in dict.dict {
             let word_len = d.word.chars().count();
@@ -82,62 +117,18 @@ impl CharScorer {
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
             let weight = PositionalWeight::new(-(word_len as i32), weight);
-            if let Some(data) = weights_map.get_mut(&d.word) {
-                let (prev_weight, _) = &mut *data.borrow_mut();
-                *prev_weight = PositionalWeight::from_two_weights(&weight, prev_weight);
-            } else {
-                weights_map.insert(d.word, RefCell::new((weight, false)));
-            }
+            weight_merger.add(&d.word, weight);
         }
 
-        let mut stack = vec![];
-        for (ngram, data) in &weights_map {
-            if data.borrow().1 {
-                continue;
-            }
-            stack.push(data);
-            for (j, _) in ngram.char_indices().skip(1) {
-                if let Some(data) = weights_map.get(&ngram[j..]) {
-                    stack.push(data);
-                    if data.borrow().1 {
-                        break;
-                    }
-                }
-            }
-            let mut data_from = stack.pop().unwrap();
-            data_from.borrow_mut().1 = true;
-            while let Some(data_to) = stack.pop() {
-                let new_data = (
-                    PositionalWeight::from_two_weights(&data_from.borrow().0, &data_to.borrow().0),
-                    true,
-                );
-                *data_to.borrow_mut() = new_data;
-                data_from = data_to;
-            }
-        }
         let mut ngrams = vec![];
         let mut weights = vec![];
-        for (ngram, data) in weights_map {
+        for (ngram, data) in weight_merger.merge() {
             ngrams.push(ngram);
-            let PositionalWeight { offset, weight } = data.into_inner().0;
-
-            let weight = {
-                if weight.len() <= SIMD_SIZE {
-                    let mut s = [0i32; SIMD_SIZE];
-                    s[..weight.len()].copy_from_slice(weight.as_slice());
-                    #[cfg(not(feature = "portable-simd"))]
-                    {
-                        WeightVector::Simd(s)
-                    }
-                    #[cfg(feature = "portable-simd")]
-                    {
-                        WeightVector::Simd(I32Vec::from_array(s))
-                    }
-                } else {
-                    WeightVector::Array(weight)
-                }
-            };
-            weights.push(PositionalWeight { offset, weight });
+            let PositionalWeight { offset, weight } = data;
+            weights.push(PositionalWeight {
+                offset,
+                weight: WeightVector::new(weight),
+            });
         }
         let pma = DoubleArrayAhoCorasick::new(ngrams)
             .map_err(|_| VaporettoError::invalid_model("invalid character n-grams"))?;
@@ -152,32 +143,7 @@ impl CharScorer {
             let pos_weights = unsafe { self.weights.get_unchecked(m.value()) };
 
             let offset = padding as isize + m_end as isize + pos_weights.offset as isize - 1;
-            match &pos_weights.weight {
-                WeightVector::Array(weight) => {
-                    if offset >= 0 {
-                        for (w, y) in weight.iter().zip(&mut ys[offset as usize..]) {
-                            *y += w;
-                        }
-                    } else {
-                        for (w, y) in weight[-offset as usize..].iter().zip(ys.iter_mut()) {
-                            *y += w;
-                        }
-                    }
-                }
-                WeightVector::Simd(weight) => {
-                    let ys_slice = &mut ys[offset as usize..offset as usize + SIMD_SIZE];
-                    #[cfg(feature = "portable-simd")]
-                    {
-                        let mut target = I32Vec::from_slice(ys_slice);
-                        target += weight;
-                        ys_slice.copy_from_slice(target.as_array());
-                    }
-                    #[cfg(not(feature = "portable-simd"))]
-                    for (y, w) in ys_slice.iter_mut().zip(weight) {
-                        *y += w;
-                    }
-                }
-            }
+            pos_weights.weight.add_weight(ys, offset);
         }
     }
 }

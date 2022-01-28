@@ -33,6 +33,7 @@ mod predictor;
 mod sentence;
 mod tag_model;
 mod type_scorer;
+mod utils;
 
 pub mod errors;
 

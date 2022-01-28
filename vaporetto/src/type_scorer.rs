@@ -6,6 +6,7 @@ use daachorse::DoubleArrayAhoCorasick;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
+use crate::utils::AddWeight;
 
 pub enum TypeScorer {
     Pma(TypeScorerPma),
@@ -94,15 +95,7 @@ impl TypeScorerPma {
             // Both the weights and the PMA always have the same number of items.
             // Therefore, the following code is safe.
             let weights = unsafe { self.weights.get_unchecked(m.value()) };
-            if offset >= 0 {
-                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
-                    *y += w;
-                }
-            } else {
-                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
-                    *y += w;
-                }
-            }
+            weights.add_weight(ys, offset);
         }
     }
 }
