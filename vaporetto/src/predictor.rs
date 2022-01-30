@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::char_scorer::CharScorer;
+use crate::char_scorer::{self, CharScorer};
 use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{BoundaryType, Sentence};
@@ -46,10 +46,27 @@ impl Predictor {
         })
     }
 
-    fn predict_impl(&self, sentence: &Sentence, padding: usize, ys: &mut [i32]) {
-        ys.fill(self.bias);
-        self.char_scorer.add_scores(sentence, padding, ys);
-        self.type_scorer.add_scores(sentence, &mut ys[padding..]);
+    fn predict_impl(&self, mut sentence: Sentence) -> Sentence {
+        let ys_size = sentence.boundaries.len() + self.padding + char_scorer::SIMD_SIZE - 1;
+        let mut ys = mem::take(&mut sentence.boundary_scores);
+        ys.clear();
+        ys.resize(ys_size, self.bias);
+        self.char_scorer
+            .add_scores(&sentence, self.padding, &mut ys);
+        self.type_scorer
+            .add_scores(&sentence, &mut ys[self.padding..]);
+        for (&y, b) in ys[self.padding..]
+            .iter()
+            .zip(sentence.boundaries.iter_mut())
+        {
+            *b = if y >= 0 {
+                BoundaryType::WordBoundary
+            } else {
+                BoundaryType::NotWordBoundary
+            };
+        }
+        sentence.boundary_scores = ys;
+        sentence
     }
 
     /// Predicts word boundaries.
@@ -61,28 +78,9 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict(&self, mut sentence: Sentence) -> Sentence {
-        let boundaries_size = sentence.boundaries.len();
-
-        if boundaries_size != 0 {
-            let ys_size = boundaries_size + self.padding + crate::char_scorer::SIMD_SIZE - 1;
-            let mut ys = mem::take(&mut sentence.boundary_scores);
-            ys.resize(ys_size, 0);
-            self.predict_impl(&sentence, self.padding, &mut ys);
-            for (&y, b) in ys[self.padding..]
-                .iter()
-                .zip(sentence.boundaries.iter_mut())
-            {
-                *b = if y >= 0 {
-                    BoundaryType::WordBoundary
-                } else {
-                    BoundaryType::NotWordBoundary
-                };
-            }
-            sentence.boundary_scores = ys;
-            sentence.boundary_scores.clear();
-        }
-
+    pub fn predict(&self, sentence: Sentence) -> Sentence {
+        let mut sentence = self.predict_impl(sentence);
+        sentence.boundary_scores.clear();
         sentence
     }
 
@@ -95,30 +93,10 @@ impl Predictor {
     /// # Returns
     ///
     /// A sentence with predicted boundary information.
-    pub fn predict_with_score(&self, mut sentence: Sentence) -> Sentence {
-        let boundaries_size = sentence.boundaries.len();
-
-        if boundaries_size != 0 {
-            let ys_size = boundaries_size + self.padding + crate::char_scorer::SIMD_SIZE - 1;
-            let mut ys = vec![0; ys_size];
-            self.predict_impl(&sentence, self.padding, &mut ys);
-            sentence.boundary_scores.resize(boundaries_size, 0);
-            for (&y, (b, s)) in ys[self.padding..].iter().zip(
-                sentence
-                    .boundaries
-                    .iter_mut()
-                    .zip(sentence.boundary_scores.iter_mut()),
-            ) {
-                *b = if y >= 0 {
-                    BoundaryType::WordBoundary
-                } else {
-                    BoundaryType::NotWordBoundary
-                };
-
-                *s = y;
-            }
-        }
-
+    pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
+        let mut sentence = self.predict_impl(sentence);
+        sentence.boundary_scores.rotate_left(self.padding);
+        sentence.boundary_scores.truncate(sentence.boundaries.len());
         sentence
     }
 }

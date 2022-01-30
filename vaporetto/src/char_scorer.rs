@@ -107,7 +107,7 @@ impl CharScorer {
         let mut weight_merger = WeightMerger::new();
 
         for d in model.data {
-            let weight = PositionalWeight::new(-(window_size as i32), d.weights);
+            let weight = PositionalWeight::new(-(window_size as i32) - 1, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
         for d in dict.dict {
@@ -116,7 +116,7 @@ impl CharScorer {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let weight = PositionalWeight::new(-(word_len as i32), weight);
+            let weight = PositionalWeight::new(-(word_len as i32) - 1, weight);
             weight_merger.add(&d.word, weight);
         }
 
@@ -136,13 +136,17 @@ impl CharScorer {
     }
 
     pub fn add_scores(&self, sentence: &Sentence, padding: usize, ys: &mut [i32]) {
+        // If the following assertion fails, Vaporetto has a bug.
+        assert_eq!(sentence.str_to_char_pos.len(), sentence.text.len() + 1);
+
         for m in self.pma.find_overlapping_no_suffix_iter(&sentence.text) {
-            let m_end = sentence.str_to_char_pos[m.end()];
+            // This was checked outside of the iteration.
+            let m_end = unsafe { *sentence.str_to_char_pos.get_unchecked(m.end()) };
             // Both the weights and the PMA always have the same number of items.
             // Therefore, the following code is safe.
             let pos_weights = unsafe { self.weights.get_unchecked(m.value()) };
 
-            let offset = padding as isize + m_end as isize + pos_weights.offset as isize - 1;
+            let offset = padding as isize + m_end as isize + pos_weights.offset as isize;
             pos_weights.weight.add_weight(ys, offset);
         }
     }

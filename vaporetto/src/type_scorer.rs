@@ -164,12 +164,12 @@ impl TypeScorerCache {
     }
 
     fn seqid_to_seq(mut seqid: usize, sequence: &mut [u8]) -> bool {
-        for i in (0..sequence.len()).rev() {
+        for type_id in sequence.iter_mut().rev() {
             let x = seqid & ALPHABET_MASK;
             if x == ALPHABET_MASK {
                 return false; // invalid
             }
-            sequence[i] = ID_TO_TYPE[x];
+            *type_id = ID_TO_TYPE[x];
             seqid >>= ALPHABET_SHIFT;
         }
         assert_eq!(seqid, 0);
@@ -198,7 +198,7 @@ const ALPHABET_SIZE: usize = 8;
 const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
 const ALPHABET_SHIFT: usize = 3;
 const TYPE_TO_ID: [u32; 256] = make_type_to_id();
-const ID_TO_TYPE: [u8; 256] = make_id_to_type();
+const ID_TO_TYPE: [u8; ALPHABET_SIZE] = make_id_to_type();
 
 const fn make_type_to_id() -> [u32; 256] {
     use crate::sentence::CharacterType::*;
@@ -213,10 +213,10 @@ const fn make_type_to_id() -> [u32; 256] {
     type_to_id
 }
 
-const fn make_id_to_type() -> [u8; 256] {
+const fn make_id_to_type() -> [u8; ALPHABET_SIZE] {
     use crate::sentence::CharacterType::*;
 
-    let mut id_to_type = [0u8; 256];
+    let mut id_to_type = [0u8; ALPHABET_SIZE];
     id_to_type[1] = Digit as u8;
     id_to_type[2] = Roman as u8;
     id_to_type[3] = Hiragana as u8;
