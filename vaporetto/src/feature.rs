@@ -239,10 +239,11 @@ impl TagExampleGenerator {
                     if let Some(tag) = t.as_ref() {
                         current_tag.replace(Rc::clone(tag));
                         tag_right_pos = i + 1;
-                        for j in (i + 2)..(i + 2 + self.char_window_size).min(sentence.chars.len())
+                        for j in
+                            (i + 2)..(i + 2 + self.char_window_size).min(sentence.chars.len() + 1)
                         {
+                            let rel_position = j as isize - i as isize - 1;
                             for start in j.saturating_sub(self.char_ngram_size)..j {
-                                let rel_position = j as isize - i as isize - 1;
                                 features.push(TagFeature::right_char_ngram(
                                     rel_position,
                                     sentence.char_substring(start, j),
@@ -587,6 +588,71 @@ mod tests {
                     TagFeature::chars("だ"),
                 ],
                 tag: Rc::new("助動詞".to_string()),
+            },
+        ];
+
+        expected
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        expected.sort_unstable();
+
+        assert_eq!(expected, examples);
+    }
+
+    #[test]
+    fn test_tag_example_generate_check_sentence_boundary() {
+        let gen = TagExampleGenerator::new(3, 3);
+
+        let s = Sentence::from_tokenized("僕/代名詞 は/助詞 人間/名詞").unwrap();
+        let mut examples = gen.generate(&s).unwrap();
+
+        // The order of examples is unimportant.
+        examples
+            .iter_mut()
+            .for_each(|example| example.features.sort_unstable());
+        examples.sort_unstable();
+
+        let mut expected = vec![
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "僕は"),
+                    TagFeature::right_char_ngram(1, "は"),
+                    TagFeature::right_char_ngram(2, "僕は人"),
+                    TagFeature::right_char_ngram(2, "は人"),
+                    TagFeature::right_char_ngram(2, "人"),
+                    TagFeature::right_char_ngram(3, "は人間"),
+                    TagFeature::right_char_ngram(3, "人間"),
+                    TagFeature::right_char_ngram(3, "間"),
+                    TagFeature::chars("僕"),
+                ],
+                tag: Rc::new("代名詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::right_char_ngram(1, "僕は人"),
+                    TagFeature::right_char_ngram(1, "は人"),
+                    TagFeature::right_char_ngram(1, "人"),
+                    TagFeature::right_char_ngram(2, "は人間"),
+                    TagFeature::right_char_ngram(2, "人間"),
+                    TagFeature::right_char_ngram(2, "間"),
+                    TagFeature::left_char_ngram(-1, "僕は人"),
+                    TagFeature::left_char_ngram(-1, "僕は"),
+                    TagFeature::left_char_ngram(-1, "僕"),
+                    TagFeature::chars("は"),
+                ],
+                tag: Rc::new("助詞".to_string()),
+            },
+            TagExample {
+                features: vec![
+                    TagFeature::left_char_ngram(-2, "僕は人"),
+                    TagFeature::left_char_ngram(-2, "僕は"),
+                    TagFeature::left_char_ngram(-2, "僕"),
+                    TagFeature::left_char_ngram(-1, "は人間"),
+                    TagFeature::left_char_ngram(-1, "は人"),
+                    TagFeature::left_char_ngram(-1, "は"),
+                    TagFeature::chars("人間"),
+                ],
+                tag: Rc::new("名詞".to_string()),
             },
         ];
 
