@@ -202,7 +202,7 @@ impl<'a> Trainer<'a> {
                 type_ngram_size,
                 char_window_size,
                 type_window_size,
-                dictionary.as_ref(),
+                Some(dictionary.as_ref()).filter(|d| !d.is_empty()),
                 dict_max_word_size,
             )?,
             char_window_size,

@@ -70,7 +70,7 @@ pub struct BoundaryExampleGenerator {
     type_ngram_size: usize,
     char_window_size: usize,
     type_window_size: usize,
-    dict_ac: DoubleArrayAhoCorasick,
+    dict_ac: Option<DoubleArrayAhoCorasick>,
     dict_max_word_size: usize,
 }
 
@@ -80,20 +80,27 @@ impl BoundaryExampleGenerator {
         type_ngram_size: usize,
         char_window_size: usize,
         type_window_size: usize,
-        dict: I,
+        dict: Option<I>,
         dict_max_word_size: usize,
     ) -> Result<Self>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
     {
+        let dict_ac = if let Some(dict) = dict {
+            Some(
+                DoubleArrayAhoCorasick::new(dict)
+                    .map_err(|e| VaporettoError::invalid_argument("dict", format!("{:?}", e)))?,
+            )
+        } else {
+            None
+        };
         Ok(Self {
             char_ngram_size,
             type_ngram_size,
             char_window_size,
             type_window_size,
-            dict_ac: DoubleArrayAhoCorasick::new(dict)
-                .map_err(|e| VaporettoError::invalid_argument("dict", format!("{:?}", e)))?,
+            dict_ac,
             dict_max_word_size,
         })
     }
@@ -126,29 +133,31 @@ impl BoundaryExampleGenerator {
             }
             result.push(BoundaryExample { features, label })
         }
-        for m in self.dict_ac.find_overlapping_iter(&s.text) {
-            let m_start = s.str_to_char_pos[m.start()];
-            let m_end = s.str_to_char_pos[m.end()];
-            let length = (m_end - m_start).min(self.dict_max_word_size);
-            if m_start != 0 {
-                result[m_start - 1]
-                    .features
-                    .push(BoundaryFeature::dict_word(
-                        DictionaryWordPosition::Right,
+        if let Some(dict_ac) = self.dict_ac.as_ref() {
+            for m in dict_ac.find_overlapping_iter(&s.text) {
+                let m_start = s.str_to_char_pos[m.start()];
+                let m_end = s.str_to_char_pos[m.end()];
+                let length = (m_end - m_start).min(self.dict_max_word_size);
+                if m_start != 0 {
+                    result[m_start - 1]
+                        .features
+                        .push(BoundaryFeature::dict_word(
+                            DictionaryWordPosition::Right,
+                            length,
+                        ));
+                }
+                for example in &mut result[m_start..m_end - 1] {
+                    example.features.push(BoundaryFeature::dict_word(
+                        DictionaryWordPosition::Inside,
                         length,
                     ));
-            }
-            for example in &mut result[m_start..m_end - 1] {
-                example.features.push(BoundaryFeature::dict_word(
-                    DictionaryWordPosition::Inside,
-                    length,
-                ));
-            }
-            if m_end != s.chars().len() {
-                result[m_end - 1].features.push(BoundaryFeature::dict_word(
-                    DictionaryWordPosition::Left,
-                    length,
-                ));
+                }
+                if m_end != s.chars().len() {
+                    result[m_end - 1].features.push(BoundaryFeature::dict_word(
+                        DictionaryWordPosition::Left,
+                        length,
+                    ));
+                }
             }
         }
         result
@@ -327,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_example_generator_generate_one() {
-        let dict = ["東京特許許可局", "火星猫", "猫"];
+        let dict = Some(["東京特許許可局", "火星猫", "猫"]);
         let gen = BoundaryExampleGenerator::new(3, 2, 3, 2, dict, 2).unwrap();
 
         let s = Sentence::from_raw("猫").unwrap();
@@ -338,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_example_generator_generate_all() {
-        let dict = ["東京特許許可局", "火星猫", "猫"];
+        let dict = Some(["東京特許許可局", "火星猫", "猫"]);
         let gen = BoundaryExampleGenerator::new(3, 2, 3, 2, dict, 2).unwrap();
 
         let s = Sentence::from_partial_annotation("A-r-i-a|は|火-星 猫|だ").unwrap();
@@ -430,7 +439,7 @@ mod tests {
 
     #[test]
     fn test_example_generator_generate_without_unknown() {
-        let dict = ["東京特許許可局", "火星猫", "猫"];
+        let dict = Some(["東京特許許可局", "火星猫", "猫"]);
         let gen = BoundaryExampleGenerator::new(3, 2, 3, 2, dict, 2).unwrap();
 
         let s = Sentence::from_partial_annotation("A-r-i-a|は|火-星 猫|だ").unwrap();
