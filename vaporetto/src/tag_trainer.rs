@@ -121,6 +121,17 @@ impl<'a> TagTrainer<'a> {
                             left_char_weights.insert(ngram.to_string(), weights);
                         }
                     }
+                    TagFeature::LeftCharacterNgramBos(StringNgramFeature {
+                        rel_position,
+                        ngram,
+                    }) => {
+                        let pos = -rel_position - 1;
+                        let idx = i + pos as usize * self.tag_ids.len();
+                        let ngram = "\0".to_string() + *ngram;
+                        left_char_weights.entry(ngram).or_insert_with(|| {
+                            vec![0; self.char_window_size * self.tag_ids.len()]
+                        })[idx] = weight;
+                    }
                     TagFeature::RightCharacterNgram(StringNgramFeature {
                         rel_position,
                         ngram,
@@ -134,6 +145,17 @@ impl<'a> TagTrainer<'a> {
                             weights[idx] = weight;
                             right_char_weights.insert(ngram.to_string(), weights);
                         }
+                    }
+                    TagFeature::RightCharacterNgramEos(StringNgramFeature {
+                        rel_position,
+                        ngram,
+                    }) => {
+                        let pos = self.char_window_size as isize - rel_position;
+                        let idx = i as usize + pos as usize * self.tag_ids.len();
+                        let ngram = ngram.to_string() + "\0";
+                        right_char_weights.entry(ngram).or_insert_with(|| {
+                            vec![0; self.char_window_size * self.tag_ids.len()]
+                        })[idx] = weight;
                     }
                     TagFeature::Character(ngram) => {
                         if let Some(weights) = self_char_weights.get_mut(*ngram) {

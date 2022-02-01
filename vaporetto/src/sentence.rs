@@ -214,6 +214,12 @@ impl Sentence {
         chars.clear();
 
         for c in raw_text.chars() {
+            if c == '\0' {
+                return Err(VaporettoError::invalid_argument(
+                    "raw_text",
+                    "must not contain NULL",
+                ));
+            }
             chars.push(c);
         }
         boundaries.clear();
@@ -301,6 +307,12 @@ impl Sentence {
                         });
                         tags.push(tag_str.take().map(Rc::new));
                     }
+                    if c == '\0' {
+                        return Err(VaporettoError::invalid_argument(
+                            "tokenized_text",
+                            "must not contain NULL",
+                        ));
+                    }
                     prev_boundary = false;
                     escape = false;
                     text.push(c);
@@ -346,6 +358,12 @@ impl Sentence {
         let mut fixed_token = true;
         for &c in &labeled_chars {
             if is_char {
+                if c == '\0' {
+                    return Err(VaporettoError::invalid_argument(
+                        "labeled_text",
+                        "must not contain NULL",
+                    ));
+                }
                 text.push(c);
                 chars.push(c);
                 is_char = false;
@@ -1155,6 +1173,40 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_from_raw_null() {
+        let s = Sentence::from_raw("A1あ\0ア亜");
+
+        assert_eq!(
+            "InvalidArgumentError: raw_text: must not contain NULL",
+            &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_raw_null() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_raw("A1あ\0ア亜");
+
+        assert_eq!(
+            "InvalidArgumentError: raw_text: must not contain NULL",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: b"O".to_vec(),
+            boundaries: vec![],
+            boundary_scores: vec![],
+            tag_scores: TagScores::default(),
+            tags: vec![None],
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
     fn test_sentence_from_raw_one() {
         let s = Sentence::from_raw("あ");
 
@@ -1271,6 +1323,40 @@ mod tests {
 
         assert_eq!(
             "InvalidArgumentError: tokenized_text: must contain at least one character",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: b"O".to_vec(),
+            boundaries: vec![],
+            boundary_scores: vec![],
+            tag_scores: TagScores::default(),
+            tags: vec![None],
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
+    fn test_sentence_from_tokenized_null() {
+        let s = Sentence::from_tokenized("A1あ\0ア亜");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: must not contain NULL",
+            &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_null() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_tokenized("A1あ\0ア亜");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: must not contain NULL",
             &result.err().unwrap().to_string()
         );
 
@@ -1998,6 +2084,40 @@ mod tests {
 
         assert_eq!(
             "InvalidArgumentError: labeled_text: must contain at least one character",
+            &result.err().unwrap().to_string()
+        );
+
+        let expected = Sentence {
+            text: " ".to_string(),
+            chars: vec![' '],
+            str_to_char_pos: vec![0, 1],
+            char_to_str_pos: vec![0, 1],
+            char_type: b"O".to_vec(),
+            boundaries: vec![],
+            boundary_scores: vec![],
+            tag_scores: TagScores::default(),
+            tags: vec![None],
+        };
+        assert_eq!(expected, s);
+    }
+
+    #[test]
+    fn test_sentence_from_partial_annotation_null() {
+        let s = Sentence::from_partial_annotation("A-1-あ-\0-ア-亜");
+
+        assert_eq!(
+            "InvalidArgumentError: labeled_text: must not contain NULL",
+            &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_partial_annotation_null() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_partial_annotation("A-1-あ-\0-ア-亜");
+
+        assert_eq!(
+            "InvalidArgumentError: labeled_text: must not contain NULL",
             &result.err().unwrap().to_string()
         );
     }

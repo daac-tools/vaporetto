@@ -161,7 +161,9 @@ impl BoundaryExampleGenerator {
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TagFeature<'a> {
     LeftCharacterNgram(StringNgramFeature<'a>),
+    LeftCharacterNgramBos(StringNgramFeature<'a>),
     RightCharacterNgram(StringNgramFeature<'a>),
+    RightCharacterNgramEos(StringNgramFeature<'a>),
     Character(&'a str),
 }
 
@@ -173,8 +175,22 @@ impl<'a> TagFeature<'a> {
         })
     }
 
+    pub const fn left_char_ngram_bos(rel_position: isize, ngram: &'a str) -> Self {
+        Self::LeftCharacterNgramBos(StringNgramFeature {
+            rel_position,
+            ngram,
+        })
+    }
+
     pub const fn right_char_ngram(rel_position: isize, ngram: &'a str) -> Self {
         Self::RightCharacterNgram(StringNgramFeature {
+            rel_position,
+            ngram,
+        })
+    }
+
+    pub const fn right_char_ngram_eos(rel_position: isize, ngram: &'a str) -> Self {
+        Self::RightCharacterNgramEos(StringNgramFeature {
             rel_position,
             ngram,
         })
@@ -207,6 +223,14 @@ impl TagExampleGenerator {
     pub fn generate<'a>(&self, sentence: &'a Sentence) -> Result<Vec<TagExample<'a>>> {
         let mut result = vec![];
         let mut features = vec![];
+        for start in (sentence.chars.len() + 1).saturating_sub(self.char_ngram_size)
+            ..sentence.chars.len() + 1
+        {
+            features.push(TagFeature::right_char_ngram_eos(
+                1,
+                sentence.char_substring(start, sentence.chars.len()),
+            ));
+        }
         let mut current_tag: Option<Rc<String>> =
             sentence.tags.last().and_then(|x| x.as_ref()).map(Rc::clone);
         let mut tag_right_pos = sentence.chars.len();
@@ -220,6 +244,15 @@ impl TagExampleGenerator {
             match b {
                 BoundaryType::WordBoundary => {
                     if let Some(tag) = current_tag.take() {
+                        if i + 2 <= self.char_window_size {
+                            let rel_position = -(i as isize) - 2;
+                            for end in 0..sentence.chars.len().min(self.char_ngram_size) {
+                                features.push(TagFeature::left_char_ngram_bos(
+                                    rel_position,
+                                    sentence.char_substring(0, end),
+                                ));
+                            }
+                        }
                         for j in (i + 1).saturating_sub(self.char_window_size)..i + 1 {
                             let rel_position = j as isize - i as isize - 1;
                             for end in j + 1..sentence.chars.len().min(j + self.char_ngram_size) + 1
@@ -250,6 +283,18 @@ impl TagExampleGenerator {
                                 ));
                             }
                         }
+                        if i + self.char_window_size >= sentence.chars.len() {
+                            let rel_position = sentence.chars.len() as isize - i as isize;
+                            for start in (sentence.chars.len() + 1)
+                                .saturating_sub(self.char_ngram_size)
+                                ..sentence.chars.len() + 1
+                            {
+                                features.push(TagFeature::right_char_ngram_eos(
+                                    rel_position,
+                                    sentence.char_substring(start, sentence.chars.len()),
+                                ));
+                            }
+                        }
                     }
                 }
                 BoundaryType::NotWordBoundary => (),
@@ -261,6 +306,12 @@ impl TagExampleGenerator {
             }
         }
         if let Some(tag) = current_tag.take() {
+            for end in 0..sentence.chars.len().min(self.char_ngram_size) {
+                features.push(TagFeature::left_char_ngram_bos(
+                    -1,
+                    sentence.char_substring(0, end),
+                ));
+            }
             features.push(TagFeature::chars(sentence.char_substring(0, tag_right_pos)));
             result.push(TagExample { features, tag });
         }
@@ -414,6 +465,9 @@ mod tests {
                     TagFeature::right_char_ngram(3, "は火星"),
                     TagFeature::right_char_ngram(3, "火星"),
                     TagFeature::right_char_ngram(3, "星"),
+                    TagFeature::left_char_ngram_bos(-1, ""),
+                    TagFeature::left_char_ngram_bos(-1, "A"),
+                    TagFeature::left_char_ngram_bos(-1, "Ar"),
                     TagFeature::chars("Aria"),
                 ],
                 tag: Rc::new("名詞".to_string()),
@@ -444,6 +498,9 @@ mod tests {
             },
             TagExample {
                 features: vec![
+                    TagFeature::right_char_ngram_eos(1, "猫だ"),
+                    TagFeature::right_char_ngram_eos(1, "だ"),
+                    TagFeature::right_char_ngram_eos(1, ""),
                     TagFeature::left_char_ngram(-3, "火"),
                     TagFeature::left_char_ngram(-3, "火星"),
                     TagFeature::left_char_ngram(-3, "火星猫"),
@@ -489,6 +546,9 @@ mod tests {
                     TagFeature::right_char_ngram(2, "aは火"),
                     TagFeature::right_char_ngram(2, "は火"),
                     TagFeature::right_char_ngram(2, "火"),
+                    TagFeature::left_char_ngram_bos(-1, ""),
+                    TagFeature::left_char_ngram_bos(-1, "A"),
+                    TagFeature::left_char_ngram_bos(-1, "Ar"),
                     TagFeature::chars("Aria"),
                 ],
                 tag: Rc::new("名詞".to_string()),
@@ -513,6 +573,9 @@ mod tests {
             },
             TagExample {
                 features: vec![
+                    TagFeature::right_char_ngram_eos(1, "猫だ"),
+                    TagFeature::right_char_ngram_eos(1, "だ"),
+                    TagFeature::right_char_ngram_eos(1, ""),
                     TagFeature::left_char_ngram(-2, "星"),
                     TagFeature::left_char_ngram(-2, "星猫"),
                     TagFeature::left_char_ngram(-2, "星猫だ"),
@@ -555,6 +618,8 @@ mod tests {
                     TagFeature::right_char_ngram(2, "火"),
                     TagFeature::right_char_ngram(3, "火星"),
                     TagFeature::right_char_ngram(3, "星"),
+                    TagFeature::left_char_ngram_bos(-1, ""),
+                    TagFeature::left_char_ngram_bos(-1, "A"),
                     TagFeature::chars("Aria"),
                 ],
                 tag: Rc::new("名詞".to_string()),
@@ -579,6 +644,8 @@ mod tests {
             },
             TagExample {
                 features: vec![
+                    TagFeature::right_char_ngram_eos(1, "だ"),
+                    TagFeature::right_char_ngram_eos(1, ""),
                     TagFeature::left_char_ngram(-3, "火"),
                     TagFeature::left_char_ngram(-3, "火星"),
                     TagFeature::left_char_ngram(-2, "星"),
@@ -623,6 +690,9 @@ mod tests {
                     TagFeature::right_char_ngram(3, "は人間"),
                     TagFeature::right_char_ngram(3, "人間"),
                     TagFeature::right_char_ngram(3, "間"),
+                    TagFeature::left_char_ngram_bos(-1, ""),
+                    TagFeature::left_char_ngram_bos(-1, "僕"),
+                    TagFeature::left_char_ngram_bos(-1, "僕は"),
                     TagFeature::chars("僕"),
                 ],
                 tag: Rc::new("代名詞".to_string()),
@@ -635,6 +705,12 @@ mod tests {
                     TagFeature::right_char_ngram(2, "は人間"),
                     TagFeature::right_char_ngram(2, "人間"),
                     TagFeature::right_char_ngram(2, "間"),
+                    TagFeature::right_char_ngram_eos(3, "人間"),
+                    TagFeature::right_char_ngram_eos(3, "間"),
+                    TagFeature::right_char_ngram_eos(3, ""),
+                    TagFeature::left_char_ngram_bos(-2, "僕は"),
+                    TagFeature::left_char_ngram_bos(-2, "僕"),
+                    TagFeature::left_char_ngram_bos(-2, ""),
                     TagFeature::left_char_ngram(-1, "僕は人"),
                     TagFeature::left_char_ngram(-1, "僕は"),
                     TagFeature::left_char_ngram(-1, "僕"),
@@ -644,6 +720,12 @@ mod tests {
             },
             TagExample {
                 features: vec![
+                    TagFeature::right_char_ngram_eos(1, "人間"),
+                    TagFeature::right_char_ngram_eos(1, "間"),
+                    TagFeature::right_char_ngram_eos(1, ""),
+                    TagFeature::left_char_ngram_bos(-3, "僕は"),
+                    TagFeature::left_char_ngram_bos(-3, "僕"),
+                    TagFeature::left_char_ngram_bos(-3, ""),
                     TagFeature::left_char_ngram(-2, "僕は人"),
                     TagFeature::left_char_ngram(-2, "僕は"),
                     TagFeature::left_char_ngram(-2, "僕"),
