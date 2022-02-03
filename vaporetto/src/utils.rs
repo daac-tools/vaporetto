@@ -8,11 +8,13 @@ pub trait AddWeight {
 impl AddWeight for Vec<i32> {
     fn add_weight(&self, ys: &mut [i32], offset: isize) {
         if offset >= 0 {
-            for (w, y) in self.iter().zip(&mut ys[offset as usize..]) {
-                *y += w;
+            if let Some(ys) = ys.get_mut(offset as usize..) {
+                for (w, y) in self.iter().zip(ys) {
+                    *y += w;
+                }
             }
-        } else {
-            for (w, y) in self[-offset as usize..].iter().zip(ys.iter_mut()) {
+        } else if let Some(ws) = self.get(-offset as usize..) {
+            for (w, y) in ws.iter().zip(ys.iter_mut()) {
                 *y += w;
             }
         }
@@ -20,27 +22,29 @@ impl AddWeight for Vec<i32> {
 }
 
 pub trait MergableWeight {
-    fn from_two_weights(weight1: &Self, weight2: &Self) -> Self;
+    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self;
 }
 
 pub struct WeightMerger<W> {
     map: BTreeMap<String, RefCell<(W, bool)>>,
+    n_classes: usize,
 }
 
 impl<W> WeightMerger<W>
 where
     W: MergableWeight,
 {
-    pub fn new() -> Self {
+    pub fn new(n_classes: usize) -> Self {
         Self {
             map: BTreeMap::new(),
+            n_classes,
         }
     }
 
     pub fn add(&mut self, ngram: &str, weight: W) {
         if let Some(data) = self.map.get_mut(ngram) {
             let (prev_weight, _) = &mut *data.borrow_mut();
-            *prev_weight = W::from_two_weights(&weight, prev_weight);
+            *prev_weight = W::from_two_weights(&weight, prev_weight, self.n_classes);
         } else {
             self.map
                 .insert(ngram.to_string(), RefCell::new((weight, false)));
@@ -66,7 +70,7 @@ where
             data_from.borrow_mut().1 = true;
             while let Some(data_to) = stack.pop() {
                 let new_data = (
-                    W::from_two_weights(&data_from.borrow().0, &data_to.borrow().0),
+                    W::from_two_weights(&data_from.borrow().0, &data_to.borrow().0, self.n_classes),
                     true,
                 );
                 *data_to.borrow_mut() = new_data;
@@ -78,4 +82,15 @@ where
             .map(|(ngram, weight)| (ngram, weight.into_inner().0))
             .collect()
     }
+}
+
+pub fn xor_or_zip_with<T, F>(lhs: &Option<T>, rhs: &Option<T>, f: F) -> Option<T>
+where
+    T: Clone,
+    F: FnOnce(&T, &T) -> T,
+{
+    lhs.as_ref().map_or_else(
+        || rhs.clone(),
+        |x1| Some(rhs.as_ref().map_or_else(|| x1.clone(), |x2| f(x1, x2))),
+    )
 }

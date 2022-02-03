@@ -15,7 +15,7 @@
 //!
 //! let mut f = BufReader::new(File::open("model.bin").unwrap());
 //! let model = Model::read(&mut f).unwrap();
-//! let predictor = Predictor::new(model).unwrap();
+//! let predictor = Predictor::new(model, false).unwrap();
 //!
 //! let s = Sentence::from_raw("火星猫の生態").unwrap();
 //! let s = predictor.predict(s);

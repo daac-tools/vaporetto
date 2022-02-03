@@ -60,6 +60,10 @@ struct Opt {
     #[structopt(long)]
     model: PathBuf,
 
+    /// Predicts POS tags.
+    #[structopt(long)]
+    predict_tags: bool,
+
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
     #[structopt(long)]
@@ -95,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Loading model file...");
     let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model)?;
+    let predictor = Predictor::new(model, opt.predict_tags)?;
 
     eprintln!("Start tokenization");
 
@@ -105,17 +109,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if line.is_empty() {
             continue;
         }
-        let s = Sentence::from_tokenized(line)?;
+        let mut s = Sentence::from_tokenized(line)?;
         let ref_boundaries = s.boundaries().to_vec();
         let ref_tags = s.tags().to_vec();
-        let s = if opt.no_norm {
-            s
-        } else {
+        if !opt.no_norm {
             let new_line = fullwidth_filter.filter(s.to_raw_string());
-            Sentence::from_raw(new_line)?
+            s = Sentence::from_raw(new_line)?
         };
-        let s = predictor.predict(s);
-        let s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+        s = predictor.predict(s);
+        s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+        s = predictor.fill_tags(s);
         let hyp_boundaries = s.boundaries().to_vec();
         let hyp_tags = s.tags().to_vec();
         results.push((ref_boundaries, ref_tags, hyp_boundaries, hyp_tags));

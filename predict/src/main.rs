@@ -42,6 +42,10 @@ struct Opt {
     #[structopt(long)]
     model: PathBuf,
 
+    /// Predicts POS tags.
+    #[structopt(long)]
+    predict_tags: bool,
+
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
     #[structopt(long)]
@@ -90,6 +94,7 @@ fn tokenize(
     }
     buf1 = predictor.predict_with_score(buf1);
     buf1 = post_filters.iter().fold(buf1, |s, filter| filter.filter(s));
+    buf1 = predictor.fill_tags(buf1);
     let result = if pre_filters.is_empty() {
         buf1.to_tokenized_string()?
     } else {
@@ -122,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Loading model file...");
     let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model)?;
+    let predictor = Predictor::new(model, opt.predict_tags)?;
 
     eprintln!("Start tokenization");
     let mut n_chars = 0;

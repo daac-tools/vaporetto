@@ -1,10 +1,13 @@
+use std::iter;
+use std::rc::Rc;
+
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
-use crate::sentence::Sentence;
-use crate::utils::{AddWeight, MergableWeight, WeightMerger};
+use crate::sentence::{Sentence, TagRangeScore, TagRangeScores, TagScores};
+use crate::utils::{self, AddWeight, MergableWeight, WeightMerger};
 
 #[cfg(feature = "portable-simd")]
 use std::simd::i32x8;
@@ -13,6 +16,7 @@ pub const SIMD_SIZE: usize = 8;
 #[cfg(feature = "portable-simd")]
 type I32Vec = i32x8;
 
+#[derive(Clone)]
 struct PositionalWeight<W> {
     pub offset: i32,
     pub weight: W,
@@ -27,13 +31,14 @@ impl NaivePositionalWeight {
 }
 
 impl MergableWeight for NaivePositionalWeight {
-    fn from_two_weights(weight1: &Self, weight2: &Self) -> Self {
+    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self {
+        debug_assert!(n_classes != 0);
         let (weight1, weight2) = if weight1.offset > weight2.offset {
             (weight2, weight1)
         } else {
             (weight1, weight2)
         };
-        let shift = (weight2.offset - weight1.offset) as usize;
+        let shift = (weight2.offset - weight1.offset) as usize * n_classes;
         let mut weight = vec![0; weight1.weight.len().max(shift + weight2.weight.len())];
         weight[..weight1.weight.len()].copy_from_slice(&weight1.weight);
         for (r, w2) in weight[shift..].iter_mut().zip(&weight2.weight) {
@@ -46,6 +51,7 @@ impl MergableWeight for NaivePositionalWeight {
     }
 }
 
+#[derive(Clone)]
 enum WeightVector {
     Array(Vec<i32>),
 
@@ -97,6 +103,80 @@ impl AddWeight for WeightVector {
     }
 }
 
+pub struct WeightSet<W>
+where
+    W: Clone,
+{
+    boundary: Option<PositionalWeight<W>>,
+    tag_left: Option<PositionalWeight<Vec<i32>>>,
+    tag_right: Option<PositionalWeight<Vec<i32>>>,
+    tag_self: Option<TagRangeScores>,
+}
+
+type NaiveWeightSet = WeightSet<Vec<i32>>;
+
+impl NaiveWeightSet {
+    fn boundary_weight(offset: i32, weight: Vec<i32>) -> Self {
+        Self {
+            boundary: Some(PositionalWeight::new(offset, weight)),
+            tag_left: None,
+            tag_right: None,
+            tag_self: None,
+        }
+    }
+
+    fn tag_left_weight(offset: i32, weight: Vec<i32>) -> Self {
+        Self {
+            boundary: None,
+            tag_left: Some(PositionalWeight::new(offset, weight)),
+            tag_right: None,
+            tag_self: None,
+        }
+    }
+
+    fn tag_right_weight(offset: i32, weight: Vec<i32>) -> Self {
+        Self {
+            boundary: None,
+            tag_left: None,
+            tag_right: Some(PositionalWeight::new(offset, weight)),
+            tag_self: None,
+        }
+    }
+
+    fn tag_self_weight(start_rel_position: i32, weight: Vec<i32>) -> Self {
+        Self {
+            boundary: None,
+            tag_left: None,
+            tag_right: None,
+            tag_self: Some(Rc::new(vec![TagRangeScore::new(
+                start_rel_position,
+                weight,
+            )])),
+        }
+    }
+}
+
+impl MergableWeight for NaiveWeightSet {
+    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self {
+        Self {
+            boundary: utils::xor_or_zip_with(&weight1.boundary, &weight2.boundary, |w1, w2| {
+                PositionalWeight::from_two_weights(w1, w2, 1)
+            }),
+            tag_left: utils::xor_or_zip_with(&weight1.tag_left, &weight2.tag_left, |w1, w2| {
+                PositionalWeight::from_two_weights(w1, w2, n_classes)
+            }),
+            tag_right: utils::xor_or_zip_with(&weight1.tag_right, &weight2.tag_right, |w1, w2| {
+                PositionalWeight::from_two_weights(w1, w2, n_classes)
+            }),
+            tag_self: utils::xor_or_zip_with(&weight1.tag_self, &weight2.tag_self, |w1, w2| {
+                let mut w = w1.to_vec();
+                w.append(&mut w2.to_vec());
+                Rc::new(w)
+            }),
+        }
+    }
+}
+
 pub struct CharScorer {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<PositionalWeight<WeightVector>>,
@@ -104,7 +184,7 @@ pub struct CharScorer {
 
 impl CharScorer {
     pub fn new(model: NgramModel<String>, window_size: usize, dict: DictModel) -> Result<Self> {
-        let mut weight_merger = WeightMerger::new();
+        let mut weight_merger = WeightMerger::new(1);
 
         for d in model.data {
             let weight = PositionalWeight::new(-(window_size as i32) - 1, d.weights);
@@ -148,6 +228,125 @@ impl CharScorer {
 
             let offset = padding as isize + m_end as isize + pos_weights.offset as isize;
             pos_weights.weight.add_weight(ys, offset);
+        }
+    }
+}
+
+pub struct CharScorerWithTags {
+    pma: DoubleArrayAhoCorasick,
+    weights: Vec<WeightSet<WeightVector>>,
+    n_tags: usize,
+}
+
+impl CharScorerWithTags {
+    pub fn new(
+        model: NgramModel<String>,
+        window_size: usize,
+        dict: DictModel,
+        n_tags: usize,
+        tag_left_model: NgramModel<String>,
+        tag_right_model: NgramModel<String>,
+        tag_self_model: NgramModel<String>,
+    ) -> Result<Self> {
+        let mut weight_merger = WeightMerger::new(n_tags);
+
+        for d in model.data {
+            let weight = WeightSet::boundary_weight(-(window_size as i32), d.weights);
+            weight_merger.add(&d.ngram, weight);
+        }
+        for d in dict.dict {
+            let word_len = d.word.chars().count();
+            let mut weight = Vec::with_capacity(word_len + 1);
+            weight.push(d.weights.right);
+            weight.resize(word_len, d.weights.inside);
+            weight.push(d.weights.left);
+            let weight = WeightSet::boundary_weight(-(word_len as i32), weight);
+            weight_merger.add(&d.word, weight);
+        }
+        for d in tag_left_model.data {
+            let weight =
+                WeightSet::tag_left_weight(-(d.ngram.chars().count() as i32) + 1, d.weights);
+            weight_merger.add(&d.ngram, weight);
+        }
+        for d in tag_right_model.data {
+            let weight = WeightSet::tag_right_weight(-(window_size as i32) - 1, d.weights);
+            weight_merger.add(&d.ngram, weight);
+        }
+        for d in tag_self_model.data {
+            let weight = WeightSet::tag_self_weight(-(d.ngram.chars().count() as i32), d.weights);
+            weight_merger.add(&d.ngram, weight);
+        }
+
+        let mut ngrams = vec![];
+        let mut weights = vec![];
+        for (ngram, data) in weight_merger.merge() {
+            ngrams.push(ngram);
+            let WeightSet {
+                boundary,
+                tag_left,
+                tag_right,
+                tag_self,
+            } = data;
+            weights.push(WeightSet {
+                boundary: boundary.map(|PositionalWeight { offset, weight }| PositionalWeight {
+                    offset,
+                    weight: WeightVector::new(weight),
+                }),
+                tag_left,
+                tag_right,
+                tag_self,
+            });
+        }
+        let pma = DoubleArrayAhoCorasick::new(ngrams)
+            .map_err(|_| VaporettoError::invalid_model("invalid character n-grams"))?;
+        Ok(Self {
+            pma,
+            weights,
+            n_tags,
+        })
+    }
+
+    pub fn add_scores(
+        &self,
+        sentence: &Sentence,
+        padding: usize,
+        ys: &mut [i32],
+        tag_ys: &mut TagScores,
+    ) {
+        for m in self.pma.find_overlapping_no_suffix_iter_from_iter(
+            iter::once(0)
+                .chain(sentence.text.as_bytes().iter().cloned())
+                .chain(iter::once(0)),
+        ) {
+            let m_end = sentence
+                .str_to_char_pos
+                .get(m.end() - 1)
+                .copied()
+                .unwrap_or(sentence.chars.len() + 1);
+
+            // Both the weights and the PMA always have the same number of items.
+            // Therefore, the following code is safe.
+            let weight_set = unsafe { self.weights.get_unchecked(m.value()) };
+
+            if let Some(pos_weights) = weight_set.boundary.as_ref() {
+                let offset = padding as isize + m_end as isize + pos_weights.offset as isize - 1;
+                pos_weights.weight.add_weight(ys, offset);
+            }
+            if let Some(pos_weights) = weight_set.tag_left.as_ref() {
+                let offset = (m_end as isize + pos_weights.offset as isize) * self.n_tags as isize;
+                pos_weights
+                    .weight
+                    .add_weight(&mut tag_ys.left_scores, offset);
+            }
+            if let Some(pos_weights) = weight_set.tag_right.as_ref() {
+                let offset = (m_end as isize + pos_weights.offset as isize) * self.n_tags as isize;
+                pos_weights
+                    .weight
+                    .add_weight(&mut tag_ys.right_scores, offset);
+            }
+            if let Some(weight) = weight_set.tag_self.as_ref() {
+                tag_ys.self_scores[m_end - 1].replace(Rc::clone(weight));
+            }
         }
     }
 }

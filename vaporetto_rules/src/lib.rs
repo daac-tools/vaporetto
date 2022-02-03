@@ -18,7 +18,7 @@
 //!
 //! let mut f = BufReader::new(File::open("model.bin").unwrap());
 //! let model = Model::read(&mut f).unwrap();
-//! let mut predictor = Predictor::new(model).unwrap();
+//! let mut predictor = Predictor::new(model, false).unwrap();
 //!
 //! let pre_filters: Vec<Box<dyn StringFilter>> = vec![
 //!     Box::new(KyteaFullwidthFilter::new()),

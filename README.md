@@ -163,6 +163,26 @@ Now `メロンパン` is split into a single token.
 11:った 14178
 ```
 
+### POS tagging
+
+Vaporetto experimentally supports POS tagging.
+
+To train tags, add a slash and tag name following each token in the dataset as follows:
+
+* For fully annotated corpora
+  ```
+  この/連体詞 人/名詞 は/助詞 火星/名詞 人/接尾辞 です/助動詞
+  ```
+
+* For partially annotated corpora
+  ```
+  ヴ-ェ-ネ-ツ-ィ-ア/名詞|は/助詞|イ-タ-リ-ア/名詞|に/助詞|あ-り ま-す
+  ```
+
+If the dataset contains tags, the `train` command automatically trains them.
+
+In prediction, tags are not predicted by default, so you have to specify `--predict-tags` argument to `predict` command if necessary.
+
 ## Speed Comparison of Various Tokenizers
 
 Vaporetto is 6.9 times faster than KyTea. With `feature=simd`, it becomes 7.8 times faster. (`simd` option requires Nightly Rust.)

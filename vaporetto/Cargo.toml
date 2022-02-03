@@ -13,7 +13,7 @@ categories = ["text-processing"]
 autotests = false
 
 [dependencies]
-daachorse = "0.3.0"  # MIT or Apache-2.0
+daachorse = "0.4.0"  # MIT or Apache-2.0
 byteorder = "1.4"  # Unlicense or MIT
 
 liblinear = { version = "1", optional = true }  # MIT
