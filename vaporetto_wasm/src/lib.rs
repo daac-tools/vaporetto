@@ -28,7 +28,7 @@ impl Vaporetto {
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();
         let model = Model::read(&mut buff.as_slice()).unwrap();
-        let predictor = Predictor::new(model).unwrap();
+        let predictor = Predictor::new(model, false).unwrap();
         let post_filters: Vec<_> = filters
             .chars()
             .map(|c| {
@@ -117,13 +117,11 @@ impl Vaporetto {
             .iter()
             .fold(s, |s, filter| filter.filter(s));
 
-        if let Some(boundaries) = s.boundary_scores() {
-            for (&score, &b) in boundaries.iter().zip(s.boundaries()) {
-                let boundary = Array::new();
-                boundary.push(&(b == BoundaryType::WordBoundary).into());
-                boundary.push(&score.into());
-                result.push(&boundary);
-            }
+        for (&score, &b) in s.boundary_scores().iter().zip(s.boundaries()) {
+            let boundary = Array::new();
+            boundary.push(&(b == BoundaryType::WordBoundary).into());
+            boundary.push(&score.into());
+            result.push(&boundary);
         }
         result.into()
     }
