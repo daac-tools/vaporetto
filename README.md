@@ -185,7 +185,7 @@ In prediction, tags are not predicted by default, so you have to specify `--pred
 
 ## Speed Comparison of Various Tokenizers
 
-Vaporetto is 6.9 times faster than KyTea. With `feature=simd`, it becomes 7.8 times faster. (`simd` option requires Nightly Rust.)
+Vaporetto is 8.25 times faster than KyTea.
 
 Details can be found [here](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison).
 
