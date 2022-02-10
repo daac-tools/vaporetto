@@ -9,6 +9,8 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 
 [Technical details](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (Japanese)
 
+[日本語のドキュメント](README-ja.md)
+
 ## Example Usage
 
 ### Try Word Segmentation
@@ -22,9 +24,14 @@ Vaporetto provides three ways to generate tokenization models:
 The first is the simplest way, which is to download a model that has been trained by us.
 You can find models [here](https://github.com/legalforce-research/vaporetto/releases/tag/v0.3.0).
 
-We chose `bccwj-suw+unidic+tag.model.zst`:
+We chose `bccwj-suw+unidic+tag`:
 ```
-% wget https://github.com/legalforce-research/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.model.zst
+% wget https://github.com/legalforce-research/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.tar.xz
+```
+
+Each file contains a model file and license terms, so you need to extract the downloaded file like the following command:
+```
+% tar xf ./bccwj-suw+unidic+tag.tar.xz
 ```
 
 To perform tokenization, run the following command:
@@ -53,7 +60,6 @@ Each model is compressed, so you need to decompress the downloaded model file li
 ```
 
 To convert a KyTea model into a Vaporetto model, run the following command in the Vaporetto root directory.
-If necessary, the Rust code will be compiled before the conversion process.
 ```
 % cargo run --release -p convert_kytea_model -- --model-in path/to/jp-0.4.7-5.mod --model-out path/to/jp-0.4.7-5-tokenize.model.zst
 ```
