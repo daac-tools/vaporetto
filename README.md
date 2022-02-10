@@ -15,11 +15,31 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 
 This software is implemented in Rust. Install `rustc` and `cargo` following [the documentation](https://www.rust-lang.org/tools/install) beforehand.
 
-Vaporetto provides two ways to generate tokenization models:
+Vaporetto provides three ways to generate tokenization models:
+
+#### Download Distribution Model
+
+The first is the simplest way, which is to download a model that has been trained by us.
+You can find models [here](https://github.com/legalforce-research/vaporetto/releases/tag/v0.3.0).
+
+We chose `bccwj-suw+unidic+tag.model.zst`:
+```
+% wget https://github.com/legalforce-research/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.model.zst
+```
+
+To perform tokenization, run the following command:
+```
+% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic+tag.model.zst
+```
+
+The following will be output:
+```
+ヴェネツィア は イタリア に あり ます 。
+```
 
 #### Convert KyTea's Model
 
-The first is the simplest way, which is to convert a model that has been trained by KyTea.
+The second is also a simple way, which is to convert a model that has been trained by KyTea.
 First of all, download the model of your choice from the [KyTea Models](http://www.phontron.com/kytea/model.html) page.
 
 We chose `jp-0.4.7-5.mod.gz`:
@@ -40,17 +60,17 @@ If necessary, the Rust code will be compiled before the conversion process.
 
 Now you can perform tokenization. Run the following command:
 ```
-% echo '火星猫の生態の調査結果' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zst
+% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zst
 ```
 
 The following will be output:
 ```
-火星 猫 の 生態 の 調査 結果
+ヴェネツィア は イタリア に あ り ま す 。
 ```
 
 #### Train Your Own Model
 
-The second way, which is mainly for researchers, is to prepare your own training corpus and train your own tokenization models.
+The third way, which is mainly for researchers, is to prepare your own training corpus and train your own tokenization models.
 
 Vaporetto can train from two types of corpora: fully annotated corpora and partially annotated corpora.
 
@@ -58,7 +78,7 @@ Fully annotated corpora are corpora in which all character boundaries are annota
 This is the data in the form of spaces inserted into the boundaries of the tokens, as shown below:
 
 ```
-ヴェネツィア は イタリア に あ り ま す 。
+ヴェネツィア は イタリア に あり ます 。
 火星 猫 の 生態 の 調査 結果
 ```
 
