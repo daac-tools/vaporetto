@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::errors::{Result, VaporettoError};
 
@@ -110,7 +110,7 @@ impl TagRangeScore {
     }
 }
 
-pub type TagRangeScores = Rc<Vec<TagRangeScore>>;
+pub type TagRangeScores = Arc<Vec<TagRangeScore>>;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TagScores {
@@ -153,7 +153,7 @@ pub struct Sentence {
     pub(crate) boundaries: Vec<BoundaryType>,
     pub(crate) boundary_scores: Vec<i32>,
     pub(crate) tag_scores: TagScores,
-    pub(crate) tags: Vec<Option<Rc<String>>>,
+    pub(crate) tags: Vec<Option<Arc<String>>>,
 }
 
 impl Sentence {
@@ -161,7 +161,7 @@ impl Sentence {
         text: String,
         chars: Vec<char>,
         boundaries: Vec<BoundaryType>,
-        tags: Vec<Option<Rc<String>>>,
+        tags: Vec<Option<Arc<String>>>,
     ) -> Self {
         let mut s = Self {
             text,
@@ -202,7 +202,7 @@ impl Sentence {
         raw_text: &str,
         chars: &mut Vec<char>,
         boundaries: &mut Vec<BoundaryType>,
-        tags: &mut Vec<Option<Rc<String>>>,
+        tags: &mut Vec<Option<Arc<String>>>,
     ) -> Result<()> {
         if raw_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
@@ -235,7 +235,7 @@ impl Sentence {
         text: &mut String,
         chars: &mut Vec<char>,
         boundaries: &mut Vec<BoundaryType>,
-        tags: &mut Vec<Option<Rc<String>>>,
+        tags: &mut Vec<Option<Arc<String>>>,
     ) -> Result<()> {
         if tokenized_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
@@ -305,7 +305,7 @@ impl Sentence {
                         } else {
                             BoundaryType::NotWordBoundary
                         });
-                        tags.push(tag_str.take().map(Rc::new));
+                        tags.push(tag_str.take().map(Arc::new));
                     }
                     if c == '\0' {
                         return Err(VaporettoError::invalid_argument(
@@ -327,7 +327,7 @@ impl Sentence {
                 "must not end with a whitespace",
             ));
         }
-        tags.push(tag_str_tmp.take().map(Rc::new));
+        tags.push(tag_str_tmp.take().map(Arc::new));
 
         Ok(())
     }
@@ -337,7 +337,7 @@ impl Sentence {
         text: &mut String,
         chars: &mut Vec<char>,
         boundaries: &mut Vec<BoundaryType>,
-        tags: &mut Vec<Option<Rc<String>>>,
+        tags: &mut Vec<Option<Arc<String>>>,
     ) -> Result<()> {
         if labeled_text.is_empty() {
             return Err(VaporettoError::invalid_argument(
@@ -391,7 +391,7 @@ impl Sentence {
                             "POS tag must be annotated to a token".to_string(),
                         ));
                     }
-                    tags.push(tag_str.take().map(Rc::new));
+                    tags.push(tag_str.take().map(Arc::new));
                     boundaries.push(BoundaryType::WordBoundary);
                     is_char = true;
                     fixed_token = true;
@@ -424,7 +424,7 @@ impl Sentence {
                 }
             }
         }
-        tags.push(tag_str.take().map(Rc::new));
+        tags.push(tag_str.take().map(Arc::new));
         if chars.len() != boundaries.len() + 1 {
             return Err(VaporettoError::invalid_argument(
                 "labeled_text",
@@ -1031,23 +1031,23 @@ impl Sentence {
     /// # Examples
     ///
     /// ```
-    /// use std::rc::Rc;
+    /// use std::sync::Arc;
     ///
     /// use vaporetto::{BoundaryType, Sentence};
     ///
     /// let s = Sentence::from_tokenized("I/PRP am a/DT cat/NN ./.").unwrap();
     /// assert_eq!(&[
-    ///     Some(Rc::new("PRP".to_string())), // 'I'
+    ///     Some(Arc::new("PRP".to_string())), // 'I'
     ///     None,                             // 'a'
     ///     None,                             // 'm'
-    ///     Some(Rc::new("DT".to_string())),  // 'a'
+    ///     Some(Arc::new("DT".to_string())),  // 'a'
     ///     None,                             // 'c'
     ///     None,                             // 'a'
-    ///     Some(Rc::new("NN".to_string())),  // 't'
-    ///     Some(Rc::new(".".to_string())),   // '.'
+    ///     Some(Arc::new("NN".to_string())),  // 't'
+    ///     Some(Arc::new(".".to_string())),   // '.'
     /// ], s.tags());
     /// ```
-    pub fn tags(&self) -> &[Option<Rc<String>>] {
+    pub fn tags(&self) -> &[Option<Arc<String>>] {
         &self.tags
     }
 
@@ -1056,7 +1056,7 @@ impl Sentence {
     /// # Returns
     ///
     /// A mutable reference to the part-of-speech information.
-    pub fn tags_mut(&mut self) -> &mut [Option<Rc<String>>] {
+    pub fn tags_mut(&mut self) -> &mut [Option<Arc<String>>] {
         &mut self.tags
     }
 
@@ -1078,6 +1078,34 @@ impl Sentence {
         &self.chars
     }
 
+    /// Gets immutable references to the characters and character types, and a mutable reference to
+    /// boundaries.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of references.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::{BoundaryType, Sentence};
+    ///
+    /// let mut s = Sentence::from_partial_annotation("A-1|あ エ-漢|?").unwrap();
+    /// let (chars, char_types, boundaries) = s.chars_and_boundaries_mut();
+    /// assert_eq!(&['A', '1', 'あ', 'エ', '漢', '?'], chars);
+    /// assert_eq!(&[b'R', b'D', b'H', b'T', b'K', b'O'], char_types);
+    /// assert_eq!(&[
+    ///     BoundaryType::NotWordBoundary,
+    ///     BoundaryType::WordBoundary,
+    ///     BoundaryType::Unknown,
+    ///     BoundaryType::NotWordBoundary,
+    ///     BoundaryType::WordBoundary,
+    ///  ], boundaries);
+    /// ```
+    pub fn chars_and_boundaries_mut(&mut self) -> (&[char], &[u8], &mut [BoundaryType]) {
+        (&self.chars, &self.char_type, &mut self.boundaries)
+    }
+
     /// Gets a reference to the character type information.
     ///
     /// # Returns
@@ -1090,7 +1118,7 @@ impl Sentence {
     /// use vaporetto::Sentence;
     ///
     /// let s = Sentence::from_raw("A1あエ漢?").unwrap();
-    /// assert_eq!(&[b'R', b'D', b'H', b'T', b'K', b'O',], s.char_types());
+    /// assert_eq!(&[b'R', b'D', b'H', b'T', b'K', b'O'], s.char_types());
     /// ```
     pub fn char_types(&self) -> &[u8] {
         &self.char_type
@@ -1601,13 +1629,10 @@ mod tests {
                 None,
                 None,
                 None,
-                Some(Rc::new("名詞".to_string())),
+                Some(Arc::new("名詞".to_string())),
                 None,
                 None,
-                Some(Rc::new("形容詞".to_string())),
-                None,
-                None,
-                None,
+                Some(Arc::new("形容詞".to_string())),
                 None,
                 None,
                 None,
@@ -1615,7 +1640,10 @@ mod tests {
                 None,
                 None,
                 None,
-                Some(Rc::new("補助記号".to_string())),
+                None,
+                None,
+                None,
+                Some(Arc::new("補助記号".to_string())),
             ],
         };
         assert_eq!(expected, s.unwrap());
@@ -1712,13 +1740,10 @@ mod tests {
                 None,
                 None,
                 None,
-                Some(Rc::new("名詞".to_string())),
+                Some(Arc::new("名詞".to_string())),
                 None,
                 None,
-                Some(Rc::new("形容詞".to_string())),
-                None,
-                None,
-                None,
+                Some(Arc::new("形容詞".to_string())),
                 None,
                 None,
                 None,
@@ -1726,7 +1751,10 @@ mod tests {
                 None,
                 None,
                 None,
-                Some(Rc::new("補助記号".to_string())),
+                None,
+                None,
+                None,
+                Some(Arc::new("補助記号".to_string())),
             ],
         };
         assert_eq!(expected, s);

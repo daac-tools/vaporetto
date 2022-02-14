@@ -1,5 +1,5 @@
 use std::iter;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -148,7 +148,7 @@ impl NaiveWeightSet {
             boundary: None,
             tag_left: None,
             tag_right: None,
-            tag_self: Some(Rc::new(vec![TagRangeScore::new(
+            tag_self: Some(Arc::new(vec![TagRangeScore::new(
                 start_rel_position,
                 weight,
             )])),
@@ -171,7 +171,7 @@ impl MergableWeight for NaiveWeightSet {
             tag_self: utils::xor_or_zip_with(&weight1.tag_self, &weight2.tag_self, |w1, w2| {
                 let mut w = w1.to_vec();
                 w.append(&mut w2.to_vec());
-                Rc::new(w)
+                Arc::new(w)
             }),
         }
     }
@@ -345,7 +345,7 @@ impl CharScorerWithTags {
                     .add_weight(&mut tag_ys.right_scores, offset);
             }
             if let Some(weight) = weight_set.tag_self.as_ref() {
-                tag_ys.self_scores[m_end - 1].replace(Rc::clone(weight));
+                tag_ys.self_scores[m_end - 1].replace(Arc::clone(weight));
             }
         }
     }

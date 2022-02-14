@@ -110,14 +110,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut pre_filters: Vec<Box<dyn StringFilter>> = vec![];
     if !opt.no_norm {
-        pre_filters.push(Box::new(KyteaFullwidthFilter::new()));
+        pre_filters.push(Box::new(KyteaFullwidthFilter));
     }
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
     for wsconst in &opt.wsconst {
         match wsconst {
-            WsConst::GraphemeCluster => {
-                post_filters.push(Box::new(ConcatGraphemeClustersFilter::new()))
-            }
+            WsConst::GraphemeCluster => post_filters.push(Box::new(ConcatGraphemeClustersFilter)),
             WsConst::CharType(char_type) => {
                 post_filters.push(Box::new(KyteaWsConstFilter::new(*char_type)))
             }

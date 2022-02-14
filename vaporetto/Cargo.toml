@@ -10,7 +10,6 @@ repository = "https://github.com/legalforce-research/vaporetto"
 readme = "README.md"
 keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing"]
-autotests = false
 
 [dependencies]
 daachorse = "0.4.0"  # MIT or Apache-2.0

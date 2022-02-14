@@ -70,7 +70,7 @@ struct Opt {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
-    let fullwidth_filter = KyteaFullwidthFilter::new();
+    let fullwidth_filter = KyteaFullwidthFilter;
 
     eprintln!("Loading dataset...");
     let mut train_sents = vec![];

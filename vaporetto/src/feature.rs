@@ -1,5 +1,5 @@
 use std::hash::Hash;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -213,7 +213,7 @@ impl<'a> TagFeature<'a> {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TagExample<'a> {
     pub features: Vec<TagFeature<'a>>,
-    pub tag: Rc<String>,
+    pub tag: Arc<String>,
 }
 
 pub struct TagExampleGenerator {
@@ -240,8 +240,11 @@ impl TagExampleGenerator {
                 sentence.char_substring(start, sentence.chars.len()),
             ));
         }
-        let mut current_tag: Option<Rc<String>> =
-            sentence.tags.last().and_then(|x| x.as_ref()).map(Rc::clone);
+        let mut current_tag: Option<Arc<String>> = sentence
+            .tags
+            .last()
+            .and_then(|x| x.as_ref())
+            .map(Arc::clone);
         let mut tag_right_pos = sentence.chars.len();
         for (i, (t, b)) in sentence
             .tags
@@ -279,7 +282,7 @@ impl TagExampleGenerator {
                         features = vec![];
                     }
                     if let Some(tag) = t.as_ref() {
-                        current_tag.replace(Rc::clone(tag));
+                        current_tag.replace(Arc::clone(tag));
                         tag_right_pos = i + 1;
                         for j in
                             (i + 2)..(i + 2 + self.char_window_size).min(sentence.chars.len() + 1)
@@ -479,7 +482,7 @@ mod tests {
                     TagFeature::left_char_ngram_bos(-1, "Ar"),
                     TagFeature::chars("Aria"),
                 ],
-                tag: Rc::new("名詞".to_string()),
+                tag: Arc::new("名詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -503,7 +506,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "aは火"),
                     TagFeature::chars("は"),
                 ],
-                tag: Rc::new("助詞".to_string()),
+                tag: Arc::new("助詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -520,7 +523,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "猫だ"),
                     TagFeature::chars("だ"),
                 ],
-                tag: Rc::new("助動詞".to_string()),
+                tag: Arc::new("助動詞".to_string()),
             },
         ];
 
@@ -560,7 +563,7 @@ mod tests {
                     TagFeature::left_char_ngram_bos(-1, "Ar"),
                     TagFeature::chars("Aria"),
                 ],
-                tag: Rc::new("名詞".to_string()),
+                tag: Arc::new("名詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -578,7 +581,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "aは火"),
                     TagFeature::chars("は"),
                 ],
-                tag: Rc::new("助詞".to_string()),
+                tag: Arc::new("助詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -592,7 +595,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "猫だ"),
                     TagFeature::chars("だ"),
                 ],
-                tag: Rc::new("助動詞".to_string()),
+                tag: Arc::new("助動詞".to_string()),
             },
         ];
 
@@ -631,7 +634,7 @@ mod tests {
                     TagFeature::left_char_ngram_bos(-1, "A"),
                     TagFeature::chars("Aria"),
                 ],
-                tag: Rc::new("名詞".to_string()),
+                tag: Arc::new("名詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -649,7 +652,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "aは"),
                     TagFeature::chars("は"),
                 ],
-                tag: Rc::new("助詞".to_string()),
+                tag: Arc::new("助詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -663,7 +666,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "猫だ"),
                     TagFeature::chars("だ"),
                 ],
-                tag: Rc::new("助動詞".to_string()),
+                tag: Arc::new("助動詞".to_string()),
             },
         ];
 
@@ -704,7 +707,7 @@ mod tests {
                     TagFeature::left_char_ngram_bos(-1, "僕は"),
                     TagFeature::chars("僕"),
                 ],
-                tag: Rc::new("代名詞".to_string()),
+                tag: Arc::new("代名詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -725,7 +728,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "僕"),
                     TagFeature::chars("は"),
                 ],
-                tag: Rc::new("助詞".to_string()),
+                tag: Arc::new("助詞".to_string()),
             },
             TagExample {
                 features: vec![
@@ -743,7 +746,7 @@ mod tests {
                     TagFeature::left_char_ngram(-1, "は"),
                     TagFeature::chars("人間"),
                 ],
-                tag: Rc::new("名詞".to_string()),
+                tag: Arc::new("名詞".to_string()),
             },
         ];
 

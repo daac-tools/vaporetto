@@ -1,7 +1,7 @@
 use std::mem;
 
 use std::cmp::Ordering;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::char_scorer::{self, CharScorer, CharScorerWithTags};
 use crate::errors::Result;
@@ -24,7 +24,7 @@ pub struct Predictor {
     padding: usize,
 
     // for tag prediction
-    tag_names: Vec<Rc<String>>,
+    tag_names: Vec<Arc<String>>,
     tag_bias: Vec<i32>,
 }
 
@@ -45,7 +45,7 @@ impl Predictor {
 
         let char_scorer = if predict_tags {
             for cls in model.tag_model.class_info {
-                tag_names.push(Rc::new(cls.name));
+                tag_names.push(Arc::new(cls.name));
                 tag_bias.push(cls.bias);
             }
             CharScorerWrapper::BoundaryAndTags(CharScorerWithTags::new(
@@ -142,8 +142,8 @@ impl Predictor {
         sentence
     }
 
-    fn best_tag(&self, scores: &[i32]) -> Rc<String> {
-        Rc::clone(
+    fn best_tag(&self, scores: &[i32]) -> Arc<String> {
+        Arc::clone(
             scores
                 .iter()
                 .zip(&self.tag_names)

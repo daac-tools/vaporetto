@@ -3,6 +3,7 @@
 members = [
     "vaporetto",
     "vaporetto_rules",
+    "vaporetto_tantivy",
     "manipulate_model",
     "predict",
     "train",

@@ -3,6 +3,7 @@ use vaporetto::{BoundaryType, CharacterType, Sentence};
 use crate::SentenceFilter;
 
 /// Character type concatenator. This filter works like KyTea's wsconst option.
+#[derive(Clone)]
 pub struct KyteaWsConstFilter {
     char_type: CharacterType,
 }
@@ -23,25 +24,13 @@ impl KyteaWsConstFilter {
 }
 
 impl SentenceFilter for KyteaWsConstFilter {
-    /// Concatenates consecutive character types.
-    ///
-    /// # Arguments:
-    ///
-    /// * `sentence` - Input sentence.
-    ///
-    /// # Returns
-    ///
-    /// A processed sentence.
     fn filter(&self, mut sentence: Sentence) -> Sentence {
         let t_flag = self.char_type as u8;
-        let mut tmp = sentence.boundaries().to_vec();
-        for (i, (b, &t)) in tmp.iter_mut().zip(sentence.char_types()).enumerate() {
-            if t == t_flag && t == sentence.char_types()[i + 1] {
+        let (_, char_types, boundaries) = sentence.chars_and_boundaries_mut();
+        for ((t1, t2), b) in char_types.iter().zip(&char_types[1..]).zip(boundaries) {
+            if *t1 == t_flag && *t2 == t_flag {
                 *b = BoundaryType::NotWordBoundary;
             }
-        }
-        for (b, t) in sentence.boundaries_mut().iter_mut().zip(&tmp) {
-            *b = *t;
         }
         sentence
     }

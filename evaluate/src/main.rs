@@ -83,13 +83,11 @@ struct Opt {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
-    let fullwidth_filter = KyteaFullwidthFilter::new();
+    let fullwidth_filter = KyteaFullwidthFilter;
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
     for wsconst in &opt.wsconst {
         match wsconst {
-            WsConst::GraphemeCluster => {
-                post_filters.push(Box::new(ConcatGraphemeClustersFilter::new()))
-            }
+            WsConst::GraphemeCluster => post_filters.push(Box::new(ConcatGraphemeClustersFilter)),
             WsConst::CharType(char_type) => {
                 post_filters.push(Box::new(KyteaWsConstFilter::new(*char_type)))
             }

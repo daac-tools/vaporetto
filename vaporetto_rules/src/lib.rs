@@ -21,10 +21,10 @@
 //! let mut predictor = Predictor::new(model, false).unwrap();
 //!
 //! let pre_filters: Vec<Box<dyn StringFilter>> = vec![
-//!     Box::new(KyteaFullwidthFilter::new()),
+//!     Box::new(KyteaFullwidthFilter),
 //! ];
 //! let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
-//!     Box::new(ConcatGraphemeClustersFilter::new()),
+//!     Box::new(ConcatGraphemeClustersFilter),
 //!     Box::new(KyteaWsConstFilter::new(CharacterType::Digit)),
 //! ];
 //!
@@ -52,7 +52,7 @@ pub mod string_filters;
 
 use vaporetto::Sentence;
 
-pub trait SentenceFilter {
+pub trait SentenceFilter: Send + Sync {
     /// Filter a specified sentence using rules.
     ///
     /// # Arguments:
@@ -65,7 +65,7 @@ pub trait SentenceFilter {
     fn filter(&self, sentence: Sentence) -> Sentence;
 }
 
-pub trait StringFilter {
+pub trait StringFilter: Send + Sync {
     /// Filter a specified string using rules.
     ///
     /// # Arguments:
