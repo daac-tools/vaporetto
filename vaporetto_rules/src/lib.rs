@@ -7,6 +7,7 @@
 //! ```no_run
 //! use std::fs::File;
 //! use std::io::BufReader;
+//! use std::rc::Rc;
 //!
 //! use vaporetto::{CharacterType, Model, Predictor, Sentence};
 //! use vaporetto_rules::{
@@ -17,20 +18,22 @@
 //!
 //! let mut f = BufReader::new(File::open("model.bin").unwrap());
 //! let model = Model::read(&mut f).unwrap();
-//! let mut predictor = Predictor::new(model);
+//! let mut predictor = Predictor::new(model, false).unwrap();
 //!
-//! let pre_filters: Vec<Box<dyn StringFilter<String>>> = vec![
-//!     Box::new(KyteaFullwidthFilter::new()),
+//! let pre_filters: Vec<Box<dyn StringFilter>> = vec![
+//!     Box::new(KyteaFullwidthFilter),
 //! ];
 //! let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
-//!     Box::new(ConcatGraphemeClustersFilter::new()),
+//!     Box::new(ConcatGraphemeClustersFilter),
 //!     Box::new(KyteaWsConstFilter::new(CharacterType::Digit)),
 //! ];
 //!
 //! let input = "Vaporettoは仲良し家族👨‍👨‍👧‍👦を離れ離れにさせません。"
 //!     .to_string();
 //!
-//! let preproc_input = pre_filters.iter().fold(input, |s, filter| filter.filter(s));
+//! let input = Rc::new(input);
+//! let preproc_input = pre_filters.iter().fold(input, |s, filter| Rc::new(filter.filter(&s)));
+//! let preproc_input = Rc::try_unwrap(preproc_input).unwrap();
 //!
 //! let sentence = Sentence::from_raw(preproc_input).unwrap();
 //! let sentence = predictor.predict(sentence);
@@ -49,7 +52,7 @@ pub mod string_filters;
 
 use vaporetto::Sentence;
 
-pub trait SentenceFilter {
+pub trait SentenceFilter: Send + Sync {
     /// Filter a specified sentence using rules.
     ///
     /// # Arguments:
@@ -62,10 +65,7 @@ pub trait SentenceFilter {
     fn filter(&self, sentence: Sentence) -> Sentence;
 }
 
-pub trait StringFilter<S>
-where
-    S: AsRef<str>,
-{
+pub trait StringFilter: Send + Sync {
     /// Filter a specified string using rules.
     ///
     /// # Arguments:
@@ -75,5 +75,5 @@ where
     /// # Returns
     ///
     /// A processed string.
-    fn filter(&self, string: S) -> String;
+    fn filter(&self, string: &str) -> String;
 }

@@ -1,40 +1,12 @@
 use crate::StringFilter;
 
 /// Half-width to full-width filter. This filter works like KyTea's preprocessor.
+#[derive(Clone, Default)]
 pub struct KyteaFullwidthFilter;
 
-impl KyteaFullwidthFilter {
-    /// Creates a new KyteaFullwidthFilter.
-    ///
-    /// # Returns
-    ///
-    /// A new KyteaFullwidthFilter.
-    pub const fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for KyteaFullwidthFilter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<S> StringFilter<S> for KyteaFullwidthFilter
-where
-    S: AsRef<str>,
-{
-    /// Replace alphanumerics and symbols to full-width characters.
-    ///
-    /// # Arguments:
-    ///
-    /// * `text` - Input text.
-    ///
-    /// # Returns
-    ///
-    /// A processed text.
-    fn filter(&self, string: S) -> String {
-        let mut chars: Vec<_> = string.as_ref().chars().collect();
+impl StringFilter for KyteaFullwidthFilter {
+    fn filter(&self, string: &str) -> String {
+        let mut chars: Vec<_> = string.chars().collect();
         for c in &mut chars {
             *c = match *c {
                 'a' => 'ａ',

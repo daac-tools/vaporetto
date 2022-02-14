@@ -1,37 +1,31 @@
-use std::collections::HashMap;
-use std::ops::Range;
+use std::mem;
 
-#[cfg(feature = "multithreading")]
-use std::cell::RefCell;
-#[cfg(feature = "multithreading")]
+use std::cmp::Ordering;
 use std::sync::Arc;
-#[cfg(feature = "multithreading")]
-use std::thread;
 
-#[cfg(feature = "multithreading")]
-use crossbeam_channel::{Receiver, Sender};
-
-use crate::model::{DictWeight, Model, ScoreValue};
+use crate::char_scorer::{self, CharScorer, CharScorerWithTags};
+use crate::errors::Result;
+use crate::model::Model;
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
 
-use daachorse::DoubleArrayAhoCorasick;
+enum CharScorerWrapper {
+    Boundary(CharScorer),
+    BoundaryAndTags(CharScorerWithTags),
+}
 
 /// Predictor.
 pub struct Predictor {
-    word_pma: DoubleArrayAhoCorasick,
-    dict_pma: DoubleArrayAhoCorasick,
-    word_weights: Vec<Vec<ScoreValue>>,
-    dict_weights: Vec<DictWeight>,
-    dict_word_wise: bool,
-    bias: ScoreValue,
-    char_window_size: usize,
-    dict_window_size: usize,
+    bias: i32,
 
+    char_scorer: CharScorerWrapper,
     type_scorer: TypeScorer,
 
-    #[cfg(feature = "model-quantize")]
-    quantize_multiplier: f64,
+    padding: usize,
+
+    // for tag prediction
+    tag_names: Vec<Arc<String>>,
+    tag_bias: Vec<i32>,
 }
 
 impl Predictor {
@@ -40,291 +34,80 @@ impl Predictor {
     /// # Arguments
     ///
     /// * `model` - A model data.
+    /// * `predict_tags` - If you want to predict tags, set to true.
     ///
     /// # Returns
     ///
     /// A new predictor.
-    pub fn new(model: Model) -> Self {
-        let bias = model.bias;
+    pub fn new(model: Model, predict_tags: bool) -> Result<Self> {
+        let mut tag_names = vec![];
+        let mut tag_bias = vec![];
 
-        let words = model.words;
-        let dict = model.dict;
-        let dict_weights = model.dict_weights;
+        let char_scorer = if predict_tags {
+            for cls in model.tag_model.class_info {
+                tag_names.push(Arc::new(cls.name));
+                tag_bias.push(cls.bias);
+            }
+            CharScorerWrapper::BoundaryAndTags(CharScorerWithTags::new(
+                model.char_ngram_model,
+                model.char_window_size,
+                model.dict_model,
+                tag_names.len(),
+                model.tag_model.left_char_model,
+                model.tag_model.right_char_model,
+                model.tag_model.self_char_model,
+            )?)
+        } else {
+            CharScorerWrapper::Boundary(CharScorer::new(
+                model.char_ngram_model,
+                model.char_window_size,
+                model.dict_model,
+            )?)
+        };
+        let type_scorer = TypeScorer::new(model.type_ngram_model, model.type_window_size)?;
 
-        let mut word_weights: Vec<_> = model
-            .word_weights
-            .into_iter()
-            .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
-            .collect();
-        let type_weights: Vec<_> = model
-            .type_weights
-            .into_iter()
-            .map(|ws| ws.into_iter().map(|w| w as ScoreValue).collect())
-            .collect();
+        Ok(Self {
+            bias: model.bias,
 
-        let (dict, dict_weights) = Self::merge_dict_weights(
-            dict,
-            dict_weights,
-            &words,
-            &mut word_weights,
-            model.char_window_size,
-            model.dict_word_wise,
-        );
-
-        let word_weights = Self::merge_weights(&words, &word_weights);
-        let type_weights = Self::merge_weights(&model.types, &type_weights);
-
-        #[cfg(feature = "model-quantize")]
-        let bias = bias as i32;
-
-        let word_pma = DoubleArrayAhoCorasick::new(words).unwrap();
-        let type_pma = DoubleArrayAhoCorasick::new(model.types).unwrap();
-        let dict_pma = DoubleArrayAhoCorasick::new(dict).unwrap();
-
-        let type_scorer = TypeScorer::new(type_pma, type_weights, model.type_window_size);
-
-        Self {
-            word_pma,
-            dict_pma,
-            word_weights,
-            dict_weights,
-            dict_word_wise: model.dict_word_wise,
-            bias,
-            char_window_size: model.char_window_size,
-            dict_window_size: 1,
-
+            char_scorer,
             type_scorer,
 
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier: model.quantize_multiplier,
-        }
+            padding: model.char_window_size.max(model.type_window_size),
+
+            tag_names,
+            tag_bias,
+        })
     }
 
-    fn merge_dict_weights(
-        dict: Vec<Vec<u8>>,
-        dict_weights: Vec<DictWeight>,
-        words: &[Vec<u8>],
-        word_weights: &mut Vec<Vec<ScoreValue>>,
-        char_window_size: usize,
-        dict_word_wise: bool,
-    ) -> (Vec<Vec<u8>>, Vec<DictWeight>) {
-        let mut word_map = HashMap::new();
-        for (i, word) in words.iter().cloned().enumerate() {
-            word_map.insert(word, i);
-        }
-        let mut new_dict = vec![];
-        if dict_word_wise {
-            let mut new_dict_weights = vec![];
-            for (word, weight) in dict.into_iter().zip(dict_weights) {
-                let word_size = std::str::from_utf8(&word).unwrap().chars().count();
-                match word_map.get(&word) {
-                    Some(&idx) if char_window_size >= word_size => {
-                        let start = char_window_size - word_size;
-                        let end = start + word_size;
-                        word_weights[idx][start] += weight.right;
-                        for i in start + 1..end {
-                            word_weights[idx][i] += weight.inner;
-                        }
-                        word_weights[idx][end] += weight.left;
-                    }
-                    _ => {
-                        new_dict.push(word);
-                        new_dict_weights.push(weight);
-                    }
-                }
+    fn predict_impl(&self, mut sentence: Sentence) -> Sentence {
+        let ys_size = sentence.boundaries.len() + self.padding + char_scorer::SIMD_SIZE - 1;
+        let mut ys = mem::take(&mut sentence.boundary_scores);
+        ys.clear();
+        ys.resize(ys_size, self.bias);
+        match &self.char_scorer {
+            CharScorerWrapper::Boundary(char_scorer) => {
+                char_scorer.add_scores(&sentence, self.padding, &mut ys);
             }
-            (new_dict, new_dict_weights)
-        } else {
-            for word in dict {
-                let word_size = std::str::from_utf8(&word).unwrap().chars().count();
-                match word_map.get(&word) {
-                    Some(&idx) if char_window_size >= word_size => {
-                        let start = char_window_size - word_size;
-                        let end = start + word_size;
-                        let word_size_idx = std::cmp::min(word_size, dict_weights.len()) - 1;
-                        let weight = &dict_weights[word_size_idx];
-                        word_weights[idx][start] += weight.right;
-                        for i in start + 1..end {
-                            word_weights[idx][i] += weight.inner;
-                        }
-                        word_weights[idx][end] += weight.left;
-                    }
-                    _ => new_dict.push(word),
-                }
+            CharScorerWrapper::BoundaryAndTags(char_scorer) => {
+                let mut tag_ys = mem::take(&mut sentence.tag_scores);
+                tag_ys.init(sentence.chars.len(), self.tag_names.len());
+                char_scorer.add_scores(&sentence, self.padding, &mut ys, &mut tag_ys);
+                sentence.tag_scores = tag_ys;
             }
-            (new_dict, dict_weights)
         }
-    }
-
-    fn merge_weights(words: &[Vec<u8>], weights: &[Vec<ScoreValue>]) -> Vec<Vec<ScoreValue>> {
-        let mut result = vec![];
-        let word_ids = words
+        self.type_scorer
+            .add_scores(&sentence, &mut ys[self.padding..]);
+        for (&y, b) in ys[self.padding..]
             .iter()
-            .cloned()
-            .enumerate()
-            .map(|(i, w)| (w, i))
-            .collect::<HashMap<Vec<u8>, usize>>();
-        for seq in words {
-            let mut new_weights: Option<Vec<_>> = None;
-            for st in (0..seq.len()).rev() {
-                if let Some(&idx) = word_ids.get(&seq[st..]) {
-                    if let Some(new_weights) = new_weights.as_mut() {
-                        for (w_new, w) in new_weights.iter_mut().zip(&weights[idx]) {
-                            *w_new += *w;
-                        }
-                    } else {
-                        new_weights.replace(weights[idx].clone());
-                    }
-                }
-            }
-            result.push(new_weights.unwrap());
-        }
-        result
-    }
-
-    fn add_word_ngram_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let char_start = if start >= self.char_window_size {
-            start + 1 - self.char_window_size
-        } else {
-            0
-        };
-        let text_start = sentence.char_to_str_pos[char_start];
-        let char_end = std::cmp::min(
-            start + ys.len() + self.char_window_size,
-            sentence.char_to_str_pos.len() - 1,
-        );
-        let text_end = sentence.char_to_str_pos[char_end];
-        let text = &sentence.text[text_start..text_end];
-        let padding = start - char_start + 1;
-        for m in self.word_pma.find_overlapping_no_suffix_iter(&text) {
-            let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
-            let offset = m_end as isize - self.char_window_size as isize - padding as isize;
-            let weights = &self.word_weights[m.pattern()];
-            if offset >= 0 {
-                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
-                    *y += w;
-                }
-            } else {
-                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
-                    *y += w;
-                }
-            }
-        }
-    }
-
-    fn add_dict_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let char_start = if start >= self.dict_window_size {
-            start + 1 - self.dict_window_size
-        } else {
-            0
-        };
-        let text_start = sentence.char_to_str_pos[char_start];
-        let char_end = std::cmp::min(
-            start + ys.len() + self.dict_window_size,
-            sentence.char_to_str_pos.len() - 1,
-        );
-        let text_end = sentence.char_to_str_pos[char_end];
-        let text = &sentence.text[text_start..text_end];
-        let padding = start - char_start + 1;
-        for m in self.dict_pma.find_overlapping_iter(&text) {
-            let m_start = sentence.str_to_char_pos[m.start() + text_start] - char_start;
-            let m_end = sentence.str_to_char_pos[m.end() + text_start] - char_start;
-            let idx = if self.dict_word_wise {
-                m.pattern()
-            } else {
-                std::cmp::min(m_end - m_start, self.dict_weights.len()) - 1
-            };
-            let dict_weight = self.dict_weights[idx];
-            if m_start >= padding && m_start < padding + ys.len() {
-                ys[m_start - padding] += dict_weight.right;
-            }
-            let range_start = std::cmp::max(0, m_start as isize - padding as isize + 1);
-            let range_end = std::cmp::min(m_end as isize - padding as isize, ys.len() as isize);
-            if range_start < range_end {
-                for y in &mut ys[range_start as usize..range_end as usize] {
-                    *y += dict_weight.inner;
-                }
-            }
-            if m_end >= padding && m_end < ys.len() + padding {
-                ys[m_end - padding] += dict_weight.left;
-            }
-        }
-    }
-
-    fn predict_partial_impl(
-        &self,
-        sentence: &Sentence,
-        range: Range<usize>,
-        ys: &mut [ScoreValue],
-    ) {
-        ys.fill(self.bias);
-        self.add_word_ngram_scores(sentence, range.start, ys);
-        self.type_scorer.add_scores(sentence, range.start, ys);
-        self.add_dict_scores(sentence, range.start, ys);
-    }
-
-    /// Predicts word boundaries of the specified range of a sentence.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    /// * `range` - The range of the sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict_partial(&self, mut sentence: Sentence, range: Range<usize>) -> Sentence {
-        let mut ys = vec![ScoreValue::default(); range.len()];
-        self.predict_partial_impl(&sentence, range.clone(), &mut ys);
-        for (y, b) in ys.into_iter().zip(sentence.boundaries[range].iter_mut()) {
-            *b = if y >= ScoreValue::default() {
+            .zip(sentence.boundaries.iter_mut())
+        {
+            *b = if y >= 0 {
                 BoundaryType::WordBoundary
             } else {
                 BoundaryType::NotWordBoundary
             };
         }
-        sentence
-    }
-
-    /// Predicts word boundaries of the specified range of a sentence. This function inserts
-    /// scores.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    /// * `range` - The range of the sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict_partial_with_score(
-        &self,
-        mut sentence: Sentence,
-        range: Range<usize>,
-    ) -> Sentence {
-        let mut ys = vec![ScoreValue::default(); range.len()];
-        self.predict_partial_impl(&sentence, range.clone(), &mut ys);
-        let mut scores = sentence
-            .boundary_scores
-            .take()
-            .unwrap_or_else(|| vec![0.; sentence.boundaries.len()]);
-        for (y, (b, s)) in ys.into_iter().zip(
-            sentence.boundaries[range.clone()]
-                .iter_mut()
-                .zip(scores[range].iter_mut()),
-        ) {
-            *b = if y >= ScoreValue::default() {
-                BoundaryType::WordBoundary
-            } else {
-                BoundaryType::NotWordBoundary
-            };
-
-            #[cfg(feature = "model-quantize")]
-            let y = y as f64 * self.quantize_multiplier;
-
-            *s = y;
-        }
-        sentence.boundary_scores.replace(scores);
+        sentence.boundary_scores = ys;
         sentence
     }
 
@@ -338,12 +121,9 @@ impl Predictor {
     ///
     /// A sentence with predicted boundary information.
     pub fn predict(&self, sentence: Sentence) -> Sentence {
-        let boundaries_size = sentence.boundaries.len();
-        if boundaries_size == 0 {
-            sentence
-        } else {
-            self.predict_partial(sentence, 0..boundaries_size)
-        }
+        let mut sentence = self.predict_impl(sentence);
+        sentence.boundary_scores.clear();
+        sentence
     }
 
     /// Predicts word boundaries. This function inserts scores.
@@ -356,148 +136,27 @@ impl Predictor {
     ///
     /// A sentence with predicted boundary information.
     pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
-        let boundaries_size = sentence.boundaries.len();
-        if boundaries_size == 0 {
-            sentence
-        } else {
-            self.predict_partial_with_score(sentence, 0..boundaries_size)
-        }
-    }
-
-    /// Sets the window size of words in the dictionary.
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - The window size.
-    ///
-    /// # Returns
-    ///
-    /// A predictor with the specified window size.
-    pub fn dict_window_size(mut self, size: usize) -> Self {
-        self.dict_window_size = std::cmp::max(size, 1);
-        self
-    }
-
-    /// Creates a multithreading predictor. This function is the alias of
-    /// [`MultithreadPredictor::new()`].
-    ///
-    /// # Arguments
-    ///
-    /// * `n_threads` - The number of threads.
-    /// * `chunk_size` - The chunk size of each thread.
-    ///
-    /// # Returns
-    ///
-    /// A multithread predictor.
-    #[cfg(feature = "multithreading")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "multithreading")))]
-    pub fn multithreading(self, n_threads: usize, chunk_size: usize) -> MultithreadPredictor {
-        MultithreadPredictor::new(self, n_threads, chunk_size)
-    }
-}
-
-/// Predictor for multithreading.
-#[cfg(feature = "multithreading")]
-#[cfg_attr(docsrs, doc(cfg(feature = "multithreading")))]
-pub struct MultithreadPredictor {
-    task_tx: Sender<(Arc<Sentence>, Range<usize>, Vec<ScoreValue>)>,
-    result_rx: Receiver<(Vec<ScoreValue>, Range<usize>)>,
-    chunk_size: usize,
-    ys_pool: RefCell<Vec<Vec<ScoreValue>>>,
-
-    #[cfg(feature = "model-quantize")]
-    quantize_multiplier: f64,
-}
-
-#[cfg(feature = "multithreading")]
-impl MultithreadPredictor {
-    /// Creates a multithreading predictor.
-    ///
-    /// # Arguments
-    ///
-    /// * `predictor` - A normal predictor.
-    /// * `n_threads` - The number of threads.
-    /// * `chunk_size` - The chunk size of each thread.
-    ///
-    /// # Returns
-    ///
-    /// A multithread predictor.
-    pub fn new(predictor: Predictor, n_threads: usize, chunk_size: usize) -> Self {
-        let predictor = Arc::new(predictor);
-
-        let (result_tx, result_rx) = crossbeam_channel::unbounded();
-        let (task_tx, task_rx) =
-            crossbeam_channel::unbounded::<(Arc<Sentence>, Range<usize>, Vec<ScoreValue>)>();
-        for _ in 0..n_threads {
-            let predictor = Arc::clone(&predictor);
-            let result_tx = result_tx.clone();
-            let task_rx = task_rx.clone();
-            thread::spawn(move || {
-                for (sentence, range, mut ys) in task_rx {
-                    predictor.predict_partial_impl(
-                        &sentence,
-                        range.clone(),
-                        &mut ys[..range.len()],
-                    );
-                    std::mem::drop(sentence);
-                    result_tx.send((ys, range)).unwrap();
-                }
-            });
-        }
-
-        Self {
-            task_tx,
-            result_rx,
-            chunk_size,
-            ys_pool: RefCell::new(vec![]),
-
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier: predictor.quantize_multiplier,
-        }
-    }
-
-    /// Predicts word boundaries.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict(&self, sentence: Sentence) -> Sentence {
-        let sentence = Arc::new(sentence);
-
-        let mut n_chunks = 0;
-        let mut ys_pool = self.ys_pool.borrow_mut();
-        for start in (0..sentence.boundaries.len()).step_by(self.chunk_size) {
-            let ys = ys_pool
-                .pop()
-                .unwrap_or_else(|| vec![ScoreValue::default(); self.chunk_size]);
-            let sentence = Arc::clone(&sentence);
-            let end = std::cmp::min(start + self.chunk_size, sentence.boundaries.len());
-            self.task_tx.send((sentence, start..end, ys)).unwrap();
-            n_chunks += 1;
-        }
-        let mut boundaries = vec![BoundaryType::Unknown; sentence.boundaries.len()];
-        for _ in 0..n_chunks {
-            let (ys, range) = self.result_rx.recv().unwrap();
-            for (&y, b) in ys.iter().zip(&mut boundaries[range]) {
-                *b = if y >= ScoreValue::default() {
-                    BoundaryType::WordBoundary
-                } else {
-                    BoundaryType::NotWordBoundary
-                };
-            }
-            ys_pool.push(ys);
-        }
-
-        let mut sentence = Arc::try_unwrap(sentence).unwrap();
-        sentence.boundaries = boundaries;
+        let mut sentence = self.predict_impl(sentence);
+        sentence.boundary_scores.rotate_left(self.padding);
+        sentence.boundary_scores.truncate(sentence.boundaries.len());
         sentence
     }
 
-    /// Predicts word boundaries. This function inserts scores.
+    fn best_tag(&self, scores: &[i32]) -> Arc<String> {
+        Arc::clone(
+            scores
+                .iter()
+                .zip(&self.tag_names)
+                .max_by_key(|(&x, _)| x)
+                .unwrap()
+                .1,
+        )
+    }
+
+    /// Fills tags using calculated scores.
+    ///
+    /// Tags are predicted using token boundaries, so you have to apply boundary post-processors
+    /// before filling tags.
     ///
     /// # Arguments
     ///
@@ -505,48 +164,85 @@ impl MultithreadPredictor {
     ///
     /// # Returns
     ///
-    /// A sentence with predicted boundary information.
-    pub fn predict_with_score(&self, mut sentence: Sentence) -> Sentence {
-        let mut scores = sentence
-            .boundary_scores
-            .take()
-            .unwrap_or_else(|| vec![0.; sentence.boundaries.len()]);
-        let sentence = Arc::new(sentence);
-        let mut n_chunks = 0;
-        let mut ys_pool = self.ys_pool.borrow_mut();
-        for start in (0..sentence.boundaries.len()).step_by(self.chunk_size) {
-            let ys = ys_pool
-                .pop()
-                .unwrap_or_else(|| vec![ScoreValue::default(); self.chunk_size]);
-            let sentence = Arc::clone(&sentence);
-            let end = std::cmp::min(start + self.chunk_size, sentence.boundaries.len());
-            self.task_tx.send((sentence, start..end, ys)).unwrap();
-            n_chunks += 1;
+    /// A sentence with tag information. When the predictor is instantiated with
+    /// `predict_tag = false`, the sentence is returned without any modification.
+    pub fn fill_tags(&self, mut sentence: Sentence) -> Sentence {
+        if self.tag_names.is_empty() {
+            return sentence;
         }
-        let mut boundaries = vec![BoundaryType::Unknown; sentence.boundaries.len()];
-        for _ in 0..n_chunks {
-            let (ys, range) = self.result_rx.recv().unwrap();
-            for (&y, (b, s)) in ys
-                .iter()
-                .zip(boundaries[range.clone()].iter_mut().zip(&mut scores[range]))
-            {
-                *b = if y >= ScoreValue::default() {
-                    BoundaryType::WordBoundary
-                } else {
-                    BoundaryType::NotWordBoundary
-                };
-
-                #[cfg(feature = "model-quantize")]
-                let y = y as f64 * self.quantize_multiplier;
-
-                *s = y;
+        if sentence.tags.is_empty() {
+            sentence.tags.resize(sentence.chars().len(), None);
+        }
+        let n_tags = self.tag_names.len();
+        let mut tag_score = self.tag_bias.clone();
+        let mut left_scores_iter = sentence.tag_scores.left_scores.chunks(n_tags);
+        for (t, l) in tag_score.iter_mut().zip(left_scores_iter.next().unwrap()) {
+            *t += l;
+        }
+        let mut right_scores_iter = sentence.tag_scores.right_scores.chunks(n_tags);
+        let mut last_boundary_idx = 0;
+        for (i, ((((b, left_scores), right_scores), self_scores), tag)) in sentence
+            .boundaries
+            .iter()
+            .zip(left_scores_iter)
+            .zip(&mut right_scores_iter)
+            .zip(&sentence.tag_scores.self_scores)
+            .zip(&mut sentence.tags)
+            .enumerate()
+        {
+            if *b == BoundaryType::WordBoundary {
+                for (t, r) in tag_score.iter_mut().zip(right_scores) {
+                    *t += *r;
+                }
+                if let Some(self_weights) = self_scores.as_ref() {
+                    let diff = last_boundary_idx as i32 - i as i32 - 1;
+                    for self_weight in self_weights.iter() {
+                        match self_weight.start_rel_position.cmp(&diff) {
+                            Ordering::Greater => continue,
+                            Ordering::Equal => {
+                                for (t, s) in tag_score.iter_mut().zip(&self_weight.weight) {
+                                    *t += *s;
+                                }
+                            }
+                            Ordering::Less => (),
+                        }
+                        break;
+                    }
+                }
+                tag.replace(self.best_tag(&tag_score));
+                for (t, (l, b)) in tag_score
+                    .iter_mut()
+                    .zip(left_scores.iter().zip(&self.tag_bias))
+                {
+                    *t = *l + *b;
+                }
+                last_boundary_idx = i + 1;
             }
-            ys_pool.push(ys);
         }
+        for (t, r) in tag_score.iter_mut().zip(right_scores_iter.next().unwrap()) {
+            *t += r;
+        }
+        if let Some(self_weights) = sentence.tag_scores.self_scores.last().unwrap().as_ref() {
+            let diff = last_boundary_idx as i32 - sentence.chars.len() as i32;
+            for self_weight in self_weights.iter() {
+                match self_weight.start_rel_position.cmp(&diff) {
+                    Ordering::Greater => continue,
+                    Ordering::Equal => {
+                        for (t, s) in tag_score.iter_mut().zip(&self_weight.weight) {
+                            *t += *s;
+                        }
+                    }
+                    Ordering::Less => (),
+                }
+                break;
+            }
+        }
+        sentence
+            .tags
+            .last_mut()
+            .unwrap()
+            .replace(self.best_tag(&tag_score));
 
-        let mut sentence = Arc::try_unwrap(sentence).unwrap();
-        sentence.boundaries = boundaries;
-        sentence.boundary_scores.replace(scores);
         sentence
     }
 }
@@ -554,6 +250,11 @@ impl MultithreadPredictor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
+    use crate::ngram_model::{NgramData, NgramModel};
+    use crate::sentence::Token;
+    use crate::tag_model::{TagClassInfo, TagModel};
 
     /// Input:  我  ら  は  全  世  界  の  国  民
     /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
@@ -583,84 +284,81 @@ mod tests {
     ///   世:                 40  42
     fn generate_model_1() -> Model {
         Model {
-            words: vec![
-                "我ら".as_bytes().to_vec(),
-                "全世界".as_bytes().to_vec(),
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "界".as_bytes().to_vec(),
-            ],
-            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
-            dict: vec![
-                "全世界".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "世".as_bytes().to_vec(),
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            word_weights: vec![
-                vec![0.5, 1.0, 1.5, 2.0, 2.5],
-                vec![3.0, 3.5, 4.0, 4.5],
-                vec![5.0, 5.5, 6.0, 6.5, 7.0],
-                vec![7.5, 8.0, 8.5, 9.0, 9.5],
-                vec![10.0, 10.5, 11.0, 11.5, 12.0, 12.5],
-            ],
-            #[cfg(feature = "model-quantize")]
-            word_weights: vec![
-                vec![1, 2, 3, 4, 5],
-                vec![6, 7, 8, 9],
-                vec![10, 11, 12, 13, 14],
-                vec![15, 16, 17, 18, 19],
-                vec![20, 21, 22, 23, 24, 25],
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            type_weights: vec![
-                vec![13.0, 13.5, 14.0, 14.5],
-                vec![15.0, 15.5, 16.0, 16.5],
-                vec![17.0, 17.5, 18.0],
-                vec![18.5, 19.0, 19.5],
-            ],
-            #[cfg(feature = "model-quantize")]
-            type_weights: vec![
-                vec![26, 27, 28, 29],
-                vec![30, 31, 32, 33],
-                vec![34, 35, 36],
-                vec![37, 38, 39],
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            dict_weights: vec![
-                DictWeight {
-                    right: 20.0,
-                    inner: 20.5,
-                    left: 21.0,
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3, 4, 5],
                 },
-                DictWeight {
-                    right: 21.5,
-                    inner: 22.0,
-                    left: 22.5,
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![6, 7, 8, 9],
                 },
-            ],
-            #[cfg(feature = "model-quantize")]
-            dict_weights: vec![
-                DictWeight {
-                    right: 40,
-                    inner: 41,
-                    left: 42,
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![10, 11, 12, 13, 14],
                 },
-                DictWeight {
-                    right: 43,
-                    inner: 44,
-                    left: 45,
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![15, 16, 17, 18, 19],
                 },
-            ],
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier: 0.5,
-            dict_word_wise: false,
-            #[cfg(not(feature = "model-quantize"))]
-            bias: -100.0,
-            #[cfg(feature = "model-quantize")]
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![20, 21, 22, 23, 24, 25],
+                },
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![26, 27, 28, 29],
+                },
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![30, 31, 32, 33],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![34, 35, 36],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![37, 38, 39],
+                },
+            ]),
+            dict_model: DictModel {
+                dict: vec![
+                    WordWeightRecord {
+                        word: "全世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 40,
+                            inside: 41,
+                            left: 42,
+                        },
+                        comment: "".to_string(),
+                    },
+                ],
+            },
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
+            tag_model: TagModel::default(),
         }
     }
 
@@ -692,94 +390,81 @@ mod tests {
     ///   世:                 38  40
     fn generate_model_2() -> Model {
         Model {
-            words: vec![
-                "我ら".as_bytes().to_vec(),
-                "全世界".as_bytes().to_vec(),
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "界".as_bytes().to_vec(),
-            ],
-            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
-            dict: vec![
-                "全世界".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "世".as_bytes().to_vec(),
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            word_weights: vec![
-                vec![0.25, 0.5, 0.75],
-                vec![1.0, 1.25],
-                vec![1.5, 1.75, 2.0],
-                vec![2.25, 2.5, 2.75],
-                vec![3.0, 3.25, 3.5, 3.75],
-            ],
-            #[cfg(feature = "model-quantize")]
-            word_weights: vec![
-                vec![1, 2, 3],
-                vec![4, 5],
-                vec![6, 7, 8],
-                vec![9, 10, 11],
-                vec![12, 13, 14, 15],
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            type_weights: vec![
-                vec![4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
-                vec![5.5, 5.75, 6.0, 6.25, 6.5, 6.75],
-                vec![7.0, 7.25, 7.5, 7.75, 8.0],
-                vec![8.25, 8.5, 8.75, 9.0, 9.25],
-            ],
-            #[cfg(feature = "model-quantize")]
-            type_weights: vec![
-                vec![16, 17, 18, 19, 20, 21],
-                vec![22, 23, 24, 25, 26, 27],
-                vec![28, 29, 30, 31, 32],
-                vec![33, 34, 35, 36, 37],
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            dict_weights: vec![
-                DictWeight {
-                    right: 9.5,
-                    inner: 9.75,
-                    left: 10.0,
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3],
                 },
-                DictWeight {
-                    right: 10.25,
-                    inner: 10.5,
-                    left: 10.75,
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![4, 5],
                 },
-                DictWeight {
-                    right: 11.0,
-                    inner: 11.25,
-                    left: 11.5,
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![6, 7, 8],
                 },
-            ],
-            #[cfg(feature = "model-quantize")]
-            dict_weights: vec![
-                DictWeight {
-                    right: 38,
-                    inner: 39,
-                    left: 40,
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![9, 10, 11],
                 },
-                DictWeight {
-                    right: 41,
-                    inner: 42,
-                    left: 43,
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![12, 13, 14, 15],
                 },
-                DictWeight {
-                    right: 44,
-                    inner: 45,
-                    left: 46,
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![16, 17, 18, 19, 20, 21],
                 },
-            ],
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier: 0.25,
-            dict_word_wise: false,
-            #[cfg(not(feature = "model-quantize"))]
-            bias: -71.25,
-            #[cfg(feature = "model-quantize")]
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![22, 23, 24, 25, 26, 27],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![28, 29, 30, 31, 32],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![33, 34, 35, 36, 37],
+                },
+            ]),
+            dict_model: DictModel {
+                dict: vec![
+                    WordWeightRecord {
+                        word: "全世界".to_string(),
+                        weights: DictWeight {
+                            right: 44,
+                            inside: 45,
+                            left: 46,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 41,
+                            inside: 42,
+                            left: 43,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 38,
+                            inside: 39,
+                            left: 40,
+                        },
+                        comment: "".to_string(),
+                    },
+                ],
+            },
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
+            tag_model: TagModel::default(),
         }
     }
 
@@ -811,101 +496,343 @@ mod tests {
     ///   世:                 44  46
     fn generate_model_3() -> Model {
         Model {
-            words: vec![
-                "我ら".as_bytes().to_vec(),
-                "全世界".as_bytes().to_vec(),
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "界".as_bytes().to_vec(),
-            ],
-            types: vec![b"H".to_vec(), b"K".to_vec(), b"KH".to_vec(), b"HK".to_vec()],
-            dict: vec![
-                "国民".as_bytes().to_vec(),
-                "世界".as_bytes().to_vec(),
-                "世".as_bytes().to_vec(),
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            word_weights: vec![
-                vec![0.25, 0.5, 0.75],
-                vec![1.0, 1.25],
-                vec![1.5, 1.75, 2.0],
-                vec![2.25, 2.5, 2.75],
-                vec![3.0, 3.25, 3.5, 3.75],
-            ],
-            #[cfg(feature = "model-quantize")]
-            word_weights: vec![
-                vec![1, 2, 3],
-                vec![4, 5],
-                vec![6, 7, 8],
-                vec![9, 10, 11],
-                vec![12, 13, 14, 15],
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            type_weights: vec![
-                vec![4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
-                vec![5.5, 5.75, 6.0, 6.25, 6.5, 6.75],
-                vec![7.0, 7.25, 7.5, 7.75, 8.0],
-                vec![8.25, 8.5, 8.75, 9.0, 9.25],
-            ],
-            #[cfg(feature = "model-quantize")]
-            type_weights: vec![
-                vec![16, 17, 18, 19, 20, 21],
-                vec![22, 23, 24, 25, 26, 27],
-                vec![28, 29, 30, 31, 32],
-                vec![33, 34, 35, 36, 37],
-            ],
-            #[cfg(not(feature = "model-quantize"))]
-            dict_weights: vec![
-                DictWeight {
-                    right: 9.5,
-                    inner: 9.75,
-                    left: 11.0,
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3],
                 },
-                DictWeight {
-                    right: 10.25,
-                    inner: 10.5,
-                    left: 10.75,
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![4, 5],
                 },
-                DictWeight {
-                    right: 11.0,
-                    inner: 11.25,
-                    left: 11.5,
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![6, 7, 8],
                 },
-            ],
-            #[cfg(feature = "model-quantize")]
-            dict_weights: vec![
-                DictWeight {
-                    right: 38,
-                    inner: 39,
-                    left: 40,
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![9, 10, 11],
                 },
-                DictWeight {
-                    right: 41,
-                    inner: 42,
-                    left: 43,
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![12, 13, 14, 15],
                 },
-                DictWeight {
-                    right: 44,
-                    inner: 45,
-                    left: 46,
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![16, 17, 18, 19, 20, 21],
                 },
-            ],
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier: 0.25,
-            dict_word_wise: true,
-            #[cfg(not(feature = "model-quantize"))]
-            bias: -71.25,
-            #[cfg(feature = "model-quantize")]
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![22, 23, 24, 25, 26, 27],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![28, 29, 30, 31, 32],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![33, 34, 35, 36, 37],
+                },
+            ]),
+            dict_model: DictModel {
+                dict: vec![
+                    WordWeightRecord {
+                        word: "国民".to_string(),
+                        weights: DictWeight {
+                            right: 38,
+                            inside: 39,
+                            left: 40,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 41,
+                            inside: 42,
+                            left: 43,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 44,
+                            inside: 45,
+                            left: 46,
+                        },
+                        comment: "".to_string(),
+                    },
+                ],
+            },
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
+            tag_model: TagModel::default(),
+        }
+    }
+
+    /// Input:  我  ら  は  全  世  界  の  国  民
+    /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
+    /// chars:
+    ///   我ら:    3   4   5
+    ///   全世界:          6   7   8   9
+    ///   国民:                       10  11  12
+    ///   世界:           15  16  17  18  19
+    ///   界:             20  21  22  23  24  25
+    /// types:
+    ///   H:      27  28  29
+    ///           26  27  28  29
+    ///                           26  27  28  29
+    ///   K:      32  33
+    ///               30  31  32  33
+    ///                   30  31  32  33
+    ///                       30  31  32  33
+    ///                               30  31  32
+    ///                                   30  31
+    ///   KH:     35  36
+    ///                           34  35  36
+    ///   HK:         37  38  39
+    ///                               37  38  39
+    /// dict:
+    ///   全世界:         43  44  44  45
+    ///   世界:               43  44  45
+    ///   世:                 40  42
+    ///   世界の国民:         43  44  44  44  44
+    ///   は全世界:   43  44  44  44  45
+    ///
+    ///
+    ///   は全世界:   43  44  44  44  45
+    ///                   15  16  17  18  19
+    ///                   20  21  22  23  24  25
+    ///                    6   7   8   9
+    fn generate_model_4() -> Model {
+        Model {
+            char_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: "我ら".to_string(),
+                    weights: vec![1, 2, 3, 4, 5],
+                },
+                NgramData {
+                    ngram: "全世界".to_string(),
+                    weights: vec![6, 7, 8, 9],
+                },
+                NgramData {
+                    ngram: "国民".to_string(),
+                    weights: vec![10, 11, 12, 13, 14],
+                },
+                NgramData {
+                    ngram: "世界".to_string(),
+                    weights: vec![15, 16, 17, 18, 19],
+                },
+                NgramData {
+                    ngram: "界".to_string(),
+                    weights: vec![20, 21, 22, 23, 24, 25],
+                },
+            ]),
+            type_ngram_model: NgramModel::new(vec![
+                NgramData {
+                    ngram: b"H".to_vec(),
+                    weights: vec![26, 27, 28, 29],
+                },
+                NgramData {
+                    ngram: b"K".to_vec(),
+                    weights: vec![30, 31, 32, 33],
+                },
+                NgramData {
+                    ngram: b"KH".to_vec(),
+                    weights: vec![34, 35, 36],
+                },
+                NgramData {
+                    ngram: b"HK".to_vec(),
+                    weights: vec![37, 38, 39],
+                },
+            ]),
+            dict_model: DictModel {
+                dict: vec![
+                    WordWeightRecord {
+                        word: "全世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世".to_string(),
+                        weights: DictWeight {
+                            right: 40,
+                            inside: 41,
+                            left: 42,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "世界の国民".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                    WordWeightRecord {
+                        word: "は全世界".to_string(),
+                        weights: DictWeight {
+                            right: 43,
+                            inside: 44,
+                            left: 45,
+                        },
+                        comment: "".to_string(),
+                    },
+                ],
+            },
+            bias: -200,
+            char_window_size: 3,
+            type_window_size: 2,
+            tag_model: TagModel::default(),
+        }
+    }
+
+    /// Input:  人  と  人  を  つ  な  ぐ  人
+    /// left:
+    ///   \0人: 1   4
+    ///         2   5
+    ///         3   6
+    ///     人:     7  10   7  10
+    ///             8  11   8  11
+    ///             9  12   9  12
+    /// つなぐ:                    13  16  19
+    ///                            14  17  20
+    ///                            15  18  21
+    ///   人\0:                            22
+    ///                                    23
+    ///                                    24
+    ///
+    ///    sum: 1  11  10   7  10  13  16  41
+    ///         2  13  11   8  11  14  17  43
+    ///         3  15  12   9  12  15  18  45
+    ///
+    /// right:
+    /// \0人と:  28
+    ///          29
+    ///          30
+    ///   人を:      31  34  37
+    ///              32  35  38
+    ///              33  36  39
+    ///     を:      40  43
+    ///              41  44
+    ///              42  45
+    ///   人\0:                          46  49
+    ///                                  47  50
+    ///                                  48  51
+    ///
+    ///     sum: 28  71  77  37   0   0  46  49
+    ///          29  73  79  38   0   0  47  50
+    ///          30  75  81  39   0   0  48  51
+    fn generate_model_5() -> Model {
+        Model {
+            char_ngram_model: NgramModel::new(vec![NgramData {
+                ngram: "xxxx".to_string(),
+                weights: vec![0],
+            }]),
+            type_ngram_model: NgramModel::new(vec![NgramData {
+                ngram: b"RRRR".to_vec(),
+                weights: vec![0],
+            }]),
+            dict_model: DictModel { dict: vec![] },
+            bias: 0,
+            char_window_size: 2,
+            type_window_size: 2,
+            tag_model: TagModel {
+                class_info: vec![
+                    TagClassInfo {
+                        name: "名詞".to_string(),
+                        bias: 5,
+                    },
+                    TagClassInfo {
+                        name: "動詞".to_string(),
+                        bias: 3,
+                    },
+                    TagClassInfo {
+                        name: "助詞".to_string(),
+                        bias: 1,
+                    },
+                ],
+                left_char_model: NgramModel::new(vec![
+                    NgramData {
+                        ngram: "\0人".to_string(),
+                        weights: vec![1, 2, 3, 4, 5, 6],
+                    },
+                    NgramData {
+                        ngram: "人".to_string(),
+                        weights: vec![7, 8, 9, 10, 11, 12],
+                    },
+                    NgramData {
+                        ngram: "つなぐ".to_string(),
+                        weights: vec![13, 14, 15, 16, 17, 18, 19, 20, 21],
+                    },
+                    NgramData {
+                        ngram: "ぐ人\0".to_string(),
+                        weights: vec![22, 23, 24],
+                    },
+                ]),
+                right_char_model: NgramModel::new(vec![
+                    NgramData {
+                        ngram: "\0人と".to_string(),
+                        weights: vec![25, 26, 27, 28, 29, 30],
+                    },
+                    NgramData {
+                        ngram: "人を".to_string(),
+                        weights: vec![31, 32, 33, 34, 35, 36, 37, 38, 39],
+                    },
+                    NgramData {
+                        ngram: "を".to_string(),
+                        weights: vec![40, 41, 42, 43, 44, 45],
+                    },
+                    NgramData {
+                        ngram: "人\0".to_string(),
+                        weights: vec![46, 47, 48, 49, 50, 51],
+                    },
+                ]),
+                self_char_model: NgramModel::new(vec![
+                    NgramData {
+                        ngram: "人".to_string(),
+                        weights: vec![2, -1, -1],
+                    },
+                    NgramData {
+                        ngram: "と".to_string(),
+                        weights: vec![0, 0, 0],
+                    },
+                    NgramData {
+                        ngram: "つなぐ".to_string(),
+                        weights: vec![0, 1, 0],
+                    },
+                    NgramData {
+                        ngram: "を".to_string(),
+                        weights: vec![0, 0, 0],
+                    },
+                ]),
+            },
         }
     }
 
     #[test]
     fn test_predict_1() {
         let model = generate_model_1();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict(s);
         assert_eq!(
@@ -926,7 +853,7 @@ mod tests {
     #[test]
     fn test_predict_2() {
         let model = generate_model_2();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict(s);
         assert_eq!(
@@ -947,7 +874,7 @@ mod tests {
     #[test]
     fn test_predict_3() {
         let model = generate_model_3();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict(s);
         assert_eq!(
@@ -966,11 +893,33 @@ mod tests {
     }
 
     #[test]
+    fn test_predict_4() {
+        let model = generate_model_4();
+        let p = Predictor::new(model, false).unwrap();
+        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
+        let s = p.predict(s);
+        assert_eq!(
+            &[
+                BoundaryType::NotWordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+            ],
+            s.boundaries(),
+        );
+    }
+
+    #[test]
     fn test_predict_with_score_1() {
         let model = generate_model_1();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
+        assert_eq!(&[-77, -5, 45, 132, 133, 144, 50, -32], s.boundary_scores(),);
         assert_eq!(
             &[
                 BoundaryType::NotWordBoundary,
@@ -983,19 +932,19 @@ mod tests {
                 BoundaryType::NotWordBoundary,
             ],
             s.boundaries(),
-        );
-        assert_eq!(
-            &[-38.5, -2.5, 22.5, 66.0, 66.5, 72.0, 25.0, -16.0],
-            s.boundary_scores().unwrap(),
         );
     }
 
     #[test]
     fn test_predict_with_score_2() {
         let model = generate_model_2();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
+        assert_eq!(
+            &[-138, -109, -39, 57, 104, 34, -79, -114],
+            s.boundary_scores(),
+        );
         assert_eq!(
             &[
                 BoundaryType::NotWordBoundary,
@@ -1008,20 +957,20 @@ mod tests {
                 BoundaryType::NotWordBoundary,
             ],
             s.boundaries(),
-        );
-        assert_eq!(
-            &[-34.5, -27.25, -9.75, 14.25, 26.0, 8.5, -19.75, -28.5],
-            s.boundary_scores().unwrap(),
         );
     }
 
     #[test]
     fn test_predict_with_score_3() {
         let model = generate_model_3();
-        let p = Predictor::new(model);
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
         let s = p.predict_with_score(s);
         assert_eq!(
+            &[-138, -109, -83, 18, 65, -12, -41, -75],
+            s.boundary_scores(),
+        );
+        assert_eq!(
             &[
                 BoundaryType::NotWordBoundary,
                 BoundaryType::NotWordBoundary,
@@ -1031,150 +980,93 @@ mod tests {
                 BoundaryType::NotWordBoundary,
                 BoundaryType::NotWordBoundary,
                 BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[-34.5, -27.25, -20.75, 4.5, 16.25, -3.0, -10.25, -18.75],
-            s.boundary_scores().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_1() {
-        let model = generate_model_1();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial(s, 1..5);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
             ],
             s.boundaries(),
         );
     }
 
     #[test]
-    fn test_predict_partial_2() {
-        let model = generate_model_2();
-        let p = Predictor::new(model);
+    fn test_predict_with_score_4() {
+        let model = generate_model_4();
+        let p = Predictor::new(model, false).unwrap();
         let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial(s, 2..7);
+        let s = p.predict_with_score(s);
+        assert_eq!(&[-77, 38, 89, 219, 221, 233, 94, 12], s.boundary_scores(),);
         assert_eq!(
             &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
                 BoundaryType::NotWordBoundary,
                 BoundaryType::WordBoundary,
                 BoundaryType::WordBoundary,
                 BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
+                BoundaryType::WordBoundary,
             ],
             s.boundaries(),
         );
     }
 
     #[test]
-    fn test_predict_partial_3() {
-        let model = generate_model_3();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial(s, 2..6);
+    fn test_predict_with_score_5() {
+        let model = generate_model_5();
+        let p = Predictor::new(model, true).unwrap();
+        let s = Sentence::from_raw("人と人をつなぐ人").unwrap();
+        let mut s = p.predict(s);
         assert_eq!(
             &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
+                1, 2, 3, 11, 13, 15, 10, 11, 12, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 41,
+                43, 45
             ],
-            s.boundaries(),
+            s.tag_scores.left_scores.as_slice()
         );
-    }
+        assert_eq!(
+            &[
+                28, 29, 30, 71, 73, 75, 77, 79, 81, 37, 38, 39, 0, 0, 0, 0, 0, 0, 46, 47, 48, 49,
+                50, 51
+            ],
+            s.tag_scores.right_scores.as_slice()
+        );
 
-    #[test]
-    fn test_predict_partial_with_score_1() {
-        let model = generate_model_1();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial_with_score(s, 1..5);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[0.0, -2.5, 22.5, 66.0, 66.5, 0.0, 0.0, 0.0],
-            s.boundary_scores().unwrap(),
-        );
-    }
+        s.boundaries_mut().copy_from_slice(&[
+            BoundaryType::WordBoundary,
+            BoundaryType::WordBoundary,
+            BoundaryType::WordBoundary,
+            BoundaryType::WordBoundary,
+            BoundaryType::NotWordBoundary,
+            BoundaryType::NotWordBoundary,
+            BoundaryType::WordBoundary,
+        ]);
+        let s = p.fill_tags(s);
 
-    #[test]
-    fn test_predict_partial_with_score_2() {
-        let model = generate_model_2();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial_with_score(s, 2..7);
         assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
+            vec![
+                Token {
+                    surface: "人",
+                    tag: Some("名詞")
+                },
+                Token {
+                    surface: "と",
+                    tag: Some("助詞")
+                },
+                Token {
+                    surface: "人",
+                    tag: Some("名詞")
+                },
+                Token {
+                    surface: "を",
+                    tag: Some("助詞")
+                },
+                Token {
+                    surface: "つなぐ",
+                    tag: Some("動詞")
+                },
+                Token {
+                    surface: "人",
+                    tag: Some("名詞")
+                }
             ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[0.0, 0.0, -9.75, 14.25, 26.0, 8.5, -19.75, 0.0],
-            s.boundary_scores().unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_predict_partial_with_score_3() {
-        let model = generate_model_3();
-        let p = Predictor::new(model);
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_partial_with_score(s, 2..6);
-        assert_eq!(
-            &[
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::Unknown,
-                BoundaryType::Unknown,
-            ],
-            s.boundaries(),
-        );
-        assert_eq!(
-            &[0.0, 0.0, -20.75, 4.5, 16.25, -3.0, 0.0, 0.0],
-            s.boundary_scores().unwrap(),
+            s.to_tokenized_vec().unwrap(),
         );
     }
 }

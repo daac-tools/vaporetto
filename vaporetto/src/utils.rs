@@ -1,85 +1,171 @@
-#[cfg(feature = "train")]
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::io::{self, Read, Write};
 
-#[cfg(feature = "train")]
-use crate::feature::Feature;
-
-#[cfg(feature = "train")]
-pub struct FeatureIDManager<'a> {
-    pub(crate) map: HashMap<Feature<'a>, u32>,
+pub trait AddWeight {
+    fn add_weight(&self, target: &mut [i32], offset: isize);
 }
 
-#[cfg(feature = "train")]
-impl<'a> FeatureIDManager<'a> {
-    pub fn new() -> Self {
+impl AddWeight for Vec<i32> {
+    fn add_weight(&self, ys: &mut [i32], offset: isize) {
+        if offset >= 0 {
+            if let Some(ys) = ys.get_mut(offset as usize..) {
+                for (w, y) in self.iter().zip(ys) {
+                    *y += w;
+                }
+            }
+        } else if let Some(ws) = self.get(-offset as usize..) {
+            for (w, y) in ws.iter().zip(ys.iter_mut()) {
+                *y += w;
+            }
+        }
+    }
+}
+
+pub trait MergableWeight {
+    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self;
+}
+
+pub struct WeightMerger<W> {
+    map: BTreeMap<String, RefCell<(W, bool)>>,
+    n_classes: usize,
+}
+
+impl<W> WeightMerger<W>
+where
+    W: MergableWeight,
+{
+    pub fn new(n_classes: usize) -> Self {
         Self {
-            map: HashMap::new(),
+            map: BTreeMap::new(),
+            n_classes,
         }
     }
 
-    pub fn get_id(&mut self, feature: Feature<'a>) -> u32 {
-        self.map.get(&feature).copied().unwrap_or_else(|| {
-            let new_id = self.map.len() as u32;
-            self.map.insert(feature, new_id);
-            new_id
-        })
-    }
-}
-
-#[cfg(feature = "train")]
-impl<'a> Default for FeatureIDManager<'a> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(feature = "train")]
-pub struct StringIdManager {
-    pub(crate) map: HashMap<Vec<u8>, usize>,
-}
-
-#[cfg(feature = "train")]
-impl StringIdManager {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
+    pub fn add(&mut self, ngram: &str, weight: W) {
+        if let Some(data) = self.map.get_mut(ngram) {
+            let (prev_weight, _) = &mut *data.borrow_mut();
+            *prev_weight = W::from_two_weights(&weight, prev_weight, self.n_classes);
+        } else {
+            self.map
+                .insert(ngram.to_string(), RefCell::new((weight, false)));
         }
     }
 
-    pub fn get_id(&mut self, key: &[u8]) -> usize {
-        self.map.get(key).copied().unwrap_or_else(|| {
-            let new_id = self.map.len();
-            self.map.insert(key.into(), new_id);
-            new_id
-        })
+    pub fn merge(self) -> Vec<(String, W)> {
+        let mut stack = vec![];
+        for (ngram, data) in &self.map {
+            if data.borrow().1 {
+                continue;
+            }
+            stack.push(data);
+            for (j, _) in ngram.char_indices().skip(1) {
+                if let Some(data) = self.map.get(&ngram[j..]) {
+                    stack.push(data);
+                    if data.borrow().1 {
+                        break;
+                    }
+                }
+            }
+            let mut data_from = stack.pop().unwrap();
+            data_from.borrow_mut().1 = true;
+            while let Some(data_to) = stack.pop() {
+                let new_data = (
+                    W::from_two_weights(&data_from.borrow().0, &data_to.borrow().0, self.n_classes),
+                    true,
+                );
+                *data_to.borrow_mut() = new_data;
+                data_from = data_to;
+            }
+        }
+        self.map
+            .into_iter()
+            .map(|(ngram, weight)| (ngram, weight.into_inner().0))
+            .collect()
     }
 }
 
-#[cfg(test)]
-#[allow(unused_macros)]
-macro_rules! ct2u8 {
-    ( $( $v:path ),* ) => {
-        ct2u8!( $( $v, )* )
-    };
-    ( $( $v:path, )* ) => {
-        [
-            $(
-                $v as u8,
-            )*
-        ]
-    };
+pub fn xor_or_zip_with<T, F>(lhs: &Option<T>, rhs: &Option<T>, f: F) -> Option<T>
+where
+    T: Clone,
+    F: FnOnce(&T, &T) -> T,
+{
+    lhs.as_ref().map_or_else(
+        || rhs.clone(),
+        |x1| Some(rhs.as_ref().map_or_else(|| x1.clone(), |x2| f(x1, x2))),
+    )
 }
 
-#[cfg(test)]
-macro_rules! ct2u8vec {
-    ( $( $v:path ),* ) => {
-        ct2u8vec!( $( $v, )* )
-    };
-    ( $( $v:path, )* ) => {
-        vec![
-            $(
-                $v as u8,
-            )*
-        ]
-    };
+#[cfg(feature = "kytea")]
+pub fn read_u8<R>(mut rdr: R) -> io::Result<u8>
+where
+    R: Read,
+{
+    let mut buf = [0];
+    rdr.read_exact(&mut buf)?;
+    Ok(buf[0])
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_u16<R>(mut rdr: R) -> io::Result<u16>
+where
+    R: Read,
+{
+    let mut buf = [0; 2];
+    rdr.read_exact(&mut buf)?;
+    Ok(u16::from_le_bytes(buf))
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_i16<R>(mut rdr: R) -> io::Result<i16>
+where
+    R: Read,
+{
+    let mut buf = [0; 2];
+    rdr.read_exact(&mut buf)?;
+    Ok(i16::from_le_bytes(buf))
+}
+
+pub fn read_u32<R>(mut rdr: R) -> io::Result<u32>
+where
+    R: Read,
+{
+    let mut buf = [0; 4];
+    rdr.read_exact(&mut buf)?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+pub fn write_u32<W>(mut wtr: W, data: u32) -> io::Result<()>
+where
+    W: Write,
+{
+    wtr.write_all(&data.to_le_bytes())?;
+    Ok(())
+}
+
+pub fn read_i32<R>(mut rdr: R) -> io::Result<i32>
+where
+    R: Read,
+{
+    let mut buf = [0; 4];
+    rdr.read_exact(&mut buf)?;
+    Ok(i32::from_le_bytes(buf))
+}
+
+pub fn write_i32<W>(mut wtr: W, data: i32) -> io::Result<()>
+where
+    W: Write,
+{
+    wtr.write_all(&data.to_le_bytes())?;
+    Ok(())
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_f64<R>(mut rdr: R) -> io::Result<f64>
+where
+    R: Read,
+{
+    let mut buf = [0; 8];
+    rdr.read_exact(&mut buf)?;
+    Ok(f64::from_le_bytes(buf))
 }

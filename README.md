@@ -1,6 +1,7 @@
 # 🛥 VAporetto: POintwise pREdicTion based TOkenizer
 
 Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
+This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
@@ -8,19 +9,44 @@ Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 
 [Technical details](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (Japanese)
 
-## Overview
+[日本語のドキュメント](README-ja.md)
 
-This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
+## Example Usage
 
 ### Try Word Segmentation
 
 This software is implemented in Rust. Install `rustc` and `cargo` following [the documentation](https://www.rust-lang.org/tools/install) beforehand.
 
-Vaporetto provides two ways to generate tokenization models:
+Vaporetto provides three ways to generate tokenization models:
+
+#### Download Distribution Model
+
+The first is the simplest way, which is to download a model that has been trained by us.
+You can find models [here](https://github.com/legalforce-research/vaporetto/releases/tag/v0.3.0).
+
+We chose `bccwj-suw+unidic+tag`:
+```
+% wget https://github.com/legalforce-research/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.tar.xz
+```
+
+Each file contains a model file and license terms, so you need to extract the downloaded file like the following command:
+```
+% tar xf ./bccwj-suw+unidic+tag.tar.xz
+```
+
+To perform tokenization, run the following command:
+```
+% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic+tag.model.zst
+```
+
+The following will be output:
+```
+ヴェネツィア は イタリア に あり ます 。
+```
 
 #### Convert KyTea's Model
 
-The first is the simplest way, which is to convert a model that has been trained by KyTea.
+The second is also a simple way, which is to convert a model that has been trained by KyTea.
 First of all, download the model of your choice from the [KyTea Models](http://www.phontron.com/kytea/model.html) page.
 
 We chose `jp-0.4.7-5.mod.gz`:
@@ -34,24 +60,23 @@ Each model is compressed, so you need to decompress the downloaded model file li
 ```
 
 To convert a KyTea model into a Vaporetto model, run the following command in the Vaporetto root directory.
-If necessary, the Rust code will be compiled before the conversion process.
 ```
-% cargo run --release -p convert_kytea_model -- --model-in path/to/jp-0.4.7-5.mod --model-out path/to/jp-0.4.7-5-tokenize.model.zstd
+% cargo run --release -p convert_kytea_model -- --model-in path/to/jp-0.4.7-5.mod --model-out path/to/jp-0.4.7-5-tokenize.model.zst
 ```
 
 Now you can perform tokenization. Run the following command:
 ```
-% echo '火星猫の生態の調査結果' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zstd
+% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/jp-0.4.7-5-tokenize.model.zst
 ```
 
 The following will be output:
 ```
-火星 猫 の 生態 の 調査 結果
+ヴェネツィア は イタリア に あ り ま す 。
 ```
 
 #### Train Your Own Model
 
-The second way, which is mainly for researchers, is to prepare your own training corpus and train your own tokenization models.
+The third way, which is mainly for researchers, is to prepare your own training corpus and train your own tokenization models.
 
 Vaporetto can train from two types of corpora: fully annotated corpora and partially annotated corpora.
 
@@ -59,7 +84,7 @@ Fully annotated corpora are corpora in which all character boundaries are annota
 This is the data in the form of spaces inserted into the boundaries of the tokens, as shown below:
 
 ```
-ヴェネツィア は イタリア に あ り ま す 。
+ヴェネツィア は イタリア に あり ます 。
 火星 猫 の 生態 の 調査 結果
 ```
 
@@ -75,56 +100,122 @@ Here is an example:
 To train a model, use the following command:
 
 ```
-% cargo run --release -p train -- --model ./your.model.zstd --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt
+% cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt
 ```
 
 `--tok` argument specifies a fully annotated corpus, and `--part` argument specifies a partially annotated corpus.
 You can also specify a word dictionary with `--dict` argument.
 A word dictionary is a file with words per line.
 
+The trainer does not accept empty lines.
+Therefore, remove all empty lines from the corpus before training.
+
 You can specify all arguments above multiple times.
+
+### Model Manipulation
+
+Sometimes, your model will output different results than what you expect.
+For example, `メロンパン` is split into two tokens in the following command.
+We use `--scores` option to show the score of each character boundary:
+```
+% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
+朝食 は メロン パン 1 個 だっ た
+0:朝食 -15398
+1:食は 24623
+2:はメ 30261
+3:メロ -26885
+4:ロン -38896
+5:ンパ 8162
+6:パン -23416
+7:ン１ 23513
+8:１個 18435
+9:個だ 24964
+10:だっ -15065
+11:った 14178
+```
+
+To concatenate `メロンパン` into a single token, manipulate the model in the following steps so that the score of `ンパ` becomes negative:
+
+1. Dump a dictionary by the following command:
+   ```
+   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --dump-dict path/to/dictionary.csv
+   ```
+
+2. Edit the dictionary.
+
+   The dictionary is a csv file. Each row contains a word, corresponding weights, and a comment in the following order:
+
+   * `right_weight` - A weight that is added when the word is found to the right of the boundary.
+   * `inside_weight` - A weight that is added when the word is overlapped on the boundary.
+   * `left_weight` - A weight that is added when the word is found to the left of the boundary.
+   * `comment` - A comment that does not affect the behaviour.
+
+   Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
+   ```diff
+    メロレオストーシス,6944,-2553,5319,
+    メロン,8924,-10861,7081,
+   +メロンパン,0,-100000,0,melon🍈 bread🍞 in English.
+    メロン果実,4168,-1165,3558,
+    メロヴィング,6999,-15413,7583,
+   ```
+
+   In this case, `-100000` will be added when the boundary is inside of the word `メロンパン`.
+
+   Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
+
+   In addition, The dictionary cannot contain duplicated words.
+   When the word is already contained in the dictionary, you have to edit existing weights.
+
+3. Replaces weight data of a model file
+   ```
+   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/jp-0.4.7-5-tokenize-new.model.zst
+   ```
+
+Now `メロンパン` is split into a single token.
+```
+% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize-new.model.zst
+朝食 は メロンパン 1 個 だっ た
+0:朝食 -15398
+1:食は 24623
+2:はメ 30261
+3:メロ -126885
+4:ロン -138896
+5:ンパ -91838
+6:パン -123416
+7:ン１ 23513
+8:１個 18435
+9:個だ 24964
+10:だっ -15065
+11:った 14178
+```
+
+### POS tagging
+
+Vaporetto experimentally supports POS tagging.
+
+To train tags, add a slash and tag name following each token in the dataset as follows:
+
+* For fully annotated corpora
+  ```
+  この/連体詞 人/名詞 は/助詞 火星/名詞 人/接尾辞 です/助動詞
+  ```
+
+* For partially annotated corpora
+  ```
+  ヴ-ェ-ネ-ツ-ィ-ア/名詞|は/助詞|イ-タ-リ-ア/名詞|に/助詞|あ-り ま-す
+  ```
+
+If the dataset contains tags, the `train` command automatically trains them.
+
+In prediction, tags are not predicted by default, so you have to specify `--predict-tags` argument to `predict` command if necessary.
 
 ## Speed Comparison of Various Tokenizers
 
-### Experimental Setup
+Vaporetto is 8.25 times faster than KyTea.
 
-* Document: Japanese training data of Kyoto Free Translation Task
-* Models:
-  * KyTea and Vaporetto: Compact LR model (jp-0.4.7-6)
-  * MeCab, Kuromoji, and Lindera: IPAdic
-  * Sudachi and Sudachi.rs: system_core.dic (v20210802)
+Details can be found [here](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison).
 
-### Results
-
-* VM instance on Google Cloud Platform (c2-standard-16, Debian)
-
-  | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
-  | -------------------------- | ---------------------:|-------|
-  | KyTea (2020-04-03)         |                 0.777 | 0.020 |
-  | Vaporetto (0.1.6)          |             **4.426** | 0.182 |
-  |                            |                       |       |
-  | MeCab (2020-09-14)         |                 2.736 | 0.041 |
-  |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 0.423 | 0.013 |
-  | Lindera (0.8.0)            |                 1.002 | 0.014 |
-  |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.251 | 0.012 |
-  | Sudachi.rs (0.6.0-rc1)     |                 0.644 | 0.012 |
-
-* MacBook Pro (2017, Processor: 2.3 GHz Intel Core i5, Memory: 8 GB 2133 MHz LPDDR3)
-
-  | Tool Name (version)        | Speed (×10^6 chars/s) | σ     |
-  | -------------------------- | ---------------------:|-------|
-  | KyTea (2020-04-03)         |                 0.490 | 0.003 |
-  | Vaporetto (0.1.6)          |             **3.016** | 0.113 |
-  |                            |                       |       |
-  | MeCab (2020-09-14)         |                 1.418 | 0.007 |
-  |                            |                       |       |
-  | Kuromoji (Atilika's 0.9.0) |                 1.197 | 0.034 |
-  | Lindera (0.8.0)            |                 0.542 | 0.010 |
-  |                            |                       |       |
-  | Sudachi (0.5.2)            |                 0.439 | 0.026 |
-  | Sudachi.rs (0.6.0-rc1)     |                 0.427 | 0.009 |
+![](./figures/comparison.svg)
 
 ## Disclaimer
 

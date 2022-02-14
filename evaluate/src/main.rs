@@ -33,6 +33,23 @@ impl FromStr for WsConst {
     }
 }
 
+#[derive(Debug)]
+enum EvaluationMetric {
+    CharBoundaryAccuracy,
+    WordAccuracy,
+}
+
+impl FromStr for EvaluationMetric {
+    type Err = &'static str;
+    fn from_str(metric: &str) -> Result<Self, Self::Err> {
+        match metric {
+            "char" => Ok(Self::CharBoundaryAccuracy),
+            "word" => Ok(Self::WordAccuracy),
+            _ => Err("Could not parse a metric value"),
+        }
+    }
+}
+
 #[derive(StructOpt, Debug)]
 #[structopt(
     name = "evaluate",
@@ -43,6 +60,10 @@ struct Opt {
     #[structopt(long)]
     model: PathBuf,
 
+    /// Predicts POS tags.
+    #[structopt(long)]
+    predict_tags: bool,
+
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
     #[structopt(long)]
@@ -51,18 +72,22 @@ struct Opt {
     /// Do not normalize input strings before prediction.
     #[structopt(long)]
     no_norm: bool,
+
+    /// Evaluation metric: {char, word}.
+    /// char: evaluates each charactor boundary.
+    /// word: evaluates each word using Nagata's method.
+    #[structopt(long, default_value = "char")]
+    metric: EvaluationMetric,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
-    let fullwidth_filter = KyteaFullwidthFilter::new();
+    let fullwidth_filter = KyteaFullwidthFilter;
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
     for wsconst in &opt.wsconst {
         match wsconst {
-            WsConst::GraphemeCluster => {
-                post_filters.push(Box::new(ConcatGraphemeClustersFilter::new()))
-            }
+            WsConst::GraphemeCluster => post_filters.push(Box::new(ConcatGraphemeClustersFilter)),
             WsConst::CharType(char_type) => {
                 post_filters.push(Box::new(KyteaWsConstFilter::new(*char_type)))
             }
@@ -72,45 +97,103 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Loading model file...");
     let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model);
+    let predictor = Predictor::new(model, opt.predict_tags)?;
 
     eprintln!("Start tokenization");
-    let mut n_true_positive = 0;
-    let mut n_false_positive = 0;
-    let mut n_false_negative = 0;
 
+    let mut results = vec![];
     for line in stdin().lock().lines() {
-        let s = Sentence::from_tokenized(line?)?;
-        let s = if opt.no_norm {
-            s
-        } else {
-            let new_line = fullwidth_filter.filter(s.to_raw_string());
-            let mut new_s = Sentence::from_raw(new_line)?;
-            new_s.boundaries_mut().clone_from_slice(s.boundaries());
-            new_s
-        };
-        let reference = s.boundaries().to_vec();
-        let s = predictor.predict(s);
-        let s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
-        for (&r, &h) in reference.iter().zip(s.boundaries()) {
-            if r == h {
-                if h == BoundaryType::WordBoundary {
-                    n_true_positive += 1;
-                }
-            } else if h == BoundaryType::WordBoundary {
-                n_false_positive += 1;
-            } else {
-                n_false_negative += 1;
-            }
+        let line = line?;
+        if line.is_empty() {
+            continue;
         }
+        let mut s = Sentence::from_tokenized(line)?;
+        let ref_boundaries = s.boundaries().to_vec();
+        let ref_tags = s.tags().to_vec();
+        if !opt.no_norm {
+            let new_line = fullwidth_filter.filter(s.to_raw_string());
+            s = Sentence::from_raw(new_line)?
+        };
+        s = predictor.predict(s);
+        s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+        s = predictor.fill_tags(s);
+        let hyp_boundaries = s.boundaries().to_vec();
+        let hyp_tags = s.tags().to_vec();
+        results.push((ref_boundaries, ref_tags, hyp_boundaries, hyp_tags));
     }
 
-    let precision = n_true_positive as f64 / (n_true_positive + n_false_positive) as f64;
-    let recall = n_true_positive as f64 / (n_true_positive + n_false_negative) as f64;
-    let f1 = 2. * precision * recall / (precision + recall);
-    println!("Precision: {}", precision);
-    println!("Recall: {}", recall);
-    println!("F1: {}", f1);
+    match opt.metric {
+        EvaluationMetric::CharBoundaryAccuracy => {
+            let mut n_tp = 0;
+            let mut n_tn = 0;
+            let mut n_fp = 0;
+            let mut n_fn = 0;
+            for (rs_b, _, hs_b, _) in results {
+                for (r, h) in rs_b.into_iter().zip(hs_b) {
+                    if r == h {
+                        if h == BoundaryType::WordBoundary {
+                            n_tp += 1;
+                        } else {
+                            n_tn += 1;
+                        }
+                    } else if h == BoundaryType::WordBoundary {
+                        n_fp += 1;
+                    } else {
+                        n_fn += 1;
+                    }
+                }
+            }
+            let precision = n_tp as f64 / (n_tp + n_fp) as f64;
+            let recall = n_tp as f64 / (n_tp + n_fn) as f64;
+            let f1 = 2. * precision * recall / (precision + recall);
+            println!("Precision: {}", precision);
+            println!("Recall: {}", recall);
+            println!("F1: {}", f1);
+            println!("TP: {}, TN: {}, FP: {}, FN: {}", n_tp, n_tn, n_fp, n_fn);
+        }
+        EvaluationMetric::WordAccuracy => {
+            // Reference:
+            // Masaaki Nagata. 1994. A stochastic Japanese morphological analyzer using a forward-DP
+            // backward-A* n-best search algorithm. In COLING 1994 Volume 1: The 15th International
+            // Conference on Computational Linguistics.
+            let mut n_sys = 0;
+            let mut n_ref = 0;
+            let mut n_cor = 0;
+            for (rs_b, rs_t, hs_b, hs_t) in results {
+                let mut matched = true;
+                for (((r_b, r_t), h_b), h_t) in rs_b.iter().zip(&rs_t).zip(&hs_b).zip(&hs_t) {
+                    if r_b == h_b {
+                        if *h_b == BoundaryType::WordBoundary {
+                            if matched && r_t == h_t {
+                                n_cor += 1;
+                            }
+                            matched = true;
+                            n_ref += 1;
+                            n_sys += 1;
+                        }
+                    } else {
+                        if *h_b == BoundaryType::WordBoundary {
+                            n_sys += 1;
+                        } else {
+                            n_ref += 1;
+                        }
+                        matched = false;
+                    }
+                }
+                if matched && rs_t.last().unwrap() == hs_t.last().unwrap() {
+                    n_cor += 1;
+                }
+                n_sys += 1;
+                n_ref += 1;
+            }
+            let precision = n_cor as f64 / n_sys as f64;
+            let recall = n_cor as f64 / n_ref as f64;
+            let f1 = 2. * precision * recall / (precision + recall);
+            println!("Precision: {}", precision);
+            println!("Recall: {}", recall);
+            println!("F1: {}", f1);
+        }
+    }
 
     Ok(())
 }

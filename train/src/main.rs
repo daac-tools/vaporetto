@@ -4,7 +4,7 @@ use std::io::{prelude::*, stderr, BufReader};
 use std::path::PathBuf;
 
 use structopt::{clap::ArgGroup, StructOpt};
-use vaporetto::{Dataset, Sentence, SolverType, Trainer};
+use vaporetto::{Sentence, SolverType, Trainer};
 use vaporetto_rules::{string_filters::KyteaFullwidthFilter, StringFilter};
 
 #[derive(StructOpt, Debug)]
@@ -58,10 +58,6 @@ struct Opt {
     #[structopt(long, default_value = "1.0")]
     cost: f64,
 
-    /// Whether to use a bias value in classifier training
-    #[structopt(long)]
-    no_bias: bool,
-
     /// The solver. {0, 1, 2, 3, 4, 5, 6, 7} (see LIBLINEAR documentation for more details)
     #[structopt(long, default_value = "1")]
     solver: SolverType,
@@ -74,7 +70,7 @@ struct Opt {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
 
-    let fullwidth_filter = KyteaFullwidthFilter::new();
+    let fullwidth_filter = KyteaFullwidthFilter;
 
     eprintln!("Loading dataset...");
     let mut train_sents = vec![];
@@ -95,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let new_line = fullwidth_filter.filter(s.to_raw_string());
                 let mut new_s = Sentence::from_raw(new_line)?;
                 new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s.tags_mut().clone_from_slice(s.tags());
                 new_s
             };
             train_sents.push(s);
@@ -116,7 +113,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 let new_line = fullwidth_filter.filter(s.to_raw_string());
                 let mut new_s = Sentence::from_raw(new_line)?;
-                new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s.boundaries_mut().copy_from_slice(s.boundaries());
+                new_s.tags_mut().clone_from_slice(s.tags());
                 new_s
             };
             train_sents.push(s);
@@ -138,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let line = if opt.no_norm {
                 line
             } else {
-                fullwidth_filter.filter(line)
+                fullwidth_filter.filter(&line)
             };
             dictionary.insert(line);
         }
@@ -147,21 +145,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dictionary: Vec<String> = dictionary.into_iter().collect();
 
     eprintln!("Extracting into features...");
-    let mut dataset = Dataset::new(
+    let mut trainer = Trainer::new(
         opt.charn, opt.charw, opt.typen, opt.typew, dictionary, opt.dictn,
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
-            eprint!("# of features: {}\r", dataset.n_features());
+            eprint!(
+                "# of features: {}, # of tag features: {}\r",
+                trainer.n_features(),
+                trainer.n_tag_features()
+            );
             stderr().flush()?;
         }
-        dataset.push_sentence(s);
+        trainer.push_sentence(s)?;
     }
-    eprintln!("# of features: {}", dataset.n_features());
+    eprintln!(
+        "# of features: {}, # of tag features: {}",
+        trainer.n_features(),
+        trainer.n_tag_features()
+    );
 
     eprintln!("Start training...");
-    let trainer = Trainer::new(opt.eps, opt.cost, if opt.no_bias { 0. } else { 1. });
-    let model = trainer.train(dataset, opt.solver)?;
+    let model = trainer.train(opt.eps, opt.cost, opt.solver)?;
     eprintln!("Finish training.");
 
     let mut f = zstd::Encoder::new(File::create(opt.model)?, 19)?;

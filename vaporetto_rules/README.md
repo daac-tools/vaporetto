@@ -8,6 +8,7 @@ vaporetto_rules is rule-base filters for Vaporetto.
 ```rust
 use std::fs::File;
 use std::io::BufReader;
+use std::rc::Rc;
 
 use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
@@ -18,9 +19,9 @@ use vaporetto_rules::{
 
 let mut f = BufReader::new(File::open("model.bin").unwrap());
 let model = Model::read(&mut f).unwrap();
-let mut predictor = Predictor::new(model);
+let mut predictor = Predictor::new(model).unwrap();
 
-let pre_filters: Vec<Box<dyn StringFilter<String>>> = vec![
+let pre_filters: Vec<Box<dyn StringFilter>> = vec![
     Box::new(KyteaFullwidthFilter::new()),
 ];
 let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
@@ -31,7 +32,9 @@ let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
 let input = "Vaporettoは仲良し家族👨‍👨‍👧‍👦を離れ離れにさせません。"
     .to_string();
 
-let preproc_input = pre_filters.iter().fold(input, |s, filter| filter.filter(s));
+let input = Rc::new(input);
+let preproc_input = pre_filters.iter().fold(input, |s, filter| Rc::new(filter.filter(&s)));
+let preproc_input = Rc::try_unwrap(preproc_input).unwrap();
 
 let sentence = Sentence::from_raw(preproc_input).unwrap();
 let sentence = predictor.predict(sentence);

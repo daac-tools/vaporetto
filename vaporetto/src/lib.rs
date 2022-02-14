@@ -1,4 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(feature = "portable-simd", feature(portable_simd))]
 
 //! # Vaporetto
 //!
@@ -14,43 +15,45 @@
 //!
 //! let mut f = BufReader::new(File::open("model.bin").unwrap());
 //! let model = Model::read(&mut f).unwrap();
-//! let predictor = Predictor::new(model);
+//! let predictor = Predictor::new(model, false).unwrap();
 //!
-//! for line in stdin().lock().lines() {
-//!     let s = Sentence::from_raw(line.unwrap()).unwrap();
-//!     let s = predictor.predict(s);
-//!     let toks = s.to_tokenized_string().unwrap();
-//!     println!("{}", toks);
-//! }
+//! let s = Sentence::from_raw("火星猫の生態").unwrap();
+//! let s = predictor.predict(s);
+//!
+//! println!("{:?}", s.to_tokenized_vec().unwrap());
 //! ```
 //!
 //! Training requires **crate feature** `train`. For more details, see [`Trainer`].
 
-#[macro_use]
-mod utils;
-
+mod char_scorer;
+mod dict_model;
 mod model;
+mod ngram_model;
 mod predictor;
 mod sentence;
+mod tag_model;
 mod type_scorer;
+mod utils;
+
+pub mod errors;
 
 #[cfg(feature = "train")]
 mod feature;
+#[cfg(feature = "train")]
+mod tag_trainer;
 #[cfg(feature = "train")]
 mod trainer;
 
 #[cfg(feature = "kytea")]
 mod kytea_model;
 
+pub use dict_model::WordWeightRecord;
 pub use model::Model;
 pub use predictor::Predictor;
-pub use sentence::{BoundaryType, CharacterType, Sentence};
-
-#[cfg(feature = "multithreading")]
-pub use predictor::MultithreadPredictor;
+pub use sentence::{BoundaryType, CharacterType, Sentence, Token};
 
 #[cfg(feature = "train")]
-pub use trainer::{Dataset, SolverType, Trainer};
+pub use trainer::{SolverType, Trainer};
 
 #[cfg(feature = "kytea")]
 pub use kytea_model::KyteaModel;

@@ -1,6 +1,12 @@
-use crate::model::ScoreValue;
-use crate::sentence::Sentence;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
 use daachorse::DoubleArrayAhoCorasick;
+
+use crate::errors::{Result, VaporettoError};
+use crate::ngram_model::NgramModel;
+use crate::sentence::Sentence;
+use crate::utils::AddWeight;
 
 pub enum TypeScorer {
     Pma(TypeScorerPma),
@@ -8,131 +14,147 @@ pub enum TypeScorer {
 }
 
 impl TypeScorer {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
-        if window_size <= 3 {
-            Self::Cache(TypeScorerCache::new(pma, weights, window_size))
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+        Ok(if window_size <= 3 {
+            Self::Cache(TypeScorerCache::new(model, window_size)?)
         } else {
-            Self::Pma(TypeScorerPma::new(pma, weights, window_size))
-        }
+            Self::Pma(TypeScorerPma::new(model, window_size)?)
+        })
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         match self {
-            TypeScorer::Pma(pma) => pma.add_scores(sentence, start, ys),
-            TypeScorer::Cache(cache) => cache.add_scores(sentence, start, ys),
+            TypeScorer::Pma(pma) => pma.add_scores(sentence, ys),
+            TypeScorer::Cache(cache) => cache.add_scores(sentence, ys),
         }
     }
 }
 
 pub struct TypeScorerPma {
     pma: DoubleArrayAhoCorasick,
-    weights: Vec<Vec<ScoreValue>>,
+    weights: Vec<Vec<i32>>,
     window_size: usize,
 }
 
 impl TypeScorerPma {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
-        Self {
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+        // key: ngram, value: (weight, check)
+        let mut weights_map: BTreeMap<Vec<u8>, RefCell<(Vec<i32>, bool)>> = BTreeMap::new();
+
+        for d in model.data {
+            weights_map.insert(d.ngram, RefCell::new((d.weights, false)));
+        }
+
+        let mut stack = vec![];
+        for (ngram, data) in &weights_map {
+            if data.borrow().1 {
+                continue;
+            }
+            stack.push(data);
+            for j in 1..ngram.len() {
+                if let Some(data) = weights_map.get(&ngram[j..]) {
+                    stack.push(data);
+                    if data.borrow().1 {
+                        break;
+                    }
+                }
+            }
+            let mut data_from = stack.pop().unwrap();
+            data_from.borrow_mut().1 = true;
+            while let Some(data_to) = stack.pop() {
+                let mut new_weight = data_from.borrow().0.clone();
+                for (w1, w2) in new_weight.iter_mut().zip(&data_to.borrow().0) {
+                    *w1 += w2;
+                }
+                let new_data = (new_weight, true);
+                *data_to.borrow_mut() = new_data;
+                data_from = data_to;
+            }
+        }
+        let mut ngrams = vec![];
+        let mut weights = vec![];
+        for (ngram, data) in weights_map {
+            ngrams.push(ngram);
+            weights.push(data.into_inner().0);
+        }
+        let pma = DoubleArrayAhoCorasick::new(ngrams)
+            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
+        Ok(Self {
             pma,
             weights,
             window_size,
-        }
+        })
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let type_start = if start >= self.window_size {
-            start + 1 - self.window_size
-        } else {
-            0
-        };
-        let type_end = std::cmp::min(
-            start + ys.len() + self.window_size,
-            sentence.char_type.len(),
-        );
-        let char_type = &sentence.char_type[type_start..type_end];
-        let padding = start - type_start + 1;
-        for m in self.pma.find_overlapping_no_suffix_iter(&char_type) {
-            let offset = m.end() as isize - self.window_size as isize - padding as isize;
-            let weights = &self.weights[m.pattern()];
-            if offset >= 0 {
-                for (w, y) in weights.iter().zip(&mut ys[offset as usize..]) {
-                    *y += w;
-                }
-            } else {
-                for (w, y) in weights[-offset as usize..].iter().zip(ys.iter_mut()) {
-                    *y += w;
-                }
-            }
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
+        for m in self
+            .pma
+            .find_overlapping_no_suffix_iter(&sentence.char_type)
+        {
+            let offset = m.end() as isize - self.window_size as isize - 1;
+            // Both the weights and the PMA always have the same number of items.
+            // Therefore, the following code is safe.
+            let weights = unsafe { self.weights.get_unchecked(m.value()) };
+            weights.add_weight(ys, offset);
         }
     }
 }
 
 pub struct TypeScorerCache {
-    scores: Vec<ScoreValue>,
+    scores: Vec<i32>,
     window_size: usize,
     sequence_mask: usize,
 }
 
 impl TypeScorerCache {
-    pub fn new(
-        pma: DoubleArrayAhoCorasick,
-        weights: Vec<Vec<ScoreValue>>,
-        window_size: usize,
-    ) -> Self {
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
+            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
+        let mut weights = vec![];
+        for d in model.data {
+            if d.weights.len() <= 2 * window_size - d.ngram.len() {
+                return Err(VaporettoError::invalid_model(
+                    "invalid size of weight vector",
+                ));
+            }
+            weights.push(d.weights);
+        }
+
         let sequence_size = window_size * 2;
         let all_sequences = ALPHABET_SIZE.pow(sequence_size as u32);
 
         let mut sequence = vec![0u8; sequence_size];
-        let mut scores = vec![0 as ScoreValue; all_sequences];
+        let mut scores = vec![0; all_sequences];
 
         for (i, score) in scores.iter_mut().enumerate() {
             if !Self::seqid_to_seq(i, &mut sequence) {
                 continue;
             }
-            let mut y = ScoreValue::default();
-            for m in pma.find_overlapping_no_suffix_iter(&sequence) {
-                y += weights[m.pattern()][sequence_size - m.end()];
+            let mut y = 0;
+            for m in pma.find_overlapping_iter(&sequence) {
+                y += weights[m.value()][sequence_size - m.end()];
             }
             *score = y;
         }
 
-        Self {
+        Ok(Self {
             scores,
             window_size,
             sequence_mask: (1 << (ALPHABET_SHIFT * sequence_size)) - 1,
-        }
+        })
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, start: usize, ys: &mut [ScoreValue]) {
-        let type_start = if start >= self.window_size {
-            start + 1 - self.window_size
-        } else {
-            0
-        };
-        let type_end = std::cmp::min(
-            start + ys.len() + self.window_size,
-            sentence.char_type.len(),
-        );
-        let char_type = &sentence.char_type[type_start..type_end];
-        let offset = self.window_size + start;
+    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         let mut seqid = 0;
-        for i in 0..offset {
-            if let Some(ct) = char_type.get(i) {
+        for i in 0..self.window_size {
+            if let Some(ct) = sentence.char_type.get(i) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);
             };
         }
         for (i, y) in ys.iter_mut().enumerate() {
-            if let Some(ct) = char_type.get(i + offset) {
+            if let Some(ct) = sentence.char_type.get(i + self.window_size) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);
@@ -142,12 +164,12 @@ impl TypeScorerCache {
     }
 
     fn seqid_to_seq(mut seqid: usize, sequence: &mut [u8]) -> bool {
-        for i in (0..sequence.len()).rev() {
+        for type_id in sequence.iter_mut().rev() {
             let x = seqid & ALPHABET_MASK;
             if x == ALPHABET_MASK {
                 return false; // invalid
             }
-            sequence[i] = ID_TO_TYPE[x];
+            *type_id = ID_TO_TYPE[x];
             seqid >>= ALPHABET_SHIFT;
         }
         assert_eq!(seqid, 0);
@@ -155,7 +177,7 @@ impl TypeScorerCache {
     }
 
     #[inline(always)]
-    fn get_score(&self, seqid: usize) -> ScoreValue {
+    fn get_score(&self, seqid: usize) -> i32 {
         self.scores[seqid]
     }
 
@@ -176,7 +198,7 @@ const ALPHABET_SIZE: usize = 8;
 const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
 const ALPHABET_SHIFT: usize = 3;
 const TYPE_TO_ID: [u32; 256] = make_type_to_id();
-const ID_TO_TYPE: [u8; 256] = make_id_to_type();
+const ID_TO_TYPE: [u8; ALPHABET_SIZE] = make_id_to_type();
 
 const fn make_type_to_id() -> [u32; 256] {
     use crate::sentence::CharacterType::*;
@@ -191,10 +213,10 @@ const fn make_type_to_id() -> [u32; 256] {
     type_to_id
 }
 
-const fn make_id_to_type() -> [u8; 256] {
+const fn make_id_to_type() -> [u8; ALPHABET_SIZE] {
     use crate::sentence::CharacterType::*;
 
-    let mut id_to_type = [0u8; 256];
+    let mut id_to_type = [0u8; ALPHABET_SIZE];
     id_to_type[1] = Digit as u8;
     id_to_type[2] = Roman as u8;
     id_to_type[3] = Hiragana as u8;

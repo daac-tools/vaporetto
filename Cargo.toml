@@ -3,9 +3,14 @@
 members = [
     "vaporetto",
     "vaporetto_rules",
+    "vaporetto_tantivy",
+    "manipulate_model",
     "predict",
     "train",
     "evaluate",
     "convert_kytea_model",
+]
+
+exclude = [
     "vaporetto_wasm",
 ]

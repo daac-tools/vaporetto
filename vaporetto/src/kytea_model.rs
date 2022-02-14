@@ -1,10 +1,12 @@
 use std::convert::TryFrom;
 use std::io::BufRead;
 
-use anyhow::{anyhow, Result};
-use byteorder::{LittleEndian, ReadBytesExt};
-
-use crate::model::{DictWeight, Model};
+use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
+use crate::errors::{Result, VaporettoError};
+use crate::model::Model;
+use crate::ngram_model::{NgramData, NgramModel};
+use crate::tag_model::TagModel;
+use crate::utils;
 
 struct KyteaConfig {
     _model_tag: String,
@@ -23,20 +25,23 @@ struct KyteaConfig {
 }
 
 impl KyteaConfig {
-    fn read<R: BufRead>(rdr: &mut R) -> Result<Self> {
+    fn read<R>(mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
         let mut model_tag = String::new();
         rdr.read_line(&mut model_tag)?;
-        let do_ws = rdr.read_u8()? != 0;
-        let do_tags = rdr.read_u8()? != 0;
-        let n_tags = rdr.read_u32::<LittleEndian>()?;
-        let char_w = rdr.read_u8()?;
-        let char_n = rdr.read_u8()?;
-        let type_w = rdr.read_u8()?;
-        let type_n = rdr.read_u8()?;
-        let dict_n = rdr.read_u8()?;
-        let bias = rdr.read_u8()? != 0;
-        let epsilon = rdr.read_f64::<LittleEndian>()?;
-        let solver_type = rdr.read_u8()?;
+        let do_ws = utils::read_u8(&mut rdr)? != 0;
+        let do_tags = utils::read_u8(&mut rdr)? != 0;
+        let n_tags = utils::read_u32(&mut rdr)?;
+        let char_w = utils::read_u8(&mut rdr)?;
+        let char_n = utils::read_u8(&mut rdr)?;
+        let type_w = utils::read_u8(&mut rdr)?;
+        let type_n = utils::read_u8(&mut rdr)?;
+        let dict_n = utils::read_u8(&mut rdr)?;
+        let bias = utils::read_u8(&mut rdr)? != 0;
+        let epsilon = utils::read_f64(&mut rdr)?;
+        let solver_type = utils::read_u8(&mut rdr)?;
         let mut char_map = vec![];
         rdr.read_until(0, &mut char_map)?;
         let char_map: Vec<char> = String::from_utf8(char_map)?.chars().collect();
@@ -59,24 +64,35 @@ impl KyteaConfig {
 }
 
 trait Readable: Sized {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self>;
+    fn read<R>(config: &KyteaConfig, rdr: R) -> Result<Self>
+    where
+        R: BufRead;
 }
 
 impl Readable for i16 {
-    fn read<R: BufRead>(_config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        Ok(rdr.read_i16::<LittleEndian>()?)
+    fn read<R>(_config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        Ok(utils::read_i16(&mut rdr)?)
     }
 }
 
 impl Readable for f64 {
-    fn read<R: BufRead>(_config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        Ok(rdr.read_f64::<LittleEndian>()?)
+    fn read<R>(_config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        Ok(utils::read_f64(&mut rdr)?)
     }
 }
 
 impl Readable for char {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        let cidx = rdr.read_u16::<LittleEndian>()? as usize;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let cidx = utils::read_u16(&mut rdr)? as usize;
         Ok(config.char_map[cidx - 1])
     }
 }
@@ -85,22 +101,28 @@ impl<T> Readable for Vec<T>
 where
     T: Readable,
 {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        let size = rdr.read_u32::<LittleEndian>()?;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let size = utils::read_u32(&mut rdr)?;
         let mut result = Self::with_capacity(size as usize);
         for _ in 0..size {
-            result.push(T::read(config, rdr)?);
+            result.push(T::read(config, &mut rdr)?);
         }
         Ok(result)
     }
 }
 
 impl Readable for String {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        let size = rdr.read_u32::<LittleEndian>()?;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let size = utils::read_u32(&mut rdr)?;
         let mut result = Self::new();
         for _ in 0..size {
-            let cidx = rdr.read_u16::<LittleEndian>()? as usize;
+            let cidx = utils::read_u16(&mut rdr)? as usize;
             result.push(config.char_map[cidx - 1]);
         }
         Ok(result)
@@ -149,29 +171,32 @@ impl<T> Dictionary<T>
 where
     T: Readable,
 {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Option<Self>> {
-        let n_dicts = rdr.read_u8()?;
-        let n_states = rdr.read_u32::<LittleEndian>()? as usize;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Option<Self>>
+    where
+        R: BufRead,
+    {
+        let n_dicts = utils::read_u8(&mut rdr)?;
+        let n_states = utils::read_u32(&mut rdr)? as usize;
         if n_states == 0 {
             return Ok(None);
         }
         let mut states = Vec::with_capacity(n_states);
         for _ in 0..n_states {
-            let failure = rdr.read_u32::<LittleEndian>()?;
-            let n_gotos = rdr.read_u32::<LittleEndian>()?;
+            let failure = utils::read_u32(&mut rdr)?;
+            let n_gotos = utils::read_u32(&mut rdr)?;
             let mut gotos = vec![];
             for _ in 0..n_gotos {
-                let k = char::read(config, rdr)?;
-                let v = rdr.read_u32::<LittleEndian>()?;
+                let k = char::read(config, &mut rdr)?;
+                let v = utils::read_u32(&mut rdr)?;
                 gotos.push((k, v));
             }
             gotos.sort_unstable();
-            let n_outputs = rdr.read_u32::<LittleEndian>()? as usize;
+            let n_outputs = utils::read_u32(&mut rdr)? as usize;
             let mut outputs = Vec::with_capacity(n_outputs);
             for _ in 0..n_outputs {
-                outputs.push(rdr.read_u32::<LittleEndian>()?);
+                outputs.push(utils::read_u32(&mut rdr)?);
             }
-            let is_branch = rdr.read_u8()? != 0;
+            let is_branch = utils::read_u8(&mut rdr)? != 0;
             states.push(State {
                 _failure: failure,
                 gotos,
@@ -179,10 +204,10 @@ where
                 is_branch,
             });
         }
-        let n_entries = rdr.read_u32::<LittleEndian>()? as usize;
+        let n_entries = utils::read_u32(&mut rdr)? as usize;
         let mut entries = Vec::with_capacity(n_entries);
         for _ in 0..n_entries {
-            entries.push(T::read(config, rdr)?);
+            entries.push(T::read(config, &mut rdr)?);
         }
         Ok(Some(Self {
             n_dicts,
@@ -209,18 +234,21 @@ impl<T> FeatureLookup<T>
 where
     T: Readable,
 {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Option<Self>> {
-        let active = rdr.read_u8()?;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Option<Self>>
+    where
+        R: BufRead,
+    {
+        let active = utils::read_u8(&mut rdr)?;
         if active == 0 {
             return Ok(None);
         }
-        let char_dict = Dictionary::read(config, rdr)?;
-        let type_dict = Dictionary::read(config, rdr)?;
-        let self_dict = Dictionary::read(config, rdr)?;
-        let dict_vec = Vec::<T>::read(config, rdr)?;
-        let biases = Vec::<T>::read(config, rdr)?;
-        let tag_dict_vec = Vec::<T>::read(config, rdr)?;
-        let tag_unk_vec = Vec::<T>::read(config, rdr)?;
+        let char_dict = Dictionary::read(config, &mut rdr)?;
+        let type_dict = Dictionary::read(config, &mut rdr)?;
+        let self_dict = Dictionary::read(config, &mut rdr)?;
+        let dict_vec = Vec::<T>::read(config, &mut rdr)?;
+        let biases = Vec::<T>::read(config, &mut rdr)?;
+        let tag_dict_vec = Vec::<T>::read(config, &mut rdr)?;
+        let tag_unk_vec = Vec::<T>::read(config, &mut rdr)?;
         Ok(Some(Self {
             char_dict,
             type_dict,
@@ -238,31 +266,34 @@ struct LinearModel {
     _solver_type: u8,
     _labels: Vec<i32>,
     _bias: bool,
-    multiplier: f64,
+    _multiplier: f64,
     feature_lookup: Option<FeatureLookup<i16>>,
 }
 
 impl Readable for Option<LinearModel> {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        let n_classes = rdr.read_u32::<LittleEndian>()?;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let n_classes = utils::read_u32(&mut rdr)?;
         if n_classes == 0 {
             return Ok(None);
         }
         let add_features = false;
-        let solver_type = rdr.read_u8()?;
+        let solver_type = utils::read_u8(&mut rdr)?;
         let mut labels = vec![];
         for _ in 0..n_classes {
-            labels.push(rdr.read_i32::<LittleEndian>()?);
+            labels.push(utils::read_i32(&mut rdr)?);
         }
-        let bias = rdr.read_u8()? != 0;
-        let multiplier = rdr.read_f64::<LittleEndian>()?;
-        let feature_lookup = FeatureLookup::read(config, rdr)?;
+        let bias = utils::read_u8(&mut rdr)? != 0;
+        let multiplier = utils::read_f64(&mut rdr)?;
+        let feature_lookup = FeatureLookup::read(config, &mut rdr)?;
         Ok(Some(LinearModel {
             _add_features: add_features,
             _solver_type: solver_type,
             _labels: labels,
             _bias: bias,
-            multiplier,
+            _multiplier: multiplier,
             feature_lookup,
         }))
     }
@@ -277,25 +308,28 @@ struct ModelTagEntry {
 }
 
 impl Readable for ModelTagEntry {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        let word = String::read(config, rdr)?;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let word = String::read(config, &mut rdr)?;
         let mut tags = Vec::with_capacity(config.n_tags as usize);
         let mut tags_in_dicts = Vec::with_capacity(config.n_tags as usize);
         for _ in 0..config.n_tags {
-            let size = rdr.read_u32::<LittleEndian>()? as usize;
+            let size = utils::read_u32(&mut rdr)? as usize;
             let mut t = Vec::with_capacity(size);
             let mut td = Vec::with_capacity(size);
             for _ in 0..size {
-                t.push(String::read(config, rdr)?);
-                td.push(rdr.read_u8()?);
+                t.push(String::read(config, &mut rdr)?);
+                td.push(utils::read_u8(&mut rdr)?);
             }
             tags.push(t);
             tags_in_dicts.push(td);
         }
-        let in_dict = rdr.read_u8()?;
+        let in_dict = utils::read_u8(&mut rdr)?;
         let mut tag_models = Vec::with_capacity(config.n_tags as usize);
         for _ in 0..config.n_tags {
-            tag_models.push(Option::<LinearModel>::read(config, rdr)?);
+            tag_models.push(Option::<LinearModel>::read(config, &mut rdr)?);
         }
         Ok(Self {
             _word: word,
@@ -314,17 +348,20 @@ struct ProbTagEntry {
 }
 
 impl Readable for ProbTagEntry {
-    fn read<R: BufRead>(config: &KyteaConfig, rdr: &mut R) -> Result<Self> {
-        let word = String::read(config, rdr)?;
+    fn read<R>(config: &KyteaConfig, mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let word = String::read(config, &mut rdr)?;
         let mut tags = Vec::with_capacity(config.n_tags as usize);
         let mut probs = Vec::with_capacity(config.n_tags as usize);
         for _ in 0..config.n_tags {
-            let size = rdr.read_u32::<LittleEndian>()? as usize;
+            let size = utils::read_u32(&mut rdr)? as usize;
             let mut t = Vec::with_capacity(size);
             let mut p = Vec::with_capacity(size);
             for _ in 0..size {
-                t.push(String::read(config, rdr)?);
-                p.push(rdr.read_f64::<LittleEndian>()?);
+                t.push(String::read(config, &mut rdr)?);
+                p.push(utils::read_f64(&mut rdr)?);
             }
             tags.push(t);
             probs.push(p);
@@ -362,21 +399,24 @@ impl KyteaModel {
     /// # Errors
     ///
     /// When `rdr` generates an error, it will be returned as is.
-    pub fn read<R: BufRead>(rdr: &mut R) -> Result<Self> {
-        let config = KyteaConfig::read(rdr)?;
+    pub fn read<R>(mut rdr: R) -> Result<Self>
+    where
+        R: BufRead,
+    {
+        let config = KyteaConfig::read(&mut rdr)?;
 
-        let wordseg_model = Option::<LinearModel>::read(&config, rdr)?;
+        let wordseg_model = Option::<LinearModel>::read(&config, &mut rdr)?;
 
         let mut global_tags = Vec::with_capacity(config.n_tags as usize);
         let mut global_models = Vec::with_capacity(config.n_tags as usize);
 
         for _ in 0..config.n_tags {
-            global_tags.push(Vec::<String>::read(&config, rdr)?);
-            global_models.push(Option::<LinearModel>::read(&config, rdr)?);
+            global_tags.push(Vec::<String>::read(&config, &mut rdr)?);
+            global_models.push(Option::<LinearModel>::read(&config, &mut rdr)?);
         }
 
-        let dict = Dictionary::<ModelTagEntry>::read(&config, rdr)?;
-        let subword_dict = Dictionary::<ProbTagEntry>::read(&config, rdr)?;
+        let dict = Dictionary::<ModelTagEntry>::read(&config, &mut rdr)?;
+        let subword_dict = Dictionary::<ProbTagEntry>::read(&config, &mut rdr)?;
 
         Ok(Self {
             config,
@@ -390,43 +430,47 @@ impl KyteaModel {
 }
 
 impl TryFrom<KyteaModel> for Model {
-    type Error = anyhow::Error;
+    type Error = VaporettoError;
 
     fn try_from(model: KyteaModel) -> Result<Self> {
         let config = &model.config;
         let wordseg_model = model
             .wordseg_model
-            .ok_or_else(|| anyhow!("no word segmentation model."))?;
-        let quantize_multiplier = wordseg_model.multiplier;
+            .ok_or_else(|| VaporettoError::invalid_model("no word segmentation model."))?;
         let feature_lookup = wordseg_model
             .feature_lookup
-            .ok_or_else(|| anyhow!("no lookup data."))?;
-        let bias = feature_lookup.biases[0];
+            .ok_or_else(|| VaporettoError::invalid_model("no lookup data."))?;
+        let bias = feature_lookup.biases[0] as i32;
         let char_dict = feature_lookup
             .char_dict
-            .ok_or_else(|| anyhow!("no character dictionary."))?;
+            .ok_or_else(|| VaporettoError::invalid_model("no character dictionary."))?;
         let type_dict = feature_lookup
             .type_dict
-            .ok_or_else(|| anyhow!("no type dictionary."))?;
+            .ok_or_else(|| VaporettoError::invalid_model("no type dictionary."))?;
 
-        let mut words: Vec<Vec<u8>> = vec![];
-        let mut word_weights = vec![];
-        for (word, v) in char_dict.dump_items() {
-            let weight_size = config.char_w as usize * 2 - word.len() + 1;
-            words.push(word.into_iter().collect::<String>().as_bytes().to_vec());
-            word_weights.push(v[..weight_size].to_vec());
+        let mut char_ngrams = vec![];
+        for (char_ngram, v) in char_dict.dump_items() {
+            let weight_size = config.char_w as usize * 2 - char_ngram.len() + 1;
+            char_ngrams.push(NgramData {
+                ngram: char_ngram.into_iter().collect(),
+                weights: v[..weight_size].iter().map(|&w| w as i32).collect(),
+            });
         }
 
-        let mut types: Vec<Vec<u8>> = vec![];
-        let mut type_weights = vec![];
-        for (word, v) in type_dict.dump_items() {
-            let weight_size = config.type_w as usize * 2 - word.len() + 1;
-            types.push(word.into_iter().collect::<String>().as_bytes().to_vec());
-            type_weights.push(v[..weight_size].to_vec());
+        let mut type_ngrams = vec![];
+        for (type_ngram, v) in type_dict.dump_items() {
+            let weight_size = config.type_w as usize * 2 - type_ngram.len() + 1;
+            type_ngrams.push(NgramData {
+                ngram: type_ngram
+                    .into_iter()
+                    .collect::<String>()
+                    .as_bytes()
+                    .to_vec(),
+                weights: v[..weight_size].iter().map(|&w| w as i32).collect(),
+            });
         }
 
-        let mut dict: Vec<Vec<u8>> = vec![];
-        let mut dict_weights = vec![];
+        let mut dict = vec![];
         if let Some(kytea_dict) = model.dict {
             for (w, data) in kytea_dict.dump_items() {
                 let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
@@ -435,28 +479,24 @@ impl TryFrom<KyteaModel> for Model {
                     if data.in_dict >> j & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * word_len;
                         weights.right += feature_lookup.dict_vec[offset] as i32;
-                        weights.inner += feature_lookup.dict_vec[offset + 1] as i32;
+                        weights.inside += feature_lookup.dict_vec[offset + 1] as i32;
                         weights.left += feature_lookup.dict_vec[offset + 2] as i32;
                     }
                 }
-                dict_weights.push(weights);
-                dict.push(w.into_iter().collect::<String>().as_bytes().to_vec());
+                dict.push(WordWeightRecord {
+                    word: w.into_iter().collect(),
+                    weights,
+                    comment: "".to_string(),
+                });
             }
         }
 
         Ok(Self {
-            words,
-            types,
-            dict,
-
-            #[cfg(feature = "model-quantize")]
-            quantize_multiplier,
-
-            word_weights,
-            type_weights,
-            dict_weights,
-            dict_word_wise: true,
+            char_ngram_model: NgramModel::new(char_ngrams),
+            type_ngram_model: NgramModel::new(type_ngrams),
+            dict_model: DictModel::new(dict),
             bias,
+            tag_model: TagModel::default(),
             char_window_size: config.char_w as usize,
             type_window_size: config.type_w as usize,
         })
