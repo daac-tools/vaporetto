@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::io::{self, Read, Write};
 
 pub trait AddWeight {
     fn add_weight(&self, target: &mut [i32], offset: isize);
@@ -93,4 +94,78 @@ where
         || rhs.clone(),
         |x1| Some(rhs.as_ref().map_or_else(|| x1.clone(), |x2| f(x1, x2))),
     )
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_u8<R>(mut rdr: R) -> io::Result<u8>
+where
+    R: Read,
+{
+    let mut buf = [0];
+    rdr.read_exact(&mut buf)?;
+    Ok(buf[0])
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_u16<R>(mut rdr: R) -> io::Result<u16>
+where
+    R: Read,
+{
+    let mut buf = [0; 2];
+    rdr.read_exact(&mut buf)?;
+    Ok(u16::from_le_bytes(buf))
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_i16<R>(mut rdr: R) -> io::Result<i16>
+where
+    R: Read,
+{
+    let mut buf = [0; 2];
+    rdr.read_exact(&mut buf)?;
+    Ok(i16::from_le_bytes(buf))
+}
+
+pub fn read_u32<R>(mut rdr: R) -> io::Result<u32>
+where
+    R: Read,
+{
+    let mut buf = [0; 4];
+    rdr.read_exact(&mut buf)?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+pub fn write_u32<W>(mut wtr: W, data: u32) -> io::Result<()>
+where
+    W: Write,
+{
+    wtr.write_all(&data.to_le_bytes())?;
+    Ok(())
+}
+
+pub fn read_i32<R>(mut rdr: R) -> io::Result<i32>
+where
+    R: Read,
+{
+    let mut buf = [0; 4];
+    rdr.read_exact(&mut buf)?;
+    Ok(i32::from_le_bytes(buf))
+}
+
+pub fn write_i32<W>(mut wtr: W, data: i32) -> io::Result<()>
+where
+    W: Write,
+{
+    wtr.write_all(&data.to_le_bytes())?;
+    Ok(())
+}
+
+#[cfg(feature = "kytea")]
+pub fn read_f64<R>(mut rdr: R) -> io::Result<f64>
+where
+    R: Read,
+{
+    let mut buf = [0; 8];
+    rdr.read_exact(&mut buf)?;
+    Ok(f64::from_le_bytes(buf))
 }

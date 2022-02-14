@@ -1,11 +1,10 @@
 use std::io::{Read, Write};
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 use crate::tag_model::TagModel;
+use crate::utils;
 
 /// Model data.
 pub struct Model {
@@ -35,9 +34,9 @@ impl Model {
         self.char_ngram_model.serialize(&mut wtr)?;
         self.type_ngram_model.serialize(&mut wtr)?;
         self.dict_model.serialize(&mut wtr)?;
-        wtr.write_i32::<LittleEndian>(self.bias)?;
-        wtr.write_u32::<LittleEndian>(self.char_window_size.try_into().unwrap())?;
-        wtr.write_u32::<LittleEndian>(self.type_window_size.try_into().unwrap())?;
+        utils::write_i32(&mut wtr, self.bias)?;
+        utils::write_u32(&mut wtr, self.char_window_size.try_into().unwrap())?;
+        utils::write_u32(&mut wtr, self.type_window_size.try_into().unwrap())?;
         self.tag_model.serialize(&mut wtr)?;
         Ok(())
     }
@@ -63,9 +62,9 @@ impl Model {
             char_ngram_model: NgramModel::<String>::deserialize(&mut rdr)?,
             type_ngram_model: NgramModel::<Vec<u8>>::deserialize(&mut rdr)?,
             dict_model: DictModel::deserialize(&mut rdr)?,
-            bias: rdr.read_i32::<LittleEndian>()?,
-            char_window_size: rdr.read_u32::<LittleEndian>()?.try_into().unwrap(),
-            type_window_size: rdr.read_u32::<LittleEndian>()?.try_into().unwrap(),
+            bias: utils::read_i32(&mut rdr)?,
+            char_window_size: utils::read_u32(&mut rdr)?.try_into().unwrap(),
+            type_window_size: utils::read_u32(&mut rdr)?.try_into().unwrap(),
             tag_model: TagModel::deserialize(&mut rdr)?,
         })
     }

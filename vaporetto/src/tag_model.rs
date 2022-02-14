@@ -1,9 +1,8 @@
 use std::io::{Read, Write};
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
+use crate::utils;
 
 pub struct TagClassInfo {
     pub(crate) name: String,
@@ -15,9 +14,9 @@ impl TagClassInfo {
     where
         W: Write,
     {
-        wtr.write_u32::<LittleEndian>(self.name.len().try_into().unwrap())?;
+        utils::write_u32(&mut wtr, self.name.len().try_into().unwrap())?;
         wtr.write_all(self.name.as_bytes())?;
-        wtr.write_i32::<LittleEndian>(self.bias)?;
+        utils::write_i32(&mut wtr, self.bias)?;
         Ok(())
     }
 
@@ -25,13 +24,13 @@ impl TagClassInfo {
     where
         R: Read,
     {
-        let name_size = rdr.read_u32::<LittleEndian>()?;
+        let name_size = utils::read_u32(&mut rdr)?;
         let mut name_bytes = vec![0; name_size.try_into().unwrap()];
         rdr.read_exact(&mut name_bytes)?;
         let name = String::from_utf8(name_bytes)?;
         Ok(Self {
             name,
-            bias: rdr.read_i32::<LittleEndian>()?,
+            bias: utils::read_i32(&mut rdr)?,
         })
     }
 }
@@ -57,7 +56,7 @@ impl TagModel {
     where
         W: Write,
     {
-        wtr.write_u32::<LittleEndian>(self.class_info.len().try_into().unwrap())?;
+        utils::write_u32(&mut wtr, self.class_info.len().try_into().unwrap())?;
         for cls in &self.class_info {
             cls.serialize(&mut wtr)?;
         }
@@ -71,7 +70,7 @@ impl TagModel {
     where
         R: Read,
     {
-        let n_class = rdr.read_u32::<LittleEndian>()?;
+        let n_class = utils::read_u32(&mut rdr)?;
         let mut class_info = vec![];
         for _ in 0..n_class {
             class_info.push(TagClassInfo::deserialize(&mut rdr)?);

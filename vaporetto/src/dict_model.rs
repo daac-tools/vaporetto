@@ -1,9 +1,8 @@
 use std::io::{Read, Write};
 use std::mem;
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-
 use crate::errors::Result;
+use crate::utils;
 
 #[derive(Clone, Copy, Default)]
 pub struct DictWeight {
@@ -13,24 +12,24 @@ pub struct DictWeight {
 }
 
 impl DictWeight {
-    pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
+    pub fn serialize<W>(&self, mut wtr: W) -> Result<usize>
     where
         W: Write,
     {
-        buf.write_i32::<LittleEndian>(self.right)?;
-        buf.write_i32::<LittleEndian>(self.inside)?;
-        buf.write_i32::<LittleEndian>(self.left)?;
+        utils::write_i32(&mut wtr, self.right)?;
+        utils::write_i32(&mut wtr, self.inside)?;
+        utils::write_i32(&mut wtr, self.left)?;
         Ok(mem::size_of::<i32>() * 3)
     }
 
-    pub fn deserialize<R>(mut buf: R) -> Result<Self>
+    pub fn deserialize<R>(mut rdr: R) -> Result<Self>
     where
         R: Read,
     {
         Ok(Self {
-            right: buf.read_i32::<LittleEndian>()?,
-            inside: buf.read_i32::<LittleEndian>()?,
-            left: buf.read_i32::<LittleEndian>()?,
+            right: utils::read_i32(&mut rdr)?,
+            inside: utils::read_i32(&mut rdr)?,
+            left: utils::read_i32(&mut rdr)?,
         })
     }
 }
@@ -44,33 +43,33 @@ pub struct WordWeightRecord {
 }
 
 impl WordWeightRecord {
-    pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
+    pub fn serialize<W>(&self, mut wtr: W) -> Result<usize>
     where
         W: Write,
     {
         let word_size = self.word.len();
         let comment_size = self.comment.len();
-        buf.write_u32::<LittleEndian>(word_size.try_into().unwrap())?;
-        buf.write_u32::<LittleEndian>(comment_size.try_into().unwrap())?;
-        buf.write_all(self.word.as_bytes())?;
-        buf.write_all(self.comment.as_bytes())?;
-        let weights_size = self.weights.serialize(&mut buf)?;
+        utils::write_u32(&mut wtr, u32::try_from(word_size).unwrap())?;
+        utils::write_u32(&mut wtr, u32::try_from(comment_size).unwrap())?;
+        wtr.write_all(self.word.as_bytes())?;
+        wtr.write_all(self.comment.as_bytes())?;
+        let weights_size = self.weights.serialize(&mut wtr)?;
         Ok(mem::size_of::<u32>() * 2 + word_size + weights_size + comment_size)
     }
 
-    pub fn deserialize<R>(mut buf: R) -> Result<Self>
+    pub fn deserialize<R>(mut rdr: R) -> Result<Self>
     where
         R: Read,
     {
-        let word_size = buf.read_u32::<LittleEndian>()?;
-        let comment_size = buf.read_u32::<LittleEndian>()?;
+        let word_size = utils::read_u32(&mut rdr)?;
+        let comment_size = utils::read_u32(&mut rdr)?;
         let mut word_bytes = vec![0; word_size.try_into().unwrap()];
-        buf.read_exact(&mut word_bytes)?;
+        rdr.read_exact(&mut word_bytes)?;
         let mut comment_bytes = vec![0; comment_size.try_into().unwrap()];
-        buf.read_exact(&mut comment_bytes)?;
+        rdr.read_exact(&mut comment_bytes)?;
         Ok(Self {
             word: String::from_utf8(word_bytes)?,
-            weights: DictWeight::deserialize(&mut buf)?,
+            weights: DictWeight::deserialize(&mut rdr)?,
             comment: String::from_utf8(comment_bytes)?,
         })
     }
@@ -141,27 +140,27 @@ impl DictModel {
         &self.dict
     }
 
-    pub fn serialize<W>(&self, mut buf: W) -> Result<usize>
+    pub fn serialize<W>(&self, mut wtr: W) -> Result<usize>
     where
         W: Write,
     {
         let dict_size = self.dict.len();
-        buf.write_u32::<LittleEndian>(dict_size.try_into().unwrap())?;
+        utils::write_u32(&mut wtr, dict_size.try_into().unwrap())?;
         let mut total_size = mem::size_of::<u32>();
         for entry in &self.dict {
-            total_size += entry.serialize(&mut buf)?;
+            total_size += entry.serialize(&mut wtr)?;
         }
         Ok(total_size)
     }
 
-    pub fn deserialize<R>(mut buf: R) -> Result<Self>
+    pub fn deserialize<R>(mut rdr: R) -> Result<Self>
     where
         R: Read,
     {
-        let dict_size = buf.read_u32::<LittleEndian>()?;
+        let dict_size = utils::read_u32(&mut rdr)?;
         let mut dict = Vec::with_capacity(dict_size.try_into().unwrap());
         for _ in 0..dict_size {
-            dict.push(WordWeightRecord::deserialize(&mut buf)?);
+            dict.push(WordWeightRecord::deserialize(&mut rdr)?);
         }
         Ok(Self { dict })
     }
