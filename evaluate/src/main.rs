@@ -3,7 +3,7 @@ use std::io::{prelude::*, stdin};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use structopt::StructOpt;
+use clap::Parser;
 use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
@@ -50,42 +50,42 @@ impl FromStr for EvaluationMetric {
     }
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(
+#[derive(Parser, Debug)]
+#[clap(
     name = "evaluate",
     about = "A program to evaluate the accuracy of Vaporetto."
 )]
-struct Opt {
+struct Args {
     /// The model file to use when analyzing text
-    #[structopt(long)]
+    #[clap(long)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[structopt(long)]
+    #[clap(long)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[structopt(long)]
+    #[clap(long)]
     wsconst: Vec<WsConst>,
 
     /// Do not normalize input strings before prediction.
-    #[structopt(long)]
+    #[clap(long)]
     no_norm: bool,
 
     /// Evaluation metric: {char, word}.
     /// char: evaluates each charactor boundary.
     /// word: evaluates each word using Nagata's method.
-    #[structopt(long, default_value = "char")]
+    #[clap(long, default_value = "char")]
     metric: EvaluationMetric,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opt = Opt::from_args();
+    let args = Args::parse();
 
     let fullwidth_filter = KyteaFullwidthFilter;
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
-    for wsconst in &opt.wsconst {
+    for wsconst in &args.wsconst {
         match wsconst {
             WsConst::GraphemeCluster => post_filters.push(Box::new(ConcatGraphemeClustersFilter)),
             WsConst::CharType(char_type) => {
@@ -95,9 +95,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     eprintln!("Loading model file...");
-    let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
+    let mut f = zstd::Decoder::new(File::open(args.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model, opt.predict_tags)?;
+    let predictor = Predictor::new(model, args.predict_tags)?;
 
     eprintln!("Start tokenization");
 
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut s = Sentence::from_tokenized(line)?;
         let ref_boundaries = s.boundaries().to_vec();
         let ref_tags = s.tags().to_vec();
-        if !opt.no_norm {
+        if !args.no_norm {
             let new_line = fullwidth_filter.filter(s.to_raw_string());
             s = Sentence::from_raw(new_line)?
         };
@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         results.push((ref_boundaries, ref_tags, hyp_boundaries, hyp_tags));
     }
 
-    match opt.metric {
+    match args.metric {
         EvaluationMetric::CharBoundaryAccuracy => {
             let mut n_tp = 0;
             let mut n_tn = 0;

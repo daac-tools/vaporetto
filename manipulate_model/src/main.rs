@@ -2,29 +2,29 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use structopt::StructOpt;
+use clap::Parser;
 use vaporetto::{Model, WordWeightRecord};
 
-#[derive(StructOpt, Debug)]
-#[structopt(
+#[derive(Parser, Debug)]
+#[clap(
     name = "manipulate_model",
     about = "A program to manipulate tarined models."
 )]
-struct Opt {
+struct Args {
     /// Input path of the model file
-    #[structopt(long)]
+    #[clap(long)]
     model_in: PathBuf,
 
     /// Output path of the model file
-    #[structopt(long)]
+    #[clap(long)]
     model_out: Option<PathBuf>,
 
     /// Output a dictionary contained in the model.
-    #[structopt(long)]
+    #[clap(long)]
     dump_dict: Option<PathBuf>,
 
     /// Replace a dictionary if the argument is specified.
-    #[structopt(long)]
+    #[clap(long)]
     replace_dict: Option<PathBuf>,
 }
 
@@ -38,13 +38,13 @@ struct WordWeightRecordFlatten {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opt = Opt::from_args();
+    let args = Args::parse();
 
     eprintln!("Loading model file...");
-    let mut f = zstd::Decoder::new(fs::File::open(opt.model_in)?)?;
+    let mut f = zstd::Decoder::new(fs::File::open(args.model_in)?)?;
     let mut model = Model::read(&mut f)?;
 
-    if let Some(path) = opt.dump_dict {
+    if let Some(path) = args.dump_dict {
         eprintln!("Saving dictionary file...");
         let file = fs::File::create(path)?;
         let mut wtr = csv::Writer::from_writer(file);
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if let Some(path) = opt.replace_dict {
+    if let Some(path) = args.replace_dict {
         eprintln!("Loading dictionary file...");
         let file = fs::File::open(path)?;
         let mut rdr = csv::Reader::from_reader(file);
@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         model.replace_dictionary(dict);
     }
 
-    if let Some(path) = opt.model_out {
+    if let Some(path) = args.model_out {
         eprintln!("Saving model file...");
         let mut f = zstd::Encoder::new(fs::File::create(path)?, 19)?;
         model.write(&mut f)?;
