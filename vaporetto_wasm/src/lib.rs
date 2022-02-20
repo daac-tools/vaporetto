@@ -39,7 +39,7 @@ impl Vaporetto {
                     'T' => Box::new(KyteaWsConstFilter::new(CharacterType::Katakana)),
                     'K' => Box::new(KyteaWsConstFilter::new(CharacterType::Kanji)),
                     'O' => Box::new(KyteaWsConstFilter::new(CharacterType::Other)),
-                    'G' => Box::new(ConcatGraphemeClustersFilter::new()),
+                    'G' => Box::new(ConcatGraphemeClustersFilter),
                     _ => panic!("invalid filter: {}", c),
                 };
                 b
@@ -47,7 +47,7 @@ impl Vaporetto {
             .collect();
         Self {
             predictor,
-            fullwidth_filter: KyteaFullwidthFilter::new(),
+            fullwidth_filter: KyteaFullwidthFilter,
             post_filters,
         }
     }
