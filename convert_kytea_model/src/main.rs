@@ -7,17 +7,17 @@ use clap::Parser;
 use vaporetto::{KyteaModel, Model};
 
 #[derive(Parser, Debug)]
-#[structopt(
+#[clap(
     name = "convert_kytea_model",
     about = "A program to convert KyTea model."
 )]
 struct Args {
     /// KyTea model file
-    #[structopt(long)]
+    #[clap(long)]
     model_in: PathBuf,
 
     /// Vespa model file
-    #[structopt(long)]
+    #[clap(long)]
     model_out: PathBuf,
 }
 
