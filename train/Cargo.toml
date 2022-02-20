@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-structopt = "0.3"  # MIT or Apache-2.0
+clap = { version = "3.1.0", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto", features = ["train"] }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
 zstd = "0.9"  # MIT

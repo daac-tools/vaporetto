@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::time::Instant;
 
-use structopt::StructOpt;
+use clap::Parser;
 use vaporetto::{errors::VaporettoError, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
@@ -35,28 +35,28 @@ impl FromStr for WsConst {
     }
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "predict", about = "A program to perform word segmentation.")]
-struct Opt {
+#[derive(Parser, Debug)]
+#[clap(name = "predict", about = "A program to perform word segmentation.")]
+struct Args {
     /// The model file to use when analyzing text
-    #[structopt(long)]
+    #[clap(long)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[structopt(long)]
+    #[clap(long)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[structopt(long)]
+    #[clap(long)]
     wsconst: Vec<WsConst>,
 
     /// Prints scores.
-    #[structopt(long)]
+    #[clap(long)]
     scores: bool,
 
     /// Do not normalize input strings before prediction.
-    #[structopt(long)]
+    #[clap(long)]
     no_norm: bool,
 }
 
@@ -106,14 +106,14 @@ fn tokenize(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opt = Opt::from_args();
+    let args = Args::parse();
 
     let mut pre_filters: Vec<Box<dyn StringFilter>> = vec![];
-    if !opt.no_norm {
+    if !args.no_norm {
         pre_filters.push(Box::new(KyteaFullwidthFilter));
     }
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
-    for wsconst in &opt.wsconst {
+    for wsconst in &args.wsconst {
         match wsconst {
             WsConst::GraphemeCluster => post_filters.push(Box::new(ConcatGraphemeClustersFilter)),
             WsConst::CharType(char_type) => {
@@ -123,9 +123,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     eprintln!("Loading model file...");
-    let mut f = zstd::Decoder::new(File::open(opt.model)?)?;
+    let mut f = zstd::Decoder::new(File::open(args.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model, opt.predict_tags)?;
+    let predictor = Predictor::new(model, args.predict_tags)?;
 
     eprintln!("Start tokenization");
     let mut n_chars = 0;
@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         buf1 = ret.1;
         buf2 = ret.2;
         println!("{}", result);
-        if opt.scores {
+        if args.scores {
             print_scores(&buf1);
         }
         n_chars += buf1.chars().len();
