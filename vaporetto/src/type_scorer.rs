@@ -110,12 +110,14 @@ impl TypeScorerPma {
     }
 }
 
+#[cfg(feature = "cache-type-score")]
 pub struct TypeScorerCache {
     scores: Vec<i32>,
     window_size: usize,
     sequence_mask: usize,
 }
 
+#[cfg(feature = "cache-type-score")]
 impl TypeScorerCache {
     pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
         let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
@@ -204,12 +206,18 @@ impl TypeScorerCache {
     }
 }
 
+#[cfg(feature = "cache-type-score")]
 const ALPHABET_SIZE: usize = 8;
+#[cfg(feature = "cache-type-score")]
 const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
+#[cfg(feature = "cache-type-score")]
 const ALPHABET_SHIFT: usize = 3;
+#[cfg(feature = "cache-type-score")]
 const TYPE_TO_ID: [u32; 256] = make_type_to_id();
+#[cfg(feature = "cache-type-score")]
 const ID_TO_TYPE: [u8; ALPHABET_SIZE] = make_id_to_type();
 
+#[cfg(feature = "cache-type-score")]
 const fn make_type_to_id() -> [u32; 256] {
     use crate::sentence::CharacterType::*;
 
@@ -223,6 +231,7 @@ const fn make_type_to_id() -> [u32; 256] {
     type_to_id
 }
 
+#[cfg(feature = "cache-type-score")]
 const fn make_id_to_type() -> [u8; ALPHABET_SIZE] {
     use crate::sentence::CharacterType::*;
 

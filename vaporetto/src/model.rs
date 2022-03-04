@@ -3,8 +3,11 @@ use std::io::{Read, Write};
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
-use crate::tag_model::TagModel;
+
 use crate::utils;
+
+#[cfg(feature = "tag-prediction")]
+use crate::tag_model::TagModel;
 
 /// Model data.
 pub struct Model {
@@ -14,6 +17,8 @@ pub struct Model {
     pub(crate) bias: i32,
     pub(crate) char_window_size: usize,
     pub(crate) type_window_size: usize,
+
+    #[cfg(feature = "tag-prediction")]
     pub(crate) tag_model: TagModel,
 }
 
@@ -37,6 +42,8 @@ impl Model {
         utils::write_i32(&mut wtr, self.bias)?;
         utils::write_u32(&mut wtr, self.char_window_size.try_into().unwrap())?;
         utils::write_u32(&mut wtr, self.type_window_size.try_into().unwrap())?;
+
+        #[cfg(feature = "tag-prediction")]
         self.tag_model.serialize(&mut wtr)?;
         Ok(())
     }
@@ -65,6 +72,8 @@ impl Model {
             bias: utils::read_i32(&mut rdr)?,
             char_window_size: utils::read_u32(&mut rdr)?.try_into().unwrap(),
             type_window_size: utils::read_u32(&mut rdr)?.try_into().unwrap(),
+
+            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::deserialize(&mut rdr)?,
         })
     }

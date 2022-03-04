@@ -1,4 +1,6 @@
+#[cfg(feature = "tag-prediction")]
 use std::iter;
+#[cfg(feature = "tag-prediction")]
 use std::sync::Arc;
 
 use daachorse::DoubleArrayAhoCorasick;
@@ -6,8 +8,13 @@ use daachorse::DoubleArrayAhoCorasick;
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
-use crate::sentence::{Sentence, TagRangeScore, TagRangeScores, TagScores};
-use crate::utils::{self, AddWeight, MergableWeight, WeightMerger};
+use crate::sentence::Sentence;
+use crate::utils::{AddWeight, MergableWeight, WeightMerger};
+
+#[cfg(feature = "tag-prediction")]
+use crate::sentence::{TagRangeScore, TagRangeScores, TagScores};
+#[cfg(feature = "tag-prediction")]
+use crate::utils;
 
 #[cfg(feature = "portable-simd")]
 use std::simd::i32x8;
@@ -111,6 +118,7 @@ impl AddWeight for WeightVector {
     }
 }
 
+#[cfg(feature = "tag-prediction")]
 pub struct WeightSet<W>
 where
     W: Clone,
@@ -121,8 +129,10 @@ where
     tag_self: Option<TagRangeScores>,
 }
 
+#[cfg(feature = "tag-prediction")]
 type NaiveWeightSet = WeightSet<Vec<i32>>;
 
+#[cfg(feature = "tag-prediction")]
 impl NaiveWeightSet {
     fn boundary_weight(offset: i32, weight: Vec<i32>) -> Self {
         Self {
@@ -164,6 +174,7 @@ impl NaiveWeightSet {
     }
 }
 
+#[cfg(feature = "tag-prediction")]
 impl MergableWeight for NaiveWeightSet {
     fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self {
         Self {
@@ -240,12 +251,14 @@ impl CharScorer {
     }
 }
 
+#[cfg(feature = "tag-prediction")]
 pub struct CharScorerWithTags {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<WeightSet<WeightVector>>,
     n_tags: usize,
 }
 
+#[cfg(feature = "tag-prediction")]
 impl CharScorerWithTags {
     pub fn new(
         model: NgramModel<String>,

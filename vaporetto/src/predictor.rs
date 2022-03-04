@@ -1,16 +1,23 @@
 use std::mem;
 
+#[cfg(feature = "tag-prediction")]
 use std::cmp::Ordering;
+#[cfg(feature = "tag-prediction")]
 use std::sync::Arc;
 
-use crate::char_scorer::{self, CharScorer, CharScorerWithTags};
+use crate::char_scorer::{self, CharScorer};
 use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{BoundaryType, Sentence};
 use crate::type_scorer::TypeScorer;
 
+#[cfg(feature = "tag-prediction")]
+use crate::char_scorer::CharScorerWithTags;
+
 enum CharScorerWrapper {
     Boundary(CharScorer),
+
+    #[cfg(feature = "tag-prediction")]
     BoundaryAndTags(CharScorerWithTags),
 }
 
@@ -23,8 +30,9 @@ pub struct Predictor {
 
     padding: usize,
 
-    // for tag prediction
+    #[cfg(feature = "tag-prediction")]
     tag_names: Vec<Arc<String>>,
+    #[cfg(feature = "tag-prediction")]
     tag_bias: Vec<i32>,
 }
 
@@ -39,10 +47,18 @@ impl Predictor {
     /// # Returns
     ///
     /// A new predictor.
-    pub fn new(model: Model, predict_tags: bool) -> Result<Self> {
+    pub fn new(
+        model: Model,
+
+        #[cfg(feature = "tag-prediction")] predict_tags: bool,
+        #[cfg(not(feature = "tag-prediction"))] _predict_tags: bool,
+    ) -> Result<Self> {
+        #[cfg(feature = "tag-prediction")]
         let mut tag_names = vec![];
+        #[cfg(feature = "tag-prediction")]
         let mut tag_bias = vec![];
 
+        #[cfg(feature = "tag-prediction")]
         let char_scorer = if predict_tags {
             for cls in model.tag_model.class_info {
                 tag_names.push(Arc::new(cls.name));
@@ -64,6 +80,14 @@ impl Predictor {
                 model.dict_model,
             )?)
         };
+
+        #[cfg(not(feature = "tag-prediction"))]
+        let char_scorer = CharScorerWrapper::Boundary(CharScorer::new(
+            model.char_ngram_model,
+            model.char_window_size,
+            model.dict_model,
+        )?);
+
         let type_scorer = TypeScorer::new(model.type_ngram_model, model.type_window_size)?;
 
         Ok(Self {
@@ -74,7 +98,9 @@ impl Predictor {
 
             padding: model.char_window_size.max(model.type_window_size),
 
+            #[cfg(feature = "tag-prediction")]
             tag_names,
+            #[cfg(feature = "tag-prediction")]
             tag_bias,
         })
     }
@@ -88,6 +114,8 @@ impl Predictor {
             CharScorerWrapper::Boundary(char_scorer) => {
                 char_scorer.add_scores(&sentence, self.padding, &mut ys);
             }
+
+            #[cfg(feature = "tag-prediction")]
             CharScorerWrapper::BoundaryAndTags(char_scorer) => {
                 let mut tag_ys = mem::take(&mut sentence.tag_scores);
                 tag_ys.init(sentence.chars.len(), self.tag_names.len());
@@ -142,6 +170,7 @@ impl Predictor {
         sentence
     }
 
+    #[cfg(feature = "tag-prediction")]
     fn best_tag(&self, scores: &[i32]) -> Arc<String> {
         Arc::clone(
             scores
@@ -166,6 +195,7 @@ impl Predictor {
     ///
     /// A sentence with tag information. When the predictor is instantiated with
     /// `predict_tag = false`, the sentence is returned without any modification.
+    #[cfg(feature = "tag-prediction")]
     pub fn fill_tags(&self, mut sentence: Sentence) -> Sentence {
         if self.tag_names.is_empty() {
             return sentence;
@@ -253,7 +283,10 @@ mod tests {
 
     use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
+
+    #[cfg(feature = "tag-prediction")]
     use crate::sentence::Token;
+    #[cfg(feature = "tag-prediction")]
     use crate::tag_model::{TagClassInfo, TagModel};
 
     /// Input:  我  ら  は  全  世  界  の  国  民
@@ -358,6 +391,8 @@ mod tests {
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
+
+            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -464,6 +499,8 @@ mod tests {
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
+
+            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -570,6 +607,8 @@ mod tests {
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
+
+            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -702,6 +741,8 @@ mod tests {
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
+
+            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -742,6 +783,7 @@ mod tests {
     ///     sum: 28  71  77  37   0   0  46  49
     ///          29  73  79  38   0   0  47  50
     ///          30  75  81  39   0   0  48  51
+    #[cfg(feature = "tag-prediction")]
     fn generate_model_5() -> Model {
         Model {
             char_ngram_model: NgramModel::new(vec![NgramData {
@@ -1007,6 +1049,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tag-prediction")]
     #[test]
     fn test_predict_with_score_5() {
         let model = generate_model_5();
