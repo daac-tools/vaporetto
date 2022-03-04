@@ -10,21 +10,31 @@ use crate::utils::AddWeight;
 
 pub enum TypeScorer {
     Pma(TypeScorerPma),
+
+    #[cfg(feature = "cache-type-score")]
     Cache(TypeScorerCache),
 }
 
 impl TypeScorer {
     pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
-        Ok(if window_size <= 3 {
+        #[cfg(feature = "cache-type-score")]
+        let scorer = if window_size <= 3 {
             Self::Cache(TypeScorerCache::new(model, window_size)?)
         } else {
             Self::Pma(TypeScorerPma::new(model, window_size)?)
-        })
+        };
+
+        #[cfg(not(feature = "cache-type-score"))]
+        let scorer = Self::Pma(TypeScorerPma::new(model, window_size)?);
+
+        Ok(scorer)
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         match self {
             TypeScorer::Pma(pma) => pma.add_scores(sentence, ys),
+
+            #[cfg(feature = "cache-type-score")]
             TypeScorer::Cache(cache) => cache.add_scores(sentence, ys),
         }
     }

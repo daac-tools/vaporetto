@@ -12,12 +12,15 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing"]
 
 [dependencies]
-daachorse = "0.4.0"  # MIT or Apache-2.0
+daachorse = { version = "0.4.0", path = "../../daachorse" }  # MIT or Apache-2.0
 
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
-default = []
+default = ["cache-type-score", "fix-weight-length"]
+
+cache-type-score = []
+fix-weight-length = []
 kytea = []
 train = ["liblinear"]
 portable-simd = []
