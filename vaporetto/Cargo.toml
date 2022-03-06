@@ -22,7 +22,7 @@ default = ["cache-type-score", "fix-weight-length", "tag-prediction"]
 # default: on
 cache-type-score = []
 fix-weight-length = []
-tag-prediction = []
+tag-prediction = ["fix-weight-length"]
 
 kytea = []
 train = ["liblinear"]

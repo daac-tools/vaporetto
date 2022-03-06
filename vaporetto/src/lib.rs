@@ -31,6 +31,7 @@ mod model;
 mod ngram_model;
 mod predictor;
 mod sentence;
+mod tag_model;
 mod type_scorer;
 mod utils;
 
@@ -45,9 +46,6 @@ mod trainer;
 
 #[cfg(feature = "kytea")]
 mod kytea_model;
-
-#[cfg(feature = "tag-prediction")]
-mod tag_model;
 
 pub use dict_model::WordWeightRecord;
 pub use model::Model;

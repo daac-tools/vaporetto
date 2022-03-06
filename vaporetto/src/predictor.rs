@@ -49,7 +49,6 @@ impl Predictor {
     /// A new predictor.
     pub fn new(
         model: Model,
-
         #[cfg(feature = "tag-prediction")] predict_tags: bool,
         #[cfg(not(feature = "tag-prediction"))] _predict_tags: bool,
     ) -> Result<Self> {
@@ -196,6 +195,7 @@ impl Predictor {
     /// A sentence with tag information. When the predictor is instantiated with
     /// `predict_tag = false`, the sentence is returned without any modification.
     #[cfg(feature = "tag-prediction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     pub fn fill_tags(&self, mut sentence: Sentence) -> Sentence {
         if self.tag_names.is_empty() {
             return sentence;
@@ -283,11 +283,12 @@ mod tests {
 
     use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
+    use crate::tag_model::TagModel;
 
     #[cfg(feature = "tag-prediction")]
     use crate::sentence::Token;
     #[cfg(feature = "tag-prediction")]
-    use crate::tag_model::{TagClassInfo, TagModel};
+    use crate::tag_model::TagClassInfo;
 
     /// Input:  我  ら  は  全  世  界  の  国  民
     /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
@@ -391,8 +392,6 @@ mod tests {
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
-
-            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -499,8 +498,6 @@ mod tests {
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
-
-            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -607,8 +604,6 @@ mod tests {
             bias: -285,
             char_window_size: 2,
             type_window_size: 3,
-
-            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
@@ -741,8 +736,6 @@ mod tests {
             bias: -200,
             char_window_size: 3,
             type_window_size: 2,
-
-            #[cfg(feature = "tag-prediction")]
             tag_model: TagModel::default(),
         }
     }
