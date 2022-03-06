@@ -22,11 +22,11 @@ default = ["cache-type-score", "fix-weight-length", "tag-prediction"]
 # default: on
 cache-type-score = []
 fix-weight-length = []
-tag-prediction = ["fix-weight-length"]
+tag-prediction = []
 
 kytea = []
 train = ["liblinear"]
-portable-simd = []
+portable-simd = ["fix-weight-length"]
 
 [package.metadata.docs.rs]
 all-features = true
