@@ -48,12 +48,6 @@ jobs:
           command: test
           args: --release -p vaporetto --no-default-features
 
-      - name: Run cargo test (vaporetto / all-features)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --all-features
-
       - name: Run cargo test (vaporetto / features kytea)
         uses: actions-rs/cargo@v1
         with:
