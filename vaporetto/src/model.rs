@@ -3,8 +3,10 @@ use std::io::{Read, Write};
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
-use crate::tag_model::TagModel;
+
 use crate::utils;
+
+use crate::tag_model::TagModel;
 
 /// Model data.
 pub struct Model {

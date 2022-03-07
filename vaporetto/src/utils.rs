@@ -85,6 +85,7 @@ where
     }
 }
 
+#[cfg(feature = "tag-prediction")]
 pub fn xor_or_zip_with<T, F>(lhs: &Option<T>, rhs: &Option<T>, f: F) -> Option<T>
 where
     T: Clone,

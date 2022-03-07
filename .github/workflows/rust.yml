@@ -48,11 +48,35 @@ jobs:
           command: test
           args: --release -p vaporetto --no-default-features
 
-      - name: Run cargo test (vaporetto / features kytea+train)
+      - name: Run cargo test (vaporetto / features kytea)
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --features kytea,train
+          args: --release -p vaporetto --features kytea
+
+      - name: Run cargo test (vaporetto / features train)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --features train
+
+      - name: Run cargo test (vaporetto / features cache-type-score)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features cache-type-score
+
+      - name: Run cargo test (vaporetto / features fix-weight-length)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features fix-weight-length
+
+      - name: Run cargo test (vaporetto / features tag-prediction)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features tag-prediction
 
   nightly:
     name: Nightly
@@ -100,3 +124,33 @@ jobs:
         with:
           command: test
           args: --release -p vaporetto --all-features
+
+      - name: Run cargo test (vaporetto / features kytea)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --features kytea
+
+      - name: Run cargo test (vaporetto / features train)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --features train
+
+      - name: Run cargo test (vaporetto / features cache-type-score)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features cache-type-score
+
+      - name: Run cargo test (vaporetto / features fix-weight-length)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features fix-weight-length
+
+      - name: Run cargo test (vaporetto / features tag-prediction)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features tag-prediction
