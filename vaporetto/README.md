@@ -32,8 +32,8 @@ The following features are disabled by default:
 
 The following features are enabled by default:
 
-* `cache-type-score` - Enables caching type scores. If disabled, type scores are calculated each time.
-* `fix-weight-length` - Uses arrays for storing scores for easy optimization. If disabled, it uses vectors.
+* `cache-type-score` - Enables caching type scores for faster processing. If disabled, type scores are calculated in a straightforward manner.
+* `fix-weight-length` - Uses fixed-size arrays for storing scores to facilitate optimization. If disabled, vectors are used instead.
 * `tag-prediction` - Enables tag prediction.
 
 ## License
