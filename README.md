@@ -5,7 +5,7 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
-![Build Status](https://github.com/legalforce-research/vaporetto/actions/workflows/rust.yml/badge.svg)
+![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
 
 [Technical details](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (Japanese)
 
@@ -22,11 +22,11 @@ Vaporetto provides three ways to generate tokenization models:
 #### Download Distribution Model
 
 The first is the simplest way, which is to download a model that has been trained by us.
-You can find models [here](https://github.com/legalforce-research/vaporetto/releases/tag/v0.3.0).
+You can find models [here](https://github.com/daac-tools/vaporetto/releases/tag/v0.3.0).
 
 We chose `bccwj-suw+unidic+tag`:
 ```
-% wget https://github.com/legalforce-research/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.tar.xz
+% wget https://github.com/daac-tools/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.tar.xz
 ```
 
 Each file contains a model file and license terms, so you need to extract the downloaded file like the following command:
@@ -213,7 +213,7 @@ In prediction, tags are not predicted by default, so you have to specify `--pred
 
 Vaporetto is 8.25 times faster than KyTea.
 
-Details can be found [here](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison).
+Details can be found [here](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison).
 
 ![](./figures/comparison.svg)
 

@@ -5,7 +5,7 @@ Vaporetto は、高速で軽量な点予測に基づくトークナイザです�
 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
-![Build Status](https://github.com/legalforce-research/vaporetto/actions/workflows/rust.yml/badge.svg)
+![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
 
 [技術解説](https://tech.legalforce.co.jp/entry/2021/09/28/180844)
 
@@ -22,11 +22,11 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 #### 配布モデルをダウンロードする
 
 1番目は最も単純な方法で、我々によって学習されたモデルをダウンロードすることです。
-モデルファイルは[ここ](https://github.com/legalforce-research/vaporetto/releases/tag/v0.3.0)にあります。
+モデルファイルは[ここ](https://github.com/daac-tools/vaporetto/releases/tag/v0.3.0)にあります。
 
 `bccwj-suw+unidic+tag` を選びました。
 ```
-% wget https://github.com/legalforce-research/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.tar.xz
+% wget https://github.com/daac-tools/vaporetto/releases/download/v0.3.0/bccwj-suw+unidic+tag.tar.xz
 ```
 
 各ファイルにはモデルファイルとライセンス条項が含まれているので、以下のようなコマンドでダウンロードしたファイルを展開する必要があります。
@@ -212,6 +212,6 @@ Vaporettoは実験的に品詞推定に対応しています。
 
 Vaporetto は KyTea に比べて 8.25 倍速く動作します。
 
-詳細は[ここ](https://github.com/legalforce-research/vaporetto/wiki/Speed-Comparison)を参照してください。
+詳細は[ここ](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison)を参照してください。
 
 ![](./figures/comparison.svg)
