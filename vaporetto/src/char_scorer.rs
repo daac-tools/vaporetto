@@ -215,7 +215,9 @@ impl CharScorer {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let weight = PositionalWeight::new(-(word_len as i16) - 1, weight);
+            let word_len = i16::try_from(word_len)
+                .map_err(|_| VaporettoError::invalid_model("invalid word length"))?;
+            let weight = PositionalWeight::new(-word_len - 1, weight);
             weight_merger.add(&d.word, weight);
         }
 
@@ -281,12 +283,15 @@ impl CharScorerWithTags {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let weight = WeightSet::boundary_weight(-(word_len as i16), weight);
+            let word_len = i16::try_from(word_len)
+                .map_err(|_| VaporettoError::invalid_model("invalid word length"))?;
+            let weight = WeightSet::boundary_weight(-word_len, weight);
             weight_merger.add(&d.word, weight);
         }
         for d in tag_left_model.data {
-            let weight =
-                WeightSet::tag_left_weight(-(d.ngram.chars().count() as i16) + 1, d.weights);
+            let ngram_len = i16::try_from(d.ngram.chars().count())
+                .map_err(|_| VaporettoError::invalid_model("invalid n-gram length"))?;
+            let weight = WeightSet::tag_left_weight(-ngram_len + 1, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
         for d in tag_right_model.data {
@@ -294,7 +299,9 @@ impl CharScorerWithTags {
             weight_merger.add(&d.ngram, weight);
         }
         for d in tag_self_model.data {
-            let weight = WeightSet::tag_self_weight(-(d.ngram.chars().count() as i16), d.weights);
+            let ngram_len = i16::try_from(d.ngram.chars().count())
+                .map_err(|_| VaporettoError::invalid_model("invalid n-gram length"))?;
+            let weight = WeightSet::tag_self_weight(-ngram_len, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
 
@@ -350,17 +357,20 @@ impl CharScorerWithTags {
             let weight_set = unsafe { self.weights.get_unchecked(m.value()) };
 
             if let Some(pos_weights) = weight_set.boundary.as_ref() {
-                let offset = isize::from(padding) + m_end as isize + isize::from(pos_weights.offset) - 1;
+                let offset =
+                    isize::from(padding) + m_end as isize + isize::from(pos_weights.offset) - 1;
                 pos_weights.weight.add_weight(ys, offset);
             }
             if let Some(pos_weights) = weight_set.tag_left.as_ref() {
-                let offset = (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
+                let offset =
+                    (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
                 pos_weights
                     .weight
                     .add_weight(&mut tag_ys.left_scores, offset);
             }
             if let Some(pos_weights) = weight_set.tag_right.as_ref() {
-                let offset = (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
+                let offset =
+                    (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
                 pos_weights
                     .weight
                     .add_weight(&mut tag_ys.right_scores, offset);

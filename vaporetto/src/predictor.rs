@@ -105,7 +105,8 @@ impl Predictor {
     }
 
     fn predict_impl(&self, mut sentence: Sentence) -> Sentence {
-        let ys_size = sentence.boundaries.len() + usize::from(self.padding) + char_scorer::SIMD_SIZE - 1;
+        let ys_size =
+            sentence.boundaries.len() + usize::from(self.padding) + char_scorer::SIMD_SIZE - 1;
         let mut ys = mem::take(&mut sentence.boundary_scores);
         ys.clear();
         ys.resize(ys_size, self.bias);

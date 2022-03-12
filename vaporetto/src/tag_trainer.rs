@@ -116,7 +116,8 @@ impl<'a> TagTrainer<'a> {
                         if let Some(weights) = left_char_weights.get_mut(*ngram) {
                             weights[idx] = weight;
                         } else {
-                            let mut weights = vec![0; usize::from(self.char_window_size) * self.tag_ids.len()];
+                            let mut weights =
+                                vec![0; usize::from(self.char_window_size) * self.tag_ids.len()];
                             weights[idx] = weight;
                             left_char_weights.insert(ngram.to_string(), weights);
                         }
@@ -141,7 +142,8 @@ impl<'a> TagTrainer<'a> {
                         if let Some(weights) = right_char_weights.get_mut(*ngram) {
                             weights[idx] = weight;
                         } else {
-                            let mut weights = vec![0; usize::from(self.char_window_size) * self.tag_ids.len()];
+                            let mut weights =
+                                vec![0; usize::from(self.char_window_size) * self.tag_ids.len()];
                             weights[idx] = weight;
                             right_char_weights.insert(ngram.to_string(), weights);
                         }

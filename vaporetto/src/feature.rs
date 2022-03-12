@@ -267,7 +267,12 @@ impl TagExampleGenerator {
                         }
                         for j in (i + 1).saturating_sub(self.char_window_size.into())..i + 1 {
                             let rel_position = j as isize - i as isize - 1;
-                            for end in j + 1..sentence.chars.len().min(j + usize::from(self.char_ngram_size)) + 1
+                            for end in j + 1
+                                ..sentence
+                                    .chars
+                                    .len()
+                                    .min(j + usize::from(self.char_ngram_size))
+                                    + 1
                             {
                                 features.push(TagFeature::left_char_ngram(
                                     rel_position,
@@ -284,8 +289,9 @@ impl TagExampleGenerator {
                     if let Some(tag) = t.as_ref() {
                         current_tag.replace(Arc::clone(tag));
                         tag_right_pos = i + 1;
-                        for j in
-                            (i + 2)..(i + 2 + usize::from(self.char_window_size)).min(sentence.chars.len() + 1)
+                        for j in (i + 2)
+                            ..(i + 2 + usize::from(self.char_window_size))
+                                .min(sentence.chars.len() + 1)
                         {
                             let rel_position = j as isize - i as isize - 1;
                             for start in j.saturating_sub(self.char_ngram_size.into())..j {
