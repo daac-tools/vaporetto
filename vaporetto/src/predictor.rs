@@ -124,7 +124,7 @@ impl Predictor {
             }
         }
         self.type_scorer
-            .add_scores(&sentence, &mut ys[self.padding.into()..]);
+            .add_scores(&sentence, self.padding, &mut ys);
         for (&y, b) in ys[self.padding.into()..]
             .iter()
             .zip(sentence.boundaries.iter_mut())

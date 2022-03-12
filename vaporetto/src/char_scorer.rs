@@ -91,10 +91,8 @@ impl WeightVector {
 
         v
     }
-}
 
-impl AddWeight for WeightVector {
-    fn add_weight(&self, ys: &mut [i32], offset: isize) {
+    fn add_weight(&self, ys: &mut [i32], offset: usize) {
         match self {
             WeightVector::Variable(weight) => {
                 weight.add_weight(ys, offset);
@@ -102,7 +100,7 @@ impl AddWeight for WeightVector {
 
             #[cfg(feature = "fix-weight-length")]
             WeightVector::Fixed(weight) => {
-                let ys_slice = &mut ys[offset as usize..offset as usize + SIMD_SIZE];
+                let ys_slice = &mut ys[offset..offset + SIMD_SIZE];
                 #[cfg(feature = "portable-simd")]
                 {
                     let mut target = I32Vec::from_slice(ys_slice);
@@ -248,7 +246,7 @@ impl CharScorer {
             let pos_weights = unsafe { self.weights.get_unchecked(m.value()) };
 
             let offset = isize::from(padding) + m_end as isize + isize::from(pos_weights.offset);
-            pos_weights.weight.add_weight(ys, offset);
+            pos_weights.weight.add_weight(ys, offset as usize);
         }
     }
 }
@@ -359,21 +357,21 @@ impl CharScorerWithTags {
             if let Some(pos_weights) = weight_set.boundary.as_ref() {
                 let offset =
                     isize::from(padding) + m_end as isize + isize::from(pos_weights.offset) - 1;
-                pos_weights.weight.add_weight(ys, offset);
+                pos_weights.weight.add_weight(ys, offset as usize);
             }
             if let Some(pos_weights) = weight_set.tag_left.as_ref() {
                 let offset =
                     (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
                 pos_weights
                     .weight
-                    .add_weight(&mut tag_ys.left_scores, offset);
+                    .add_weight_signed(&mut tag_ys.left_scores, offset);
             }
             if let Some(pos_weights) = weight_set.tag_right.as_ref() {
                 let offset =
                     (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
                 pos_weights
                     .weight
-                    .add_weight(&mut tag_ys.right_scores, offset);
+                    .add_weight_signed(&mut tag_ys.right_scores, offset);
             }
             if let Some(weight) = weight_set.tag_self.as_ref() {
                 tag_ys.self_scores[m_end - 1].replace(Arc::clone(weight));

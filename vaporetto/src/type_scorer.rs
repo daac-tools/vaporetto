@@ -30,12 +30,12 @@ impl TypeScorer {
         Ok(scorer)
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
+    pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
         match self {
-            TypeScorer::Pma(pma) => pma.add_scores(sentence, ys),
+            TypeScorer::Pma(pma) => pma.add_scores(sentence, padding, ys),
 
             #[cfg(feature = "cache-type-score")]
-            TypeScorer::Cache(cache) => cache.add_scores(sentence, ys),
+            TypeScorer::Cache(cache) => cache.add_scores(sentence, &mut ys[padding.into()..]),
         }
     }
 }
@@ -96,16 +96,17 @@ impl TypeScorerPma {
         })
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
+    pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
         for m in self
             .pma
             .find_overlapping_no_suffix_iter(&sentence.char_type)
         {
-            let offset = m.end() as isize - isize::from(self.window_size) - 1;
+            let offset =
+                isize::from(padding) + m.end() as isize - isize::from(self.window_size) - 1;
             // Both the weights and the PMA always have the same number of items.
             // Therefore, the following code is safe.
             let weights = unsafe { self.weights.get_unchecked(m.value()) };
-            weights.add_weight(ys, offset);
+            weights.add_weight(ys, offset as usize);
         }
     }
 }

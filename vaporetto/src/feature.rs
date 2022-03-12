@@ -109,25 +109,25 @@ impl BoundaryExampleGenerator {
         let mut result = vec![];
         for (i, &label) in s.boundaries().iter().enumerate() {
             let mut features = vec![];
-            for n in 0..self.char_ngram_size {
-                let begin = (i + 1).saturating_sub(self.char_window_size.into());
+            for n in 0..usize::from(self.char_ngram_size) {
+                let begin = (i + 1).saturating_sub(usize::from(self.char_window_size));
                 let end = (i + 1 + usize::from(self.char_window_size))
                     .min(s.chars.len())
-                    .saturating_sub(n.into());
+                    .saturating_sub(n);
                 for pos in begin..end {
                     let rel_position = pos as isize - i as isize - 1;
-                    let ngram = s.char_substring(pos, pos + usize::from(n) + 1);
+                    let ngram = s.char_substring(pos, pos + n + 1);
                     features.push(BoundaryFeature::char_ngram(rel_position, ngram));
                 }
             }
-            for n in 0..self.type_ngram_size {
-                let begin = (i + 1).saturating_sub(self.type_window_size.into());
+            for n in 0..usize::from(self.type_ngram_size) {
+                let begin = (i + 1).saturating_sub(usize::from(self.type_window_size));
                 let end = (i + 1 + usize::from(self.type_window_size))
                     .min(s.chars.len())
-                    .saturating_sub(n.into());
+                    .saturating_sub(n);
                 for pos in begin..end {
                     let rel_position = pos as isize - i as isize - 1;
-                    let ngram = &s.char_types()[pos..pos + usize::from(n) + 1];
+                    let ngram = &s.char_types()[pos..pos + n + 1];
                     features.push(BoundaryFeature::type_ngram(rel_position, ngram));
                 }
             }
@@ -137,7 +137,7 @@ impl BoundaryExampleGenerator {
             for m in dict_ac.find_overlapping_iter(&s.text) {
                 let m_start = s.str_to_char_pos[m.start()];
                 let m_end = s.str_to_char_pos[m.end()];
-                let length = (m_end - m_start).min(self.dict_max_word_size.into());
+                let length = (m_end - m_start).min(usize::from(self.dict_max_word_size));
                 if m_start != 0 {
                     result[m_start - 1]
                         .features
@@ -232,7 +232,7 @@ impl TagExampleGenerator {
     pub fn generate<'a>(&self, sentence: &'a Sentence) -> Result<Vec<TagExample<'a>>> {
         let mut result = vec![];
         let mut features = vec![];
-        for start in (sentence.chars.len() + 1).saturating_sub(self.char_ngram_size.into())
+        for start in (sentence.chars.len() + 1).saturating_sub(usize::from(self.char_ngram_size))
             ..sentence.chars.len() + 1
         {
             features.push(TagFeature::right_char_ngram_eos(
@@ -256,16 +256,18 @@ impl TagExampleGenerator {
             match b {
                 BoundaryType::WordBoundary => {
                     if let Some(tag) = current_tag.take() {
-                        if i + 2 <= self.char_window_size.into() {
+                        if i + 2 <= usize::from(self.char_window_size) {
                             let rel_position = -(i as isize) - 2;
-                            for end in 0..sentence.chars.len().min(self.char_ngram_size.into()) {
+                            for end in
+                                0..sentence.chars.len().min(usize::from(self.char_ngram_size))
+                            {
                                 features.push(TagFeature::left_char_ngram_bos(
                                     rel_position,
                                     sentence.char_substring(0, end),
                                 ));
                             }
                         }
-                        for j in (i + 1).saturating_sub(self.char_window_size.into())..i + 1 {
+                        for j in (i + 1).saturating_sub(usize::from(self.char_window_size))..i + 1 {
                             let rel_position = j as isize - i as isize - 1;
                             for end in j + 1
                                 ..sentence
@@ -294,7 +296,7 @@ impl TagExampleGenerator {
                                 .min(sentence.chars.len() + 1)
                         {
                             let rel_position = j as isize - i as isize - 1;
-                            for start in j.saturating_sub(self.char_ngram_size.into())..j {
+                            for start in j.saturating_sub(usize::from(self.char_ngram_size))..j {
                                 features.push(TagFeature::right_char_ngram(
                                     rel_position,
                                     sentence.char_substring(start, j),
@@ -304,7 +306,7 @@ impl TagExampleGenerator {
                         if i + usize::from(self.char_window_size) >= sentence.chars.len() {
                             let rel_position = sentence.chars.len() as isize - i as isize;
                             for start in (sentence.chars.len() + 1)
-                                .saturating_sub(self.char_ngram_size.into())
+                                .saturating_sub(usize::from(self.char_ngram_size))
                                 ..sentence.chars.len() + 1
                             {
                                 features.push(TagFeature::right_char_ngram_eos(
@@ -324,7 +326,7 @@ impl TagExampleGenerator {
             }
         }
         if let Some(tag) = current_tag.take() {
-            for end in 0..sentence.chars.len().min(self.char_ngram_size.into()) {
+            for end in 0..sentence.chars.len().min(usize::from(self.char_ngram_size)) {
                 features.push(TagFeature::left_char_ngram_bos(
                     -1,
                     sentence.char_substring(0, end),
