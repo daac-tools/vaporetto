@@ -16,7 +16,7 @@ pub enum TypeScorer {
 }
 
 impl TypeScorer {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
         #[cfg(feature = "cache-type-score")]
         let scorer = if window_size <= 3 {
             Self::Cache(TypeScorerCache::new(model, window_size)?)
@@ -43,11 +43,11 @@ impl TypeScorer {
 pub struct TypeScorerPma {
     pma: DoubleArrayAhoCorasick,
     weights: Vec<Vec<i32>>,
-    window_size: usize,
+    window_size: u8,
 }
 
 impl TypeScorerPma {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
         // key: ngram, value: (weight, check)
         let mut weights_map: BTreeMap<Vec<u8>, RefCell<(Vec<i32>, bool)>> = BTreeMap::new();
 
@@ -101,7 +101,7 @@ impl TypeScorerPma {
             .pma
             .find_overlapping_no_suffix_iter(&sentence.char_type)
         {
-            let offset = m.end() as isize - self.window_size as isize - 1;
+            let offset = m.end() as isize - isize::from(self.window_size) - 1;
             // Both the weights and the PMA always have the same number of items.
             // Therefore, the following code is safe.
             let weights = unsafe { self.weights.get_unchecked(m.value()) };
@@ -113,18 +113,18 @@ impl TypeScorerPma {
 #[cfg(feature = "cache-type-score")]
 pub struct TypeScorerCache {
     scores: Vec<i32>,
-    window_size: usize,
+    window_size: u8,
     sequence_mask: usize,
 }
 
 #[cfg(feature = "cache-type-score")]
 impl TypeScorerCache {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: usize) -> Result<Self> {
+    pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
         let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
             .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
         let mut weights = vec![];
         for d in model.data {
-            if d.weights.len() <= 2 * window_size - d.ngram.len() {
+            if d.weights.len() <= 2 * usize::from(window_size) - d.ngram.len() {
                 return Err(VaporettoError::invalid_model(
                     "invalid size of weight vector",
                 ));
@@ -132,10 +132,10 @@ impl TypeScorerCache {
             weights.push(d.weights);
         }
 
-        let sequence_size = window_size * 2;
-        let all_sequences = ALPHABET_SIZE.pow(sequence_size as u32);
+        let sequence_size = u16::from(window_size) * 2;
+        let all_sequences = ALPHABET_SIZE.pow(sequence_size.into());
 
-        let mut sequence = vec![0u8; sequence_size];
+        let mut sequence = vec![0u8; sequence_size.into()];
         let mut scores = vec![0; all_sequences];
 
         for (i, score) in scores.iter_mut().enumerate() {
@@ -144,7 +144,7 @@ impl TypeScorerCache {
             }
             let mut y = 0;
             for m in pma.find_overlapping_iter(&sequence) {
-                y += weights[m.value()][sequence_size - m.end()];
+                y += weights[m.value()][usize::from(sequence_size) - m.end()];
             }
             *score = y;
         }
@@ -152,21 +152,21 @@ impl TypeScorerCache {
         Ok(Self {
             scores,
             window_size,
-            sequence_mask: (1 << (ALPHABET_SHIFT * sequence_size)) - 1,
+            sequence_mask: (1 << (ALPHABET_SHIFT * usize::from(sequence_size))) - 1,
         })
     }
 
     pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
         let mut seqid = 0;
         for i in 0..self.window_size {
-            if let Some(ct) = sentence.char_type.get(i) {
+            if let Some(ct) = sentence.char_type.get(usize::from(i)) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);
             };
         }
         for (i, y) in ys.iter_mut().enumerate() {
-            if let Some(ct) = sentence.char_type.get(i + self.window_size) {
+            if let Some(ct) = sentence.char_type.get(i + usize::from(self.window_size)) {
                 seqid = self.increment_seqid(seqid, *ct);
             } else {
                 seqid = self.increment_seqid_without_char(seqid);
@@ -195,7 +195,7 @@ impl TypeScorerCache {
 
     #[inline(always)]
     fn increment_seqid(&self, seqid: usize, char_type: u8) -> usize {
-        let char_id = TYPE_TO_ID[char_type as usize] as usize;
+        let char_id = usize::from(TYPE_TO_ID[usize::from(char_type)]);
         debug_assert!((1..=6).contains(&char_id));
         ((seqid << ALPHABET_SHIFT) | char_id) & self.sequence_mask
     }
@@ -213,15 +213,15 @@ const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
 #[cfg(feature = "cache-type-score")]
 const ALPHABET_SHIFT: usize = 3;
 #[cfg(feature = "cache-type-score")]
-const TYPE_TO_ID: [u32; 256] = make_type_to_id();
+const TYPE_TO_ID: [u8; 256] = make_type_to_id();
 #[cfg(feature = "cache-type-score")]
 const ID_TO_TYPE: [u8; ALPHABET_SIZE] = make_id_to_type();
 
 #[cfg(feature = "cache-type-score")]
-const fn make_type_to_id() -> [u32; 256] {
+const fn make_type_to_id() -> [u8; 256] {
     use crate::sentence::CharacterType::*;
 
-    let mut type_to_id = [0u32; 256];
+    let mut type_to_id = [0u8; 256];
     type_to_id[Digit as usize] = 1;
     type_to_id[Roman as usize] = 2;
     type_to_id[Hiragana as usize] = 3;

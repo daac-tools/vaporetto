@@ -32,23 +32,23 @@ struct Args {
 
     /// The character window to use for word segmentation
     #[clap(long, default_value = "3")]
-    charw: usize,
+    charw: u8,
 
     /// The character n-gram length to use for word segmentation
     #[clap(long, default_value = "3")]
-    charn: usize,
+    charn: u8,
 
     /// The character type window to use for word segmentation
     #[clap(long, default_value = "3")]
-    typew: usize,
+    typew: u8,
 
     /// The character type n-gram length to use for word segmentation
     #[clap(long, default_value = "3")]
-    typen: usize,
+    typen: u8,
 
     /// Dictionary words greater than this value will be grouped together
     #[clap(long, default_value = "4")]
-    dictn: usize,
+    dictn: u8,
 
     /// The epsilon stopping criterion for classifier training
     #[clap(long, default_value = "0.01")]

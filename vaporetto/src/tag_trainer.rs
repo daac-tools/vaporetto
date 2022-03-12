@@ -11,7 +11,7 @@ use crate::trainer::{Indexer, SolverType, QUANTIZE_BIT_DEPTH};
 
 pub struct TagTrainer<'a> {
     example_generator: TagExampleGenerator,
-    char_window_size: usize,
+    char_window_size: u8,
     feature_ids: Indexer<TagFeature<'a>>,
     tag_ids: Indexer<String>,
     xs: Vec<Vec<(u32, f64)>>,
@@ -19,7 +19,7 @@ pub struct TagTrainer<'a> {
 }
 
 impl<'a> TagTrainer<'a> {
-    pub fn new(char_ngram_size: usize, char_window_size: usize) -> Self {
+    pub fn new(char_ngram_size: u8, char_window_size: u8) -> Self {
         Self {
             example_generator: TagExampleGenerator::new(char_ngram_size, char_window_size),
             char_window_size,
@@ -116,7 +116,7 @@ impl<'a> TagTrainer<'a> {
                         if let Some(weights) = left_char_weights.get_mut(*ngram) {
                             weights[idx] = weight;
                         } else {
-                            let mut weights = vec![0; self.char_window_size * self.tag_ids.len()];
+                            let mut weights = vec![0; usize::from(self.char_window_size) * self.tag_ids.len()];
                             weights[idx] = weight;
                             left_char_weights.insert(ngram.to_string(), weights);
                         }
@@ -129,19 +129,19 @@ impl<'a> TagTrainer<'a> {
                         let idx = i + pos as usize * self.tag_ids.len();
                         let ngram = "\0".to_string() + *ngram;
                         left_char_weights.entry(ngram).or_insert_with(|| {
-                            vec![0; self.char_window_size * self.tag_ids.len()]
+                            vec![0; usize::from(self.char_window_size) * self.tag_ids.len()]
                         })[idx] = weight;
                     }
                     TagFeature::RightCharacterNgram(StringNgramFeature {
                         rel_position,
                         ngram,
                     }) => {
-                        let pos = self.char_window_size as isize - rel_position;
-                        let idx = i as usize + pos as usize * self.tag_ids.len();
+                        let pos = isize::from(self.char_window_size) - rel_position;
+                        let idx = i + pos as usize * self.tag_ids.len();
                         if let Some(weights) = right_char_weights.get_mut(*ngram) {
                             weights[idx] = weight;
                         } else {
-                            let mut weights = vec![0; self.char_window_size * self.tag_ids.len()];
+                            let mut weights = vec![0; usize::from(self.char_window_size) * self.tag_ids.len()];
                             weights[idx] = weight;
                             right_char_weights.insert(ngram.to_string(), weights);
                         }
@@ -150,19 +150,19 @@ impl<'a> TagTrainer<'a> {
                         rel_position,
                         ngram,
                     }) => {
-                        let pos = self.char_window_size as isize - rel_position;
-                        let idx = i as usize + pos as usize * self.tag_ids.len();
+                        let pos = isize::from(self.char_window_size) - rel_position;
+                        let idx = i + pos as usize * self.tag_ids.len();
                         let ngram = ngram.to_string() + "\0";
                         right_char_weights.entry(ngram).or_insert_with(|| {
-                            vec![0; self.char_window_size * self.tag_ids.len()]
+                            vec![0; usize::from(self.char_window_size) * self.tag_ids.len()]
                         })[idx] = weight;
                     }
                     TagFeature::Character(ngram) => {
                         if let Some(weights) = self_char_weights.get_mut(*ngram) {
-                            weights[i as usize] = weight;
+                            weights[i] = weight;
                         } else {
                             let mut weights = vec![0; self.tag_ids.len()];
-                            weights[i as usize] = weight;
+                            weights[i] = weight;
                             self_char_weights.insert(ngram.to_string(), weights);
                         }
                     }

@@ -92,7 +92,7 @@ impl Readable for char {
     where
         R: BufRead,
     {
-        let cidx = utils::read_u16(&mut rdr)? as usize;
+        let cidx = usize::from(utils::read_u16(&mut rdr)?);
         Ok(config.char_map[cidx - 1])
     }
 }
@@ -122,7 +122,7 @@ impl Readable for String {
         let size = utils::read_u32(&mut rdr)?;
         let mut result = Self::new();
         for _ in 0..size {
-            let cidx = utils::read_u16(&mut rdr)? as usize;
+            let cidx = usize::from(utils::read_u16(&mut rdr)?);
             result.push(config.char_map[cidx - 1]);
         }
         Ok(result)
@@ -497,8 +497,8 @@ impl TryFrom<KyteaModel> for Model {
             dict_model: DictModel::new(dict),
             bias,
             tag_model: TagModel::default(),
-            char_window_size: config.char_w as usize,
-            type_window_size: config.type_w as usize,
+            char_window_size: config.char_w,
+            type_window_size: config.type_w,
         })
     }
 }

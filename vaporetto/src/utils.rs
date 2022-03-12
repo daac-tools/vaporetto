@@ -97,7 +97,6 @@ where
     )
 }
 
-#[cfg(feature = "kytea")]
 pub fn read_u8<R>(mut rdr: R) -> io::Result<u8>
 where
     R: Read,
@@ -105,6 +104,14 @@ where
     let mut buf = [0];
     rdr.read_exact(&mut buf)?;
     Ok(buf[0])
+}
+
+pub fn write_u8<W>(mut wtr: W, data: u8) -> io::Result<()>
+where
+    W: Write,
+{
+    wtr.write_all(&[data])?;
+    Ok(())
 }
 
 #[cfg(feature = "kytea")]

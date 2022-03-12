@@ -151,9 +151,9 @@ impl From<SolverType> for liblinear::SolverType {
 pub struct Trainer<'a> {
     dictionary: Vec<String>,
     example_generator: BoundaryExampleGenerator,
-    char_window_size: usize,
-    type_window_size: usize,
-    dict_max_word_size: usize,
+    char_window_size: u8,
+    type_window_size: u8,
+    dict_max_word_size: u8,
     feature_ids: Indexer<BoundaryFeature<'a>>,
     xs: Vec<Vec<(u32, f64)>>,
     ys: Vec<f64>,
@@ -180,12 +180,12 @@ impl<'a> Trainer<'a> {
     ///
     /// If invalid parameters are given, an error variant will be returned.
     pub fn new<D, P>(
-        char_ngram_size: usize,
-        char_window_size: usize,
-        type_ngram_size: usize,
-        type_window_size: usize,
+        char_ngram_size: u8,
+        char_window_size: u8,
+        type_ngram_size: u8,
+        type_window_size: u8,
         dictionary: D,
-        dict_max_word_size: usize,
+        dict_max_word_size: u8,
     ) -> Result<Self>
     where
         D: AsRef<[P]>,
@@ -296,7 +296,7 @@ impl<'a> Trainer<'a> {
         // Uses BTreeMap to increase compression ratio.
         let mut char_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
         let mut type_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
-        let mut dict_weights = vec![DictWeight::default(); self.dict_max_word_size];
+        let mut dict_weights = vec![DictWeight::default(); self.dict_max_word_size.into()];
 
         let mut weight_max = bias.abs();
         for fid in 0..model.num_features() {
@@ -323,11 +323,11 @@ impl<'a> Trainer<'a> {
                     ngram,
                 }) => {
                     let len = ngram.chars().count();
-                    let pos = self.char_window_size as isize - len as isize - rel_position;
+                    let pos = isize::from(self.char_window_size) - len as isize - rel_position;
                     if let Some(weights) = char_ngram_weights.get_mut(*ngram) {
                         weights[pos as usize] = weight;
                     } else {
-                        let mut weights = vec![0; self.char_window_size * 2 - len + 1];
+                        let mut weights = vec![0; usize::from(self.char_window_size) * 2 - len + 1];
                         weights[pos as usize] = weight;
                         char_ngram_weights.insert(ngram.to_string(), weights);
                     }
@@ -341,7 +341,7 @@ impl<'a> Trainer<'a> {
                     if let Some(weights) = type_ngram_weights.get_mut(*ngram) {
                         weights[pos as usize] = weight;
                     } else {
-                        let mut weights = vec![0; self.char_window_size * 2 - len + 1];
+                        let mut weights = vec![0; usize::from(self.char_window_size) * 2 - len + 1];
                         weights[pos as usize] = weight;
                         type_ngram_weights.insert(ngram.to_vec(), weights);
                     }

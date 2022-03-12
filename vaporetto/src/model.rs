@@ -14,8 +14,8 @@ pub struct Model {
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
     pub(crate) dict_model: DictModel,
     pub(crate) bias: i32,
-    pub(crate) char_window_size: usize,
-    pub(crate) type_window_size: usize,
+    pub(crate) char_window_size: u8,
+    pub(crate) type_window_size: u8,
     pub(crate) tag_model: TagModel,
 }
 
@@ -37,8 +37,8 @@ impl Model {
         self.type_ngram_model.serialize(&mut wtr)?;
         self.dict_model.serialize(&mut wtr)?;
         utils::write_i32(&mut wtr, self.bias)?;
-        utils::write_u32(&mut wtr, self.char_window_size.try_into().unwrap())?;
-        utils::write_u32(&mut wtr, self.type_window_size.try_into().unwrap())?;
+        utils::write_u8(&mut wtr, self.char_window_size)?;
+        utils::write_u8(&mut wtr, self.type_window_size)?;
         self.tag_model.serialize(&mut wtr)?;
         Ok(())
     }
@@ -65,8 +65,8 @@ impl Model {
             type_ngram_model: NgramModel::<Vec<u8>>::deserialize(&mut rdr)?,
             dict_model: DictModel::deserialize(&mut rdr)?,
             bias: utils::read_i32(&mut rdr)?,
-            char_window_size: utils::read_u32(&mut rdr)?.try_into().unwrap(),
-            type_window_size: utils::read_u32(&mut rdr)?.try_into().unwrap(),
+            char_window_size: utils::read_u8(&mut rdr)?,
+            type_window_size: utils::read_u8(&mut rdr)?,
             tag_model: TagModel::deserialize(&mut rdr)?,
         })
     }
