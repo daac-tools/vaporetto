@@ -93,11 +93,11 @@ pub struct Token<'a> {
 /// This data is placed on the end of each range.
 #[derive(Debug, PartialEq, Clone)]
 pub struct TagRangeScore {
-    /// The relative position of the start position from the end position.
-    pub start_rel_position: i16,
-
     /// Weight array.
     pub weight: Vec<i32>,
+
+    /// The relative position of the start position from the end position.
+    pub start_rel_position: i16,
 }
 
 impl TagRangeScore {

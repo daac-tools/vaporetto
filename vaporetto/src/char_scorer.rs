@@ -25,8 +25,8 @@ type I32Vec = i32x8;
 
 #[derive(Clone)]
 struct PositionalWeight<W> {
-    pub offset: i16,
     pub weight: W,
+    pub offset: i16,
 }
 
 type NaivePositionalWeight = PositionalWeight<Vec<i32>>;
