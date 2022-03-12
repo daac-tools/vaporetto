@@ -284,6 +284,7 @@ mod tests {
 
     use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
+    use crate::sentence::CharacterType::*;
     use crate::tag_model::TagModel;
 
     #[cfg(feature = "tag-prediction")]
@@ -343,19 +344,19 @@ mod tests {
             ]),
             type_ngram_model: NgramModel::new(vec![
                 NgramData {
-                    ngram: b"H".to_vec(),
+                    ngram: vec![Hiragana as u8],
                     weights: vec![26, 27, 28, 29],
                 },
                 NgramData {
-                    ngram: b"K".to_vec(),
+                    ngram: vec![Kanji as u8],
                     weights: vec![30, 31, 32, 33],
                 },
                 NgramData {
-                    ngram: b"KH".to_vec(),
+                    ngram: vec![Kanji as u8, Hiragana as u8],
                     weights: vec![34, 35, 36],
                 },
                 NgramData {
-                    ngram: b"HK".to_vec(),
+                    ngram: vec![Hiragana as u8, Kanji as u8],
                     weights: vec![37, 38, 39],
                 },
             ]),
@@ -449,19 +450,19 @@ mod tests {
             ]),
             type_ngram_model: NgramModel::new(vec![
                 NgramData {
-                    ngram: b"H".to_vec(),
+                    ngram: vec![Hiragana as u8],
                     weights: vec![16, 17, 18, 19, 20, 21],
                 },
                 NgramData {
-                    ngram: b"K".to_vec(),
+                    ngram: vec![Kanji as u8],
                     weights: vec![22, 23, 24, 25, 26, 27],
                 },
                 NgramData {
-                    ngram: b"KH".to_vec(),
+                    ngram: vec![Kanji as u8, Hiragana as u8],
                     weights: vec![28, 29, 30, 31, 32],
                 },
                 NgramData {
-                    ngram: b"HK".to_vec(),
+                    ngram: vec![Hiragana as u8, Kanji as u8],
                     weights: vec![33, 34, 35, 36, 37],
                 },
             ]),
@@ -555,19 +556,19 @@ mod tests {
             ]),
             type_ngram_model: NgramModel::new(vec![
                 NgramData {
-                    ngram: b"H".to_vec(),
+                    ngram: vec![Hiragana as u8],
                     weights: vec![16, 17, 18, 19, 20, 21],
                 },
                 NgramData {
-                    ngram: b"K".to_vec(),
+                    ngram: vec![Kanji as u8],
                     weights: vec![22, 23, 24, 25, 26, 27],
                 },
                 NgramData {
-                    ngram: b"KH".to_vec(),
+                    ngram: vec![Kanji as u8, Hiragana as u8],
                     weights: vec![28, 29, 30, 31, 32],
                 },
                 NgramData {
-                    ngram: b"HK".to_vec(),
+                    ngram: vec![Hiragana as u8, Kanji as u8],
                     weights: vec![33, 34, 35, 36, 37],
                 },
             ]),
@@ -669,19 +670,19 @@ mod tests {
             ]),
             type_ngram_model: NgramModel::new(vec![
                 NgramData {
-                    ngram: b"H".to_vec(),
+                    ngram: vec![Hiragana as u8],
                     weights: vec![26, 27, 28, 29],
                 },
                 NgramData {
-                    ngram: b"K".to_vec(),
+                    ngram: vec![Kanji as u8],
                     weights: vec![30, 31, 32, 33],
                 },
                 NgramData {
-                    ngram: b"KH".to_vec(),
+                    ngram: vec![Kanji as u8, Hiragana as u8],
                     weights: vec![34, 35, 36],
                 },
                 NgramData {
-                    ngram: b"HK".to_vec(),
+                    ngram: vec![Hiragana as u8, Kanji as u8],
                     weights: vec![37, 38, 39],
                 },
             ]),
@@ -785,7 +786,7 @@ mod tests {
                 weights: vec![0],
             }]),
             type_ngram_model: NgramModel::new(vec![NgramData {
-                ngram: b"RRRR".to_vec(),
+                ngram: vec![Roman as u8, Roman as u8, Roman as u8, Roman as u8],
                 weights: vec![0],
             }]),
             dict_model: DictModel { dict: vec![] },

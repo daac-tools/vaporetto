@@ -177,11 +177,10 @@ impl TypeScorerCache {
 
     fn seqid_to_seq(mut seqid: usize, sequence: &mut [u8]) -> bool {
         for type_id in sequence.iter_mut().rev() {
-            let x = seqid & ALPHABET_MASK;
-            if x == ALPHABET_MASK {
+            *type_id = (seqid & ALPHABET_MASK) as u8;
+            if usize::from(*type_id) == ALPHABET_MASK {
                 return false; // invalid
             }
-            *type_id = ID_TO_TYPE[x];
             seqid >>= ALPHABET_SHIFT;
         }
         assert_eq!(seqid, 0);
@@ -195,7 +194,7 @@ impl TypeScorerCache {
 
     #[inline(always)]
     fn increment_seqid(&self, seqid: usize, char_type: u8) -> usize {
-        let char_id = usize::from(TYPE_TO_ID[usize::from(char_type)]);
+        let char_id = usize::from(char_type);
         debug_assert!((1..=6).contains(&char_id));
         ((seqid << ALPHABET_SHIFT) | char_id) & self.sequence_mask
     }
@@ -212,35 +211,3 @@ const ALPHABET_SIZE: usize = 8;
 const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
 #[cfg(feature = "cache-type-score")]
 const ALPHABET_SHIFT: usize = 3;
-#[cfg(feature = "cache-type-score")]
-const TYPE_TO_ID: [u8; 256] = make_type_to_id();
-#[cfg(feature = "cache-type-score")]
-const ID_TO_TYPE: [u8; ALPHABET_SIZE] = make_id_to_type();
-
-#[cfg(feature = "cache-type-score")]
-const fn make_type_to_id() -> [u8; 256] {
-    use crate::sentence::CharacterType::*;
-
-    let mut type_to_id = [0u8; 256];
-    type_to_id[Digit as usize] = 1;
-    type_to_id[Roman as usize] = 2;
-    type_to_id[Hiragana as usize] = 3;
-    type_to_id[Katakana as usize] = 4;
-    type_to_id[Kanji as usize] = 5;
-    type_to_id[Other as usize] = 6;
-    type_to_id
-}
-
-#[cfg(feature = "cache-type-score")]
-const fn make_id_to_type() -> [u8; ALPHABET_SIZE] {
-    use crate::sentence::CharacterType::*;
-
-    let mut id_to_type = [0u8; ALPHABET_SIZE];
-    id_to_type[1] = Digit as u8;
-    id_to_type[2] = Roman as u8;
-    id_to_type[3] = Hiragana as u8;
-    id_to_type[4] = Katakana as u8;
-    id_to_type[5] = Kanji as u8;
-    id_to_type[6] = Other as u8;
-    id_to_type
-}
