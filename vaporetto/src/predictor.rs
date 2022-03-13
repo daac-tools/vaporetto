@@ -226,7 +226,7 @@ impl Predictor {
                     *t += *r;
                 }
                 if let Some(self_weights) = self_scores.as_ref() {
-                    let diff = i16::try_from(last_boundary_idx - i - 1).unwrap_or(i16::MAX);
+                    let diff = -i16::try_from(i + 1 - last_boundary_idx).unwrap_or(0);
                     for self_weight in self_weights.iter() {
                         match self_weight.start_rel_position.cmp(&diff) {
                             Ordering::Greater => continue,
@@ -254,7 +254,7 @@ impl Predictor {
             *t += r;
         }
         if let Some(self_weights) = sentence.tag_scores.self_scores.last().unwrap().as_ref() {
-            let diff = i16::try_from(last_boundary_idx - sentence.chars.len()).unwrap_or(i16::MAX);
+            let diff = -i16::try_from(sentence.chars.len() - last_boundary_idx).unwrap_or(0);
             for self_weight in self_weights.iter() {
                 match self_weight.start_rel_position.cmp(&diff) {
                     Ordering::Greater => continue,
