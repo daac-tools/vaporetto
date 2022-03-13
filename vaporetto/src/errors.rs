@@ -12,6 +12,7 @@ pub enum VaporettoError {
     InvalidArgument(InvalidArgumentError),
     IOError(std::io::Error),
     UTF8Error(std::string::FromUtf8Error),
+    CastError(std::num::TryFromIntError),
 }
 
 impl VaporettoError {
@@ -48,6 +49,7 @@ impl fmt::Display for VaporettoError {
             Self::InvalidArgument(e) => e.fmt(f),
             Self::IOError(e) => e.fmt(f),
             Self::UTF8Error(e) => e.fmt(f),
+            Self::CastError(e) => e.fmt(f),
         }
     }
 }
@@ -111,5 +113,11 @@ impl From<std::io::Error> for VaporettoError {
 impl From<std::string::FromUtf8Error> for VaporettoError {
     fn from(error: std::string::FromUtf8Error) -> Self {
         Self::UTF8Error(error)
+    }
+}
+
+impl From<std::num::TryFromIntError> for VaporettoError {
+    fn from(error: std::num::TryFromIntError) -> Self {
+        Self::CastError(error)
     }
 }

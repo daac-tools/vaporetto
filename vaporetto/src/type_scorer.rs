@@ -176,6 +176,7 @@ impl TypeScorerCache {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn seqid_to_seq(mut seqid: usize, sequence: &mut [u8]) -> bool {
         for type_id in sequence.iter_mut().rev() {
             *type_id = (seqid & ALPHABET_MASK) as u8;

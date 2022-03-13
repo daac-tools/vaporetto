@@ -143,8 +143,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            let precision = n_tp as f64 / (n_tp + n_fp) as f64;
-            let recall = n_tp as f64 / (n_tp + n_fn) as f64;
+            let precision = f64::from(n_tp) / f64::from(n_tp + n_fp);
+            let recall = f64::from(n_tp) / f64::from(n_tp + n_fn);
             let f1 = 2. * precision * recall / (precision + recall);
             println!("Precision: {}", precision);
             println!("Recall: {}", recall);
@@ -186,8 +186,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 n_sys += 1;
                 n_ref += 1;
             }
-            let precision = n_cor as f64 / n_sys as f64;
-            let recall = n_cor as f64 / n_ref as f64;
+            let precision = f64::from(n_cor) / f64::from(n_sys);
+            let recall = f64::from(n_cor) / f64::from(n_ref);
             let f1 = 2. * precision * recall / (precision + recall);
             println!("Precision: {}", precision);
             println!("Recall: {}", recall);

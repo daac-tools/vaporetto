@@ -76,31 +76,35 @@ impl<'a> TagTrainer<'a> {
         let mut self_char_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
 
         let mut weight_max = 0.;
-        for i in 0..self.tag_ids.len() as i32 {
+        for i in 0..i32::try_from(self.tag_ids.len())? {
             let weight = model.label_bias(i).abs();
             if weight > weight_max {
                 weight_max = weight;
             }
-            for fid in 0..model.num_features() {
-                let weight = model.feature_coefficient(fid as i32, i).abs();
+            for fid in 0..i32::try_from(model.num_features())? {
+                let weight = model.feature_coefficient(fid, i).abs();
                 if weight > weight_max {
                     weight_max = weight;
                 }
             }
         }
-        let quantize_multiplier = weight_max / ((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1) as f64;
+        let quantize_multiplier = weight_max / f64::from((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1);
 
         let mut class_info = vec![];
 
         for i in 0..self.tag_ids.len() {
             class_info.push(TagClassInfo {
                 name: self.tag_ids.keys()[model.labels()[i] as usize].clone(),
-                bias: (model.label_bias(i as i32) / quantize_multiplier) as i32,
+                bias: unsafe {
+                    (model.label_bias(i32::try_from(i)?) / quantize_multiplier).to_int_unchecked()
+                },
             });
 
             for (fid, feature) in self.feature_ids.keys().iter().enumerate() {
-                let raw_weight = model.feature_coefficient(fid as i32 + 1, i as i32);
-                let weight = (raw_weight / quantize_multiplier) as i32;
+                let raw_weight =
+                    model.feature_coefficient(i32::try_from(fid + 1)?, i32::try_from(i)?);
+                let weight =
+                    unsafe { (raw_weight / quantize_multiplier).to_int_unchecked::<i32>() };
 
                 if weight == 0 {
                     continue;

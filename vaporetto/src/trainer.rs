@@ -236,7 +236,7 @@ impl<'a> Trainer<'a> {
                     .or_insert(0.0) += 1.0;
             }
             self.xs.push(feature_ids.into_iter().collect());
-            self.ys.push(example.label as u8 as f64);
+            self.ys.push(f64::from(example.label as u8));
         }
         self.tag_trainer.push_sentence(s)?;
         Ok(())
@@ -285,11 +285,13 @@ impl<'a> Trainer<'a> {
             .build_model()
             .map_err(|e| VaporettoError::invalid_model(e.to_string()))?;
 
-        let wb_idx = model
-            .labels()
-            .iter()
-            .position(|&cls| BoundaryType::WordBoundary as i32 == cls)
-            .unwrap() as i32;
+        let wb_idx = i32::try_from(
+            model
+                .labels()
+                .iter()
+                .position(|&cls| BoundaryType::WordBoundary as i32 == cls)
+                .unwrap(),
+        )?;
 
         let bias = model.label_bias(wb_idx);
 
@@ -300,18 +302,18 @@ impl<'a> Trainer<'a> {
 
         let mut weight_max = bias.abs();
         for fid in 0..model.num_features() {
-            let weight = model.feature_coefficient(fid as i32, wb_idx).abs();
+            let weight = model.feature_coefficient(i32::try_from(fid)?, wb_idx).abs();
             if weight > weight_max {
                 weight_max = weight;
             }
         }
-        let quantize_multiplier = weight_max / ((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1) as f64;
+        let quantize_multiplier = weight_max / f64::from((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1);
 
-        let bias = (bias / quantize_multiplier) as i32;
+        let bias = unsafe { (bias / quantize_multiplier).to_int_unchecked::<i32>() };
 
         for (fid, feature) in self.feature_ids.keys().iter().enumerate() {
-            let raw_weight = model.feature_coefficient(fid as i32 + 1, wb_idx);
-            let weight = (raw_weight / quantize_multiplier) as i32;
+            let raw_weight = model.feature_coefficient(i32::try_from(fid)? + 1, wb_idx);
+            let weight = unsafe { (raw_weight / quantize_multiplier).to_int_unchecked::<i32>() };
 
             if weight == 0 {
                 continue;
