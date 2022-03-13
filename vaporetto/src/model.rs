@@ -1,12 +1,15 @@
 use std::io::{Read, Write};
 
 use crate::dict_model::{DictModel, WordWeightRecord};
-use crate::errors::Result;
+use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 
 use crate::utils;
 
 use crate::tag_model::TagModel;
+
+/// Magic number.
+const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.4.0\n";
 
 /// Model data.
 pub struct Model {
@@ -33,6 +36,7 @@ impl Model {
     where
         W: Write,
     {
+        wtr.write_all(MODEL_MAGIC)?;
         self.char_ngram_model.serialize(&mut wtr)?;
         self.type_ngram_model.serialize(&mut wtr)?;
         self.dict_model.serialize(&mut wtr)?;
@@ -60,6 +64,11 @@ impl Model {
     where
         R: Read,
     {
+        let mut magic = [0; MODEL_MAGIC.len()];
+        rdr.read_exact(&mut magic)?;
+        if magic != MODEL_MAGIC {
+            return Err(VaporettoError::invalid_model("model version mismatch"));
+        }
         Ok(Self {
             char_ngram_model: NgramModel::<String>::deserialize(&mut rdr)?,
             type_ngram_model: NgramModel::<Vec<u8>>::deserialize(&mut rdr)?,
