@@ -334,6 +334,7 @@ impl TagExampleGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sentence::CharacterType::*;
     use BoundaryFeature::*;
     use BoundaryType::*;
 
@@ -371,11 +372,11 @@ mod tests {
                 CharacterNgram(StringNgramFeature { rel_position: 1, ngram: "ia" }),
                 CharacterNgram(StringNgramFeature { rel_position: -1, ngram: "Ari" }),
                 CharacterNgram(StringNgramFeature { rel_position: 0, ngram: "ria" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: b"R" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: b"R" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 1, ngram: b"R" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: b"RR" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: b"RR" }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: &[Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: &[Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 1, ngram: &[Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: &[Roman as u8, Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: &[Roman as u8, Roman as u8] }),
             ],
             label: NotWordBoundary,
         };
@@ -400,13 +401,13 @@ mod tests {
                 CharacterNgram(StringNgramFeature { rel_position: -2, ngram: "iaは" }),
                 CharacterNgram(StringNgramFeature { rel_position: -1, ngram: "aは火" }),
                 CharacterNgram(StringNgramFeature { rel_position: 0, ngram: "は火星" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: b"R" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: b"R" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: b"H" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 1, ngram: b"K" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: b"RR" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: b"RH" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: b"HK" }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: &[Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: &[Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: &[Hiragana as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 1, ngram: &[Kanji as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: &[Roman as u8, Roman as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: &[Roman as u8, Hiragana as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: &[Hiragana as u8, Kanji as u8] }),
             ],
             label: WordBoundary,
         };
@@ -427,11 +428,11 @@ mod tests {
                 CharacterNgram(StringNgramFeature { rel_position: -1, ngram: "猫だ" }),
                 CharacterNgram(StringNgramFeature { rel_position: -3, ngram: "火星猫" }),
                 CharacterNgram(StringNgramFeature { rel_position: -2, ngram: "星猫だ" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: b"K" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: b"K" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: b"H" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: b"KK" }),
-                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: b"KH" }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: &[Kanji as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: &[Kanji as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: 0, ngram: &[Hiragana as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -2, ngram: &[Kanji as u8, Kanji as u8] }),
+                CharacterTypeNgram(BytesNgramFeature { rel_position: -1, ngram: &[Kanji as u8, Hiragana as u8] }),
                 DictionaryWord(DictionaryWordFeature { position: DictionaryWordPosition::Left, length: 2 }),
                 DictionaryWord(DictionaryWordFeature { position: DictionaryWordPosition::Left, length: 1 }),
             ],
