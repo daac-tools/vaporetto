@@ -213,8 +213,11 @@ impl CharScorer {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let word_len = i16::try_from(word_len)
-                .map_err(|_| VaporettoError::invalid_model("invalid word length"))?;
+            let word_len = i16::try_from(word_len).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "words must be shorter than or equal to 32767 characters",
+                )
+            })?;
             let weight = PositionalWeight::new(-word_len - 1, weight);
             weight_merger.add(&d.word, weight);
         }
@@ -230,7 +233,7 @@ impl CharScorer {
             });
         }
         let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("invalid character n-grams"))?;
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self { pma, weights })
     }
 
@@ -281,14 +284,20 @@ impl CharScorerWithTags {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let word_len = i16::try_from(word_len)
-                .map_err(|_| VaporettoError::invalid_model("invalid word length"))?;
+            let word_len = i16::try_from(word_len).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "words must be shorter than or equal to 32767 characters",
+                )
+            })?;
             let weight = WeightSet::boundary_weight(-word_len, weight);
             weight_merger.add(&d.word, weight);
         }
         for d in tag_left_model.data {
-            let ngram_len = i16::try_from(d.ngram.chars().count())
-                .map_err(|_| VaporettoError::invalid_model("invalid n-gram length"))?;
+            let ngram_len = i16::try_from(d.ngram.chars().count()).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "character n-grams must be shorter than or equal to 32767 characters",
+                )
+            })?;
             let weight = WeightSet::tag_left_weight(-ngram_len + 1, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
@@ -297,8 +306,11 @@ impl CharScorerWithTags {
             weight_merger.add(&d.ngram, weight);
         }
         for d in tag_self_model.data {
-            let ngram_len = i16::try_from(d.ngram.chars().count())
-                .map_err(|_| VaporettoError::invalid_model("invalid n-gram length"))?;
+            let ngram_len = i16::try_from(d.ngram.chars().count()).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "character n-grams must be shorter than or equal to 32767 characters",
+                )
+            })?;
             let weight = WeightSet::tag_self_weight(-ngram_len, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
@@ -324,7 +336,7 @@ impl CharScorerWithTags {
             });
         }
         let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("invalid character n-grams"))?;
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self {
             pma,
             weights,
