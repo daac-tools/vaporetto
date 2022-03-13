@@ -226,7 +226,7 @@ impl<'a> Trainer<'a> {
     /// [`VaporettoError::InvalidArgument`] will be returned if the maximum number of feature has
     /// been reached.
     pub fn push_sentence(&mut self, s: &'a Sentence) -> Result<()> {
-        let examples = self.example_generator.generate(s);
+        let examples = self.example_generator.generate(s)?;
         for example in examples {
             let mut feature_ids = BTreeMap::new();
             for f in &example.features {
@@ -325,7 +325,8 @@ impl<'a> Trainer<'a> {
                     ngram,
                 }) => {
                     let len = ngram.chars().count();
-                    let pos = isize::from(self.char_window_size) - len as isize - rel_position;
+                    let pos =
+                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position;
                     if let Some(weights) = char_ngram_weights.get_mut(*ngram) {
                         weights[pos as usize] = weight;
                     } else {
@@ -339,7 +340,8 @@ impl<'a> Trainer<'a> {
                     ngram,
                 }) => {
                     let len = ngram.len();
-                    let pos = self.char_window_size as isize - len as isize - rel_position;
+                    let pos =
+                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position;
                     if let Some(weights) = type_ngram_weights.get_mut(*ngram) {
                         weights[pos as usize] = weight;
                     } else {
