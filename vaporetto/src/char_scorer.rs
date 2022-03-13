@@ -237,6 +237,7 @@ impl CharScorer {
         Ok(Self { pma, weights })
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
         // If the following assertion fails, Vaporetto has a bug.
         assert_eq!(sentence.str_to_char_pos.len(), sentence.text.len() + 1);
@@ -344,6 +345,7 @@ impl CharScorerWithTags {
         })
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     pub fn add_scores(
         &self,
         sentence: &Sentence,

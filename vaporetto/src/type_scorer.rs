@@ -101,12 +101,11 @@ impl TypeScorerPma {
             .pma
             .find_overlapping_no_suffix_iter(&sentence.char_type)
         {
-            let offset =
-                isize::from(padding) + m.end() as isize - isize::from(self.window_size) - 1;
+            let offset = usize::from(padding) + m.end() - usize::from(self.window_size) - 1;
             // Both the weights and the PMA always have the same number of items.
             // Therefore, the following code is safe.
             let weights = unsafe { self.weights.get_unchecked(m.value()) };
-            weights.add_weight(ys, offset as usize);
+            weights.add_weight(ys, offset);
         }
     }
 }
