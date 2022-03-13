@@ -352,7 +352,7 @@ mod tests {
         let gen = BoundaryExampleGenerator::new(3, 2, 3, 2, dict, 2).unwrap();
 
         let s = Sentence::from_raw("猫").unwrap();
-        let examples = gen.generate(&s);
+        let examples = gen.generate(&s).unwrap();
 
         assert!(examples.is_empty());
     }
@@ -363,7 +363,7 @@ mod tests {
         let gen = BoundaryExampleGenerator::new(3, 2, 3, 2, dict, 2).unwrap();
 
         let s = Sentence::from_partial_annotation("A-r-i-a|は|火-星 猫|だ").unwrap();
-        let examples = gen.generate(&s);
+        let examples = gen.generate(&s).unwrap();
 
         assert_eq!(7, examples.len());
 
@@ -455,7 +455,7 @@ mod tests {
         let gen = BoundaryExampleGenerator::new(3, 2, 3, 2, dict, 2).unwrap();
 
         let s = Sentence::from_partial_annotation("A-r-i-a|は|火-星 猫|だ").unwrap();
-        let examples = gen.generate(&s);
+        let examples = gen.generate(&s).unwrap();
 
         assert_eq!(7, examples.len());
     }
