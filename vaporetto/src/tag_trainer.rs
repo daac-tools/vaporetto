@@ -89,6 +89,9 @@ impl<'a> TagTrainer<'a> {
             }
         }
         let quantize_multiplier = weight_max / f64::from((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1);
+        if quantize_multiplier == 0. {
+            return Err(VaporettoError::invalid_model("all weights are zero"));
+        }
 
         let mut class_info = vec![];
 
