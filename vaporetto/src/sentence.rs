@@ -44,8 +44,8 @@ impl CharacterType {
     /// let t = CharacterType::get_type('A');
     /// assert_eq!(CharacterType::Roman, t);
     /// ```
-    pub const fn get_type(c: char) -> Self {
-        match c as u32 {
+    pub fn get_type(c: char) -> Self {
+        match u32::from(c) {
             0x30..=0x39 | 0xFF10..=0xFF19 => Self::Digit,
             0x41..=0x5A | 0x61..=0x7A | 0xFF21..=0xFF3A | 0xFF41..=0xFF5A => Self::Roman,
             0x3040..=0x3096 => Self::Hiragana,
@@ -93,16 +93,16 @@ pub struct Token<'a> {
 /// This data is placed on the end of each range.
 #[derive(Debug, PartialEq, Clone)]
 pub struct TagRangeScore {
-    /// The relative position of the start position from the end position.
-    pub start_rel_position: i32,
-
     /// Weight array.
     pub weight: Vec<i32>,
+
+    /// The relative position of the start position from the end position.
+    pub start_rel_position: i16,
 }
 
 impl TagRangeScore {
     #[allow(dead_code)]
-    pub fn new(start_rel_position: i32, weight: Vec<i32>) -> Self {
+    pub fn new(start_rel_position: i16, weight: Vec<i32>) -> Self {
         Self {
             start_rel_position,
             weight,

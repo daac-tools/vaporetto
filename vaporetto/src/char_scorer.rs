@@ -25,14 +25,14 @@ type I32Vec = i32x8;
 
 #[derive(Clone)]
 struct PositionalWeight<W> {
-    pub offset: i32,
     pub weight: W,
+    pub offset: i16,
 }
 
 type NaivePositionalWeight = PositionalWeight<Vec<i32>>;
 
 impl NaivePositionalWeight {
-    fn new(offset: i32, weight: Vec<i32>) -> Self {
+    fn new(offset: i16, weight: Vec<i32>) -> Self {
         Self { offset, weight }
     }
 }
@@ -91,10 +91,8 @@ impl WeightVector {
 
         v
     }
-}
 
-impl AddWeight for WeightVector {
-    fn add_weight(&self, ys: &mut [i32], offset: isize) {
+    fn add_weight(&self, ys: &mut [i32], offset: usize) {
         match self {
             WeightVector::Variable(weight) => {
                 weight.add_weight(ys, offset);
@@ -102,7 +100,7 @@ impl AddWeight for WeightVector {
 
             #[cfg(feature = "fix-weight-length")]
             WeightVector::Fixed(weight) => {
-                let ys_slice = &mut ys[offset as usize..offset as usize + SIMD_SIZE];
+                let ys_slice = &mut ys[offset..offset + SIMD_SIZE];
                 #[cfg(feature = "portable-simd")]
                 {
                     let mut target = I32Vec::from_slice(ys_slice);
@@ -134,7 +132,7 @@ type NaiveWeightSet = WeightSet<Vec<i32>>;
 
 #[cfg(feature = "tag-prediction")]
 impl NaiveWeightSet {
-    fn boundary_weight(offset: i32, weight: Vec<i32>) -> Self {
+    fn boundary_weight(offset: i16, weight: Vec<i32>) -> Self {
         Self {
             boundary: Some(PositionalWeight::new(offset, weight)),
             tag_left: None,
@@ -143,7 +141,7 @@ impl NaiveWeightSet {
         }
     }
 
-    fn tag_left_weight(offset: i32, weight: Vec<i32>) -> Self {
+    fn tag_left_weight(offset: i16, weight: Vec<i32>) -> Self {
         Self {
             boundary: None,
             tag_left: Some(PositionalWeight::new(offset, weight)),
@@ -152,7 +150,7 @@ impl NaiveWeightSet {
         }
     }
 
-    fn tag_right_weight(offset: i32, weight: Vec<i32>) -> Self {
+    fn tag_right_weight(offset: i16, weight: Vec<i32>) -> Self {
         Self {
             boundary: None,
             tag_left: None,
@@ -161,7 +159,7 @@ impl NaiveWeightSet {
         }
     }
 
-    fn tag_self_weight(start_rel_position: i32, weight: Vec<i32>) -> Self {
+    fn tag_self_weight(start_rel_position: i16, weight: Vec<i32>) -> Self {
         Self {
             boundary: None,
             tag_left: None,
@@ -202,11 +200,11 @@ pub struct CharScorer {
 }
 
 impl CharScorer {
-    pub fn new(model: NgramModel<String>, window_size: usize, dict: DictModel) -> Result<Self> {
+    pub fn new(model: NgramModel<String>, window_size: u8, dict: DictModel) -> Result<Self> {
         let mut weight_merger = WeightMerger::new(1);
 
         for d in model.data {
-            let weight = PositionalWeight::new(-(window_size as i32) - 1, d.weights);
+            let weight = PositionalWeight::new(-i16::from(window_size) - 1, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
         for d in dict.dict {
@@ -215,7 +213,12 @@ impl CharScorer {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let weight = PositionalWeight::new(-(word_len as i32) - 1, weight);
+            let word_len = i16::try_from(word_len).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "words must be shorter than or equal to 32767 characters",
+                )
+            })?;
+            let weight = PositionalWeight::new(-word_len - 1, weight);
             weight_merger.add(&d.word, weight);
         }
 
@@ -230,11 +233,12 @@ impl CharScorer {
             });
         }
         let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("invalid character n-grams"))?;
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self { pma, weights })
     }
 
-    pub fn add_scores(&self, sentence: &Sentence, padding: usize, ys: &mut [i32]) {
+    #[allow(clippy::cast_possible_wrap)]
+    pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
         // If the following assertion fails, Vaporetto has a bug.
         assert_eq!(sentence.str_to_char_pos.len(), sentence.text.len() + 1);
 
@@ -245,8 +249,8 @@ impl CharScorer {
             // Therefore, the following code is safe.
             let pos_weights = unsafe { self.weights.get_unchecked(m.value()) };
 
-            let offset = padding as isize + m_end as isize + pos_weights.offset as isize;
-            pos_weights.weight.add_weight(ys, offset);
+            let offset = isize::from(padding) + m_end as isize + isize::from(pos_weights.offset);
+            pos_weights.weight.add_weight(ys, offset as usize);
         }
     }
 }
@@ -262,7 +266,7 @@ pub struct CharScorerWithTags {
 impl CharScorerWithTags {
     pub fn new(
         model: NgramModel<String>,
-        window_size: usize,
+        window_size: u8,
         dict: DictModel,
         n_tags: usize,
         tag_left_model: NgramModel<String>,
@@ -272,7 +276,7 @@ impl CharScorerWithTags {
         let mut weight_merger = WeightMerger::new(n_tags);
 
         for d in model.data {
-            let weight = WeightSet::boundary_weight(-(window_size as i32), d.weights);
+            let weight = WeightSet::boundary_weight(-i16::from(window_size), d.weights);
             weight_merger.add(&d.ngram, weight);
         }
         for d in dict.dict {
@@ -281,20 +285,34 @@ impl CharScorerWithTags {
             weight.push(d.weights.right);
             weight.resize(word_len, d.weights.inside);
             weight.push(d.weights.left);
-            let weight = WeightSet::boundary_weight(-(word_len as i32), weight);
+            let word_len = i16::try_from(word_len).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "words must be shorter than or equal to 32767 characters",
+                )
+            })?;
+            let weight = WeightSet::boundary_weight(-word_len, weight);
             weight_merger.add(&d.word, weight);
         }
         for d in tag_left_model.data {
-            let weight =
-                WeightSet::tag_left_weight(-(d.ngram.chars().count() as i32) + 1, d.weights);
+            let ngram_len = i16::try_from(d.ngram.chars().count()).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "character n-grams must be shorter than or equal to 32767 characters",
+                )
+            })?;
+            let weight = WeightSet::tag_left_weight(-ngram_len + 1, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
         for d in tag_right_model.data {
-            let weight = WeightSet::tag_right_weight(-(window_size as i32) - 1, d.weights);
+            let weight = WeightSet::tag_right_weight(-i16::from(window_size) - 1, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
         for d in tag_self_model.data {
-            let weight = WeightSet::tag_self_weight(-(d.ngram.chars().count() as i32), d.weights);
+            let ngram_len = i16::try_from(d.ngram.chars().count()).map_err(|_| {
+                VaporettoError::invalid_model(
+                    "character n-grams must be shorter than or equal to 32767 characters",
+                )
+            })?;
+            let weight = WeightSet::tag_self_weight(-ngram_len, d.weights);
             weight_merger.add(&d.ngram, weight);
         }
 
@@ -319,7 +337,7 @@ impl CharScorerWithTags {
             });
         }
         let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("invalid character n-grams"))?;
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self {
             pma,
             weights,
@@ -327,10 +345,11 @@ impl CharScorerWithTags {
         })
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     pub fn add_scores(
         &self,
         sentence: &Sentence,
-        padding: usize,
+        padding: u8,
         ys: &mut [i32],
         tag_ys: &mut TagScores,
     ) {
@@ -350,20 +369,23 @@ impl CharScorerWithTags {
             let weight_set = unsafe { self.weights.get_unchecked(m.value()) };
 
             if let Some(pos_weights) = weight_set.boundary.as_ref() {
-                let offset = padding as isize + m_end as isize + pos_weights.offset as isize - 1;
-                pos_weights.weight.add_weight(ys, offset);
+                let offset =
+                    isize::from(padding) + m_end as isize + isize::from(pos_weights.offset) - 1;
+                pos_weights.weight.add_weight(ys, offset as usize);
             }
             if let Some(pos_weights) = weight_set.tag_left.as_ref() {
-                let offset = (m_end as isize + pos_weights.offset as isize) * self.n_tags as isize;
+                let offset =
+                    (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
                 pos_weights
                     .weight
-                    .add_weight(&mut tag_ys.left_scores, offset);
+                    .add_weight_signed(&mut tag_ys.left_scores, offset);
             }
             if let Some(pos_weights) = weight_set.tag_right.as_ref() {
-                let offset = (m_end as isize + pos_weights.offset as isize) * self.n_tags as isize;
+                let offset =
+                    (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
                 pos_weights
                     .weight
-                    .add_weight(&mut tag_ys.right_scores, offset);
+                    .add_weight_signed(&mut tag_ys.right_scores, offset);
             }
             if let Some(weight) = weight_set.tag_self.as_ref() {
                 tag_ys.self_scores[m_end - 1].replace(Arc::clone(weight));

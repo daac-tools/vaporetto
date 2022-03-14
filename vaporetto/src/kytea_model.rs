@@ -92,7 +92,7 @@ impl Readable for char {
     where
         R: BufRead,
     {
-        let cidx = utils::read_u16(&mut rdr)? as usize;
+        let cidx = usize::from(utils::read_u16(&mut rdr)?);
         Ok(config.char_map[cidx - 1])
     }
 }
@@ -122,7 +122,7 @@ impl Readable for String {
         let size = utils::read_u32(&mut rdr)?;
         let mut result = Self::new();
         for _ in 0..size {
-            let cidx = utils::read_u16(&mut rdr)? as usize;
+            let cidx = usize::from(utils::read_u16(&mut rdr)?);
             result.push(config.char_map[cidx - 1]);
         }
         Ok(result)
@@ -440,7 +440,7 @@ impl TryFrom<KyteaModel> for Model {
         let feature_lookup = wordseg_model
             .feature_lookup
             .ok_or_else(|| VaporettoError::invalid_model("no lookup data."))?;
-        let bias = feature_lookup.biases[0] as i32;
+        let bias = i32::from(feature_lookup.biases[0]);
         let char_dict = feature_lookup
             .char_dict
             .ok_or_else(|| VaporettoError::invalid_model("no character dictionary."))?;
@@ -453,7 +453,7 @@ impl TryFrom<KyteaModel> for Model {
             let weight_size = config.char_w as usize * 2 - char_ngram.len() + 1;
             char_ngrams.push(NgramData {
                 ngram: char_ngram.into_iter().collect(),
-                weights: v[..weight_size].iter().map(|&w| w as i32).collect(),
+                weights: v[..weight_size].iter().map(|&w| i32::from(w)).collect(),
             });
         }
 
@@ -466,7 +466,7 @@ impl TryFrom<KyteaModel> for Model {
                     .collect::<String>()
                     .as_bytes()
                     .to_vec(),
-                weights: v[..weight_size].iter().map(|&w| w as i32).collect(),
+                weights: v[..weight_size].iter().map(|&w| i32::from(w)).collect(),
             });
         }
 
@@ -478,9 +478,9 @@ impl TryFrom<KyteaModel> for Model {
                 for j in 0..kytea_dict.n_dicts as usize {
                     if data.in_dict >> j & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * word_len;
-                        weights.right += feature_lookup.dict_vec[offset] as i32;
-                        weights.inside += feature_lookup.dict_vec[offset + 1] as i32;
-                        weights.left += feature_lookup.dict_vec[offset + 2] as i32;
+                        weights.right += i32::from(feature_lookup.dict_vec[offset]);
+                        weights.inside += i32::from(feature_lookup.dict_vec[offset + 1]);
+                        weights.left += i32::from(feature_lookup.dict_vec[offset + 2]);
                     }
                 }
                 dict.push(WordWeightRecord {
@@ -497,8 +497,8 @@ impl TryFrom<KyteaModel> for Model {
             dict_model: DictModel::new(dict),
             bias,
             tag_model: TagModel::default(),
-            char_window_size: config.char_w as usize,
-            type_window_size: config.type_w as usize,
+            char_window_size: config.char_w,
+            type_window_size: config.type_w,
         })
     }
 }

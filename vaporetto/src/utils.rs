@@ -3,11 +3,23 @@ use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 
 pub trait AddWeight {
-    fn add_weight(&self, target: &mut [i32], offset: isize);
+    fn add_weight(&self, target: &mut [i32], offset: usize);
+
+    #[cfg(feature = "tag-prediction")]
+    fn add_weight_signed(&self, target: &mut [i32], offset: isize);
 }
 
 impl AddWeight for Vec<i32> {
-    fn add_weight(&self, ys: &mut [i32], offset: isize) {
+    fn add_weight(&self, ys: &mut [i32], offset: usize) {
+        if let Some(ys) = ys.get_mut(offset..) {
+            for (w, y) in self.iter().zip(ys) {
+                *y += w;
+            }
+        }
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    fn add_weight_signed(&self, ys: &mut [i32], offset: isize) {
         if offset >= 0 {
             if let Some(ys) = ys.get_mut(offset as usize..) {
                 for (w, y) in self.iter().zip(ys) {
@@ -97,7 +109,6 @@ where
     )
 }
 
-#[cfg(feature = "kytea")]
 pub fn read_u8<R>(mut rdr: R) -> io::Result<u8>
 where
     R: Read,
@@ -105,6 +116,14 @@ where
     let mut buf = [0];
     rdr.read_exact(&mut buf)?;
     Ok(buf[0])
+}
+
+pub fn write_u8<W>(mut wtr: W, data: u8) -> io::Result<()>
+where
+    W: Write,
+{
+    wtr.write_all(&[data])?;
+    Ok(())
 }
 
 #[cfg(feature = "kytea")]

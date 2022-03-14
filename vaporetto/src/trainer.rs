@@ -151,9 +151,9 @@ impl From<SolverType> for liblinear::SolverType {
 pub struct Trainer<'a> {
     dictionary: Vec<String>,
     example_generator: BoundaryExampleGenerator,
-    char_window_size: usize,
-    type_window_size: usize,
-    dict_max_word_size: usize,
+    char_window_size: u8,
+    type_window_size: u8,
+    dict_max_word_size: u8,
     feature_ids: Indexer<BoundaryFeature<'a>>,
     xs: Vec<Vec<(u32, f64)>>,
     ys: Vec<f64>,
@@ -180,12 +180,12 @@ impl<'a> Trainer<'a> {
     ///
     /// If invalid parameters are given, an error variant will be returned.
     pub fn new<D, P>(
-        char_ngram_size: usize,
-        char_window_size: usize,
-        type_ngram_size: usize,
-        type_window_size: usize,
+        char_ngram_size: u8,
+        char_window_size: u8,
+        type_ngram_size: u8,
+        type_window_size: u8,
         dictionary: D,
-        dict_max_word_size: usize,
+        dict_max_word_size: u8,
     ) -> Result<Self>
     where
         D: AsRef<[P]>,
@@ -226,7 +226,7 @@ impl<'a> Trainer<'a> {
     /// [`VaporettoError::InvalidArgument`] will be returned if the maximum number of feature has
     /// been reached.
     pub fn push_sentence(&mut self, s: &'a Sentence) -> Result<()> {
-        let examples = self.example_generator.generate(s);
+        let examples = self.example_generator.generate(s)?;
         for example in examples {
             let mut feature_ids = BTreeMap::new();
             for f in &example.features {
@@ -236,7 +236,7 @@ impl<'a> Trainer<'a> {
                     .or_insert(0.0) += 1.0;
             }
             self.xs.push(feature_ids.into_iter().collect());
-            self.ys.push(example.label as u8 as f64);
+            self.ys.push(f64::from(example.label as u8));
         }
         self.tag_trainer.push_sentence(s)?;
         Ok(())
@@ -285,33 +285,38 @@ impl<'a> Trainer<'a> {
             .build_model()
             .map_err(|e| VaporettoError::invalid_model(e.to_string()))?;
 
-        let wb_idx = model
-            .labels()
-            .iter()
-            .position(|&cls| BoundaryType::WordBoundary as i32 == cls)
-            .unwrap() as i32;
+        let wb_idx = i32::try_from(
+            model
+                .labels()
+                .iter()
+                .position(|&cls| BoundaryType::WordBoundary as i32 == cls)
+                .unwrap(),
+        )?;
 
         let bias = model.label_bias(wb_idx);
 
         // Uses BTreeMap to increase compression ratio.
         let mut char_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
         let mut type_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
-        let mut dict_weights = vec![DictWeight::default(); self.dict_max_word_size];
+        let mut dict_weights = vec![DictWeight::default(); self.dict_max_word_size.into()];
 
         let mut weight_max = bias.abs();
         for fid in 0..model.num_features() {
-            let weight = model.feature_coefficient(fid as i32, wb_idx).abs();
+            let weight = model.feature_coefficient(i32::try_from(fid)?, wb_idx).abs();
             if weight > weight_max {
                 weight_max = weight;
             }
         }
-        let quantize_multiplier = weight_max / ((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1) as f64;
+        let quantize_multiplier = weight_max / f64::from((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1);
+        if quantize_multiplier == 0. {
+            return Err(VaporettoError::invalid_model("all weights are zero"));
+        }
 
-        let bias = (bias / quantize_multiplier) as i32;
+        let bias = unsafe { (bias / quantize_multiplier).to_int_unchecked::<i32>() };
 
         for (fid, feature) in self.feature_ids.keys().iter().enumerate() {
-            let raw_weight = model.feature_coefficient(fid as i32 + 1, wb_idx);
-            let weight = (raw_weight / quantize_multiplier) as i32;
+            let raw_weight = model.feature_coefficient(i32::try_from(fid)? + 1, wb_idx);
+            let weight = unsafe { (raw_weight / quantize_multiplier).to_int_unchecked::<i32>() };
 
             if weight == 0 {
                 continue;
@@ -323,11 +328,12 @@ impl<'a> Trainer<'a> {
                     ngram,
                 }) => {
                     let len = ngram.chars().count();
-                    let pos = self.char_window_size as isize - len as isize - rel_position;
+                    let pos =
+                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position;
                     if let Some(weights) = char_ngram_weights.get_mut(*ngram) {
                         weights[pos as usize] = weight;
                     } else {
-                        let mut weights = vec![0; self.char_window_size * 2 - len + 1];
+                        let mut weights = vec![0; usize::from(self.char_window_size) * 2 - len + 1];
                         weights[pos as usize] = weight;
                         char_ngram_weights.insert(ngram.to_string(), weights);
                     }
@@ -337,11 +343,12 @@ impl<'a> Trainer<'a> {
                     ngram,
                 }) => {
                     let len = ngram.len();
-                    let pos = self.char_window_size as isize - len as isize - rel_position;
+                    let pos =
+                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position;
                     if let Some(weights) = type_ngram_weights.get_mut(*ngram) {
                         weights[pos as usize] = weight;
                     } else {
-                        let mut weights = vec![0; self.char_window_size * 2 - len + 1];
+                        let mut weights = vec![0; usize::from(self.char_window_size) * 2 - len + 1];
                         weights[pos as usize] = weight;
                         type_ngram_weights.insert(ngram.to_vec(), weights);
                     }

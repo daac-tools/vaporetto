@@ -28,7 +28,7 @@ pub struct Predictor {
     char_scorer: CharScorerWrapper,
     type_scorer: TypeScorer,
 
-    padding: usize,
+    padding: u8,
 
     #[cfg(feature = "tag-prediction")]
     tag_names: Vec<Arc<String>>,
@@ -105,7 +105,8 @@ impl Predictor {
     }
 
     fn predict_impl(&self, mut sentence: Sentence) -> Sentence {
-        let ys_size = sentence.boundaries.len() + self.padding + char_scorer::SIMD_SIZE - 1;
+        let ys_size =
+            sentence.boundaries.len() + usize::from(self.padding) + char_scorer::SIMD_SIZE - 1;
         let mut ys = mem::take(&mut sentence.boundary_scores);
         ys.clear();
         ys.resize(ys_size, self.bias);
@@ -123,8 +124,8 @@ impl Predictor {
             }
         }
         self.type_scorer
-            .add_scores(&sentence, &mut ys[self.padding..]);
-        for (&y, b) in ys[self.padding..]
+            .add_scores(&sentence, self.padding, &mut ys);
+        for (&y, b) in ys[self.padding.into()..]
             .iter()
             .zip(sentence.boundaries.iter_mut())
         {
@@ -164,7 +165,7 @@ impl Predictor {
     /// A sentence with predicted boundary information.
     pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
         let mut sentence = self.predict_impl(sentence);
-        sentence.boundary_scores.rotate_left(self.padding);
+        sentence.boundary_scores.rotate_left(self.padding.into());
         sentence.boundary_scores.truncate(sentence.boundaries.len());
         sentence
     }
@@ -225,7 +226,7 @@ impl Predictor {
                     *t += *r;
                 }
                 if let Some(self_weights) = self_scores.as_ref() {
-                    let diff = last_boundary_idx as i32 - i as i32 - 1;
+                    let diff = -i16::try_from(i + 1 - last_boundary_idx).unwrap_or(0);
                     for self_weight in self_weights.iter() {
                         match self_weight.start_rel_position.cmp(&diff) {
                             Ordering::Greater => continue,
@@ -253,7 +254,7 @@ impl Predictor {
             *t += r;
         }
         if let Some(self_weights) = sentence.tag_scores.self_scores.last().unwrap().as_ref() {
-            let diff = last_boundary_idx as i32 - sentence.chars.len() as i32;
+            let diff = -i16::try_from(sentence.chars.len() - last_boundary_idx).unwrap_or(0);
             for self_weight in self_weights.iter() {
                 match self_weight.start_rel_position.cmp(&diff) {
                     Ordering::Greater => continue,
