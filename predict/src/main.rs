@@ -1,12 +1,11 @@
 use std::fs::File;
-use std::io::{prelude::*, stdin};
+use std::io::{self, BufRead, BufWriter, Write};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::time::Instant;
 
 use clap::Parser;
-use vaporetto::{errors::VaporettoError, CharacterType, Model, Predictor, Sentence};
+use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
@@ -58,60 +57,24 @@ struct Args {
     /// Do not normalize input strings before prediction.
     #[clap(long)]
     no_norm: bool,
+
+    /// Buffers this tokenizer's output.
+    #[clap(long)]
+    buffered_out: bool,
 }
 
-fn print_scores(s: &Sentence) {
-    if !s.boundary_scores().is_empty() {
-        for (i, score) in s.boundary_scores().iter().enumerate() {
-            println!("{}:{}{} {}", i, s.chars()[i], s.chars()[i + 1], score);
-        }
-        println!();
+fn print_scores(s: &Sentence, out: &mut dyn Write) -> Result<(), Box<dyn std::error::Error>> {
+    for (i, score) in s.boundary_scores().iter().enumerate() {
+        writeln!(out, "{}:{}{} {}", i, s.chars()[i], s.chars()[i + 1], score)?;
     }
-}
-
-fn tokenize(
-    predictor: &Predictor,
-    text: impl Into<String>,
-    mut buf1: Sentence,
-    mut buf2: Sentence,
-    pre_filters: &[Box<dyn StringFilter>],
-    post_filters: &[Box<dyn SentenceFilter>],
-) -> Result<(String, Sentence, Sentence), VaporettoError> {
-    let text = text.into();
-    if pre_filters.is_empty() {
-        buf1.update_raw(text)?;
-    } else {
-        let text_rc = Rc::new(text);
-        let filt_text = Rc::try_unwrap(
-            pre_filters
-                .iter()
-                .fold(Rc::clone(&text_rc), |s, filter| Rc::new(filter.filter(&s))),
-        )
-        .unwrap();
-        let text = Rc::try_unwrap(text_rc).unwrap();
-        buf1.update_raw(filt_text)?;
-        buf2.update_raw(text)?;
-    }
-    buf1 = predictor.predict_with_score(buf1);
-    buf1 = post_filters.iter().fold(buf1, |s, filter| filter.filter(s));
-    buf1 = predictor.fill_tags(buf1);
-    let result = if pre_filters.is_empty() {
-        buf1.to_tokenized_string()?
-    } else {
-        buf2.boundaries_mut().copy_from_slice(buf1.boundaries());
-        buf2.tags_mut().clone_from_slice(buf1.tags());
-        buf2.to_tokenized_string()?
-    };
-    Ok((result, buf1, buf2))
+    writeln!(out)?;
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let mut pre_filters: Vec<Box<dyn StringFilter>> = vec![];
-    if !args.no_norm {
-        pre_filters.push(Box::new(KyteaFullwidthFilter));
-    }
+    let pre_filter = KyteaFullwidthFilter;
     let mut post_filters: Vec<Box<dyn SentenceFilter>> = vec![];
     for wsconst in &args.wsconst {
         match wsconst {
@@ -128,32 +91,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let predictor = Predictor::new(model, args.predict_tags)?;
 
     eprintln!("Start tokenization");
-    let mut n_chars = 0;
     let start = Instant::now();
-    let mut buf1 = Sentence::from_raw(" ")?;
-    let mut buf2 = Sentence::from_raw(" ")?;
-    for line in stdin().lock().lines() {
-        let line = line?;
-        if line.is_empty() {
-            println!();
-            continue;
+    let stdout = io::stdout();
+    //let mut out = BufWriter::new(stdout.lock());
+    let mut out: Box<dyn Write> = if args.buffered_out {
+        Box::new(BufWriter::new(stdout.lock()))
+    } else {
+        Box::new(stdout.lock())
+    };
+    let mut buf = String::new();
+    let mut s = Sentence::from_raw(" ")?;
+    if args.no_norm {
+        for line in io::stdin().lock().lines() {
+            let line = line?;
+            if s.update_raw(line).is_ok() {
+                s = if args.scores {
+                    predictor.predict_with_score(s)
+                } else {
+                    predictor.predict(s)
+                };
+                s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+                if args.predict_tags {
+                    s = predictor.fill_tags(s);
+                }
+                s.write_tokenized_string(&mut buf)?;
+                writeln!(out, "{}", buf)?;
+                if args.scores {
+                    print_scores(&s, &mut *out)?;
+                }
+            } else {
+                writeln!(out)?;
+            }
         }
-        let ret = tokenize(&predictor, line, buf1, buf2, &pre_filters, &post_filters)?;
-        let result = ret.0;
-        buf1 = ret.1;
-        buf2 = ret.2;
-        println!("{}", result);
-        if args.scores {
-            print_scores(&buf1);
+    } else {
+        let mut s_orig = Sentence::from_raw(" ")?;
+        for line in io::stdin().lock().lines() {
+            let line = line?;
+            let line_preproc = pre_filter.filter(&line);
+            if s.update_raw(line_preproc).is_ok() {
+                s = if args.scores {
+                    predictor.predict_with_score(s)
+                } else {
+                    predictor.predict(s)
+                };
+                s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+                if args.predict_tags {
+                    s = predictor.fill_tags(s);
+                }
+                s_orig.update_raw(line)?;
+                s_orig.boundaries_mut().copy_from_slice(s.boundaries());
+                s_orig.tags_mut().clone_from_slice(s.tags());
+                s_orig.write_tokenized_string(&mut buf)?;
+                writeln!(out, "{}", buf)?;
+                if args.scores {
+                    print_scores(&s, &mut *out)?;
+                }
+            } else {
+                writeln!(out)?;
+            }
         }
-        n_chars += buf1.chars().len();
     }
     let duration = start.elapsed();
+
     eprintln!("Elapsed: {} [sec]", duration.as_secs_f64());
-    eprintln!(
-        "Speed: {} [chars/sec]",
-        n_chars as f64 / duration.as_secs_f64()
-    );
 
     Ok(())
 }
