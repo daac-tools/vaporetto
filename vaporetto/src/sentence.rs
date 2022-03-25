@@ -348,8 +348,6 @@ impl Sentence {
             ));
         }
 
-        let labeled_chars: Vec<char> = labeled_text.chars().collect();
-
         text.clear();
         chars.clear();
         boundaries.clear();
@@ -358,7 +356,7 @@ impl Sentence {
         let mut tag_str = None;
         let mut is_char = true;
         let mut fixed_token = true;
-        for &c in &labeled_chars {
+        for c in labeled_text.chars() {
             if is_char {
                 if c == '\0' {
                     return Err(VaporettoError::invalid_argument(
@@ -708,23 +706,55 @@ impl Sentence {
     /// assert_eq!("How/WRB are/VBP you?", s.to_tokenized_string().unwrap());
     /// ```
     pub fn to_tokenized_string(&self) -> Result<String> {
-        let chars: Vec<char> = self.text.chars().collect();
-        let mut result = String::with_capacity(self.text.len() + chars.len() - 1);
-        match chars[0] {
-            '\\' | '/' | '&' | ' ' => result.push('\\'),
+        let mut result = String::with_capacity(self.text.len() * 2 - 1);
+        self.write_tokenized_string(&mut result)?;
+        Ok(result)
+    }
+
+    /// Writes a string with whitespaces for word boundaries.
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer` - A string buffer.
+    ///
+    /// # Errors
+    ///
+    /// If the sentence contains unknown boundary, an error variant will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut buf = String::new();
+    ///
+    /// let s = Sentence::from_tokenized("How are you?").unwrap();
+    /// s.write_tokenized_string(&mut buf).unwrap();
+    /// assert_eq!("How are you?", buf);
+    ///
+    /// let s = Sentence::from_tokenized("How/WRB are/VBP you?").unwrap();
+    /// s.write_tokenized_string(&mut buf).unwrap();
+    /// assert_eq!("How/WRB are/VBP you?", buf);
+    /// ```
+    pub fn write_tokenized_string(&self, buffer: &mut String) -> Result<()> {
+        let mut chars_iter = self.text.chars();
+        buffer.clear();
+        let c = chars_iter.next().unwrap();
+        match c {
+            '\\' | '/' | '&' | ' ' => buffer.push('\\'),
             _ => (),
         }
-        result.push(chars[0]);
-        for (i, (&c, b)) in chars[1..].iter().zip(&self.boundaries).enumerate() {
+        buffer.push(c);
+        for (i, (c, b)) in chars_iter.zip(&self.boundaries).enumerate() {
             match b {
                 BoundaryType::WordBoundary => {
                     if !self.tags.is_empty() {
                         if let Some(tag) = self.tags.get(i).and_then(|x| x.as_ref()) {
-                            result.push('/');
-                            result.push_str(tag);
+                            buffer.push('/');
+                            buffer.push_str(tag);
                         }
                     }
-                    result.push(' ');
+                    buffer.push(' ');
                 }
                 BoundaryType::NotWordBoundary => (),
                 BoundaryType::Unknown => {
@@ -734,16 +764,16 @@ impl Sentence {
                 }
             }
             match c {
-                '\\' | '/' | '&' | ' ' => result.push('\\'),
+                '\\' | '/' | '&' | ' ' => buffer.push('\\'),
                 _ => (),
             }
-            result.push(c);
+            buffer.push(c);
         }
         if let Some(tag) = self.tags.last().and_then(|x| x.as_ref()) {
-            result.push('/');
-            result.push_str(tag);
+            buffer.push('/');
+            buffer.push_str(tag);
         }
-        Ok(result)
+        Ok(())
     }
 
     /// Generates a vector of tokens.
@@ -961,32 +991,60 @@ impl Sentence {
     /// assert_eq!("H-o-w/WRB|a-r-e|y-o-u/PRP|?", &s.to_partial_annotation_string());
     /// ```
     pub fn to_partial_annotation_string(&self) -> String {
-        let chars: Vec<char> = self.text.chars().collect();
-        let mut result = String::with_capacity(self.text.len() + chars.len() - 1);
-        result.push(chars[0]);
-        for (i, (&c, b)) in chars[1..].iter().zip(&self.boundaries).enumerate() {
+        let mut result = String::with_capacity(self.text.len() * 2 - 1);
+        self.write_partial_annotation_string(&mut result);
+        result
+    }
+
+    /// Write a string with partial annotations.
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer` - A string buffer.
+    ///
+    /// A newly allocated string with partial annotations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut buf = String::new();
+    ///
+    /// let s = Sentence::from_tokenized("How are you ?").unwrap();
+    /// s.write_partial_annotation_string(&mut buf);
+    /// assert_eq!("H-o-w|a-r-e|y-o-u|?", buf);
+    ///
+    /// let s = Sentence::from_tokenized("How/WRB are you/PRP ?").unwrap();
+    /// s.write_partial_annotation_string(&mut buf);
+    /// assert_eq!("H-o-w/WRB|a-r-e|y-o-u/PRP|?", buf);
+    /// ```
+    pub fn write_partial_annotation_string(&self, buffer: &mut String) {
+        let mut chars_iter = self.text.chars();
+        buffer.clear();
+        buffer.push(chars_iter.next().unwrap());
+        for (i, (c, b)) in chars_iter.zip(&self.boundaries).enumerate() {
             match b {
                 BoundaryType::WordBoundary => {
                     if let Some(tag) = self.tags.get(i).and_then(|x| x.as_ref()) {
-                        result.push('/');
-                        result.push_str(tag);
+                        buffer.push('/');
+                        buffer.push_str(tag);
                     }
-                    result.push('|');
+                    buffer.push('|');
                 }
                 BoundaryType::NotWordBoundary => {
-                    result.push('-');
+                    buffer.push('-');
                 }
                 BoundaryType::Unknown => {
-                    result.push(' ');
+                    buffer.push(' ');
                 }
             }
-            result.push(c);
+            buffer.push(c);
         }
         if let Some(tag) = self.tags.last().and_then(|x| x.as_ref()) {
-            result.push('/');
-            result.push_str(tag);
+            buffer.push('/');
+            buffer.push_str(tag);
         }
-        result
     }
 
     /// Gets a reference to the boundary information.
