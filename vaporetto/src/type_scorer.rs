@@ -1,5 +1,7 @@
-use std::cell::RefCell;
-use std::collections::BTreeMap;
+use core::cell::RefCell;
+
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 use bincode::{de::BorrowDecoder, error::DecodeError, BorrowDecode, Decode, Encode};
 use daachorse::DoubleArrayAhoCorasick;

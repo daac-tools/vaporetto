@@ -1,3 +1,7 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
+#[cfg(feature = "std")]
 use std::io::{Read, Write};
 
 use bincode::{Decode, Encode};
@@ -6,6 +10,7 @@ use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::tag_model::TagModel;
+use crate::utils::VecWriter;
 
 /// Magic number.
 const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.4.0\n";
@@ -50,6 +55,20 @@ impl Model {
         }
     }
 
+    /// Exports the model data into a [`Vec`].
+    ///
+    /// * `wtr` - Byte-oriented sink object.
+    ///
+    /// # Errors
+    ///
+    /// When bincode generates an error, it will be returned as is.
+    pub fn to_vec(&self) -> Result<Vec<u8>> {
+        let mut wtr = VecWriter(MODEL_MAGIC.to_vec());
+        let config = bincode::config::standard();
+        bincode::encode_into_writer(&self.data, &mut wtr, config)?;
+        Ok(wtr.0)
+    }
+
     /// Exports the model data.
     ///
     /// # Arguments
@@ -58,7 +77,8 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// When `wtr` generates an error, it will be returned as is.
+    /// When bincode generates an error, it will be returned as is.
+    #[cfg(feature = "std")]
     pub fn write<W>(&self, mut wtr: W) -> Result<()>
     where
         W: Write,
@@ -67,6 +87,28 @@ impl Model {
         let config = bincode::config::standard();
         bincode::encode_into_std_write(&self.data, &mut wtr, config)?;
         Ok(())
+    }
+
+    /// Creates a model from a slice.
+    ///
+    /// # Arguments
+    ///
+    /// * `slice` - A data source.
+    ///
+    /// # Returns
+    ///
+    /// A model data read from `slice`.
+    ///
+    /// # Errors
+    ///
+    /// When bincode generates an error, it will be returned as is.
+    pub fn read_slice(slice: &[u8]) -> Result<(Self, &[u8])> {
+        if &slice[..MODEL_MAGIC.len()] != MODEL_MAGIC {
+            return Err(VaporettoError::invalid_model("model version mismatch"));
+        }
+        let config = bincode::config::standard();
+        let (data, size) = bincode::decode_from_slice(&slice[MODEL_MAGIC.len()..], config)?;
+        Ok((Self { data }, &slice[MODEL_MAGIC.len() + size..]))
     }
 
     /// Creates a model from a reader.
@@ -81,7 +123,8 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// When `rdr` generates an error, it will be returned as is.
+    /// When bincode generates an error, it will be returned as is.
+    #[cfg(feature = "std")]
     pub fn read<R>(mut rdr: R) -> Result<Self>
     where
         R: Read,

@@ -1,8 +1,14 @@
-use std::cell::RefCell;
-use std::collections::BTreeMap;
+use core::cell::RefCell;
+
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 #[cfg(feature = "kytea")]
 use std::io::{self, Read};
+
+use bincode::enc::write::Writer;
+use bincode::error::EncodeError;
 
 pub trait AddWeight {
     fn add_weight(&self, target: &mut [i32], offset: usize);
@@ -96,6 +102,15 @@ where
             .into_iter()
             .map(|(ngram, weight)| (ngram, weight.into_inner().0))
             .collect()
+    }
+}
+
+pub struct VecWriter(pub Vec<u8>);
+
+impl Writer for VecWriter {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        self.0.extend_from_slice(bytes);
+        Ok(())
     }
 }
 

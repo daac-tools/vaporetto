@@ -1,20 +1,26 @@
 //! Definition of errors.
 
-use std::error::Error;
-use std::fmt;
+use core::fmt;
 
-pub type Result<T, E = VaporettoError> = std::result::Result<T, E>;
+use alloc::string::String;
+
+#[cfg(feature = "std")]
+use std::error::Error;
+
+pub type Result<T, E = VaporettoError> = core::result::Result<T, E>;
 
 #[derive(Debug)]
 pub enum VaporettoError {
     InvalidModel(InvalidModelError),
     InvalidSentence(InvalidSentenceError),
     InvalidArgument(InvalidArgumentError),
-    IOError(std::io::Error),
-    UTF8Error(std::string::FromUtf8Error),
-    CastError(std::num::TryFromIntError),
+    UTF8Error(alloc::string::FromUtf8Error),
+    CastError(core::num::TryFromIntError),
     DecodeError(bincode::error::DecodeError),
     EncodeError(bincode::error::EncodeError),
+
+    #[cfg(feature = "std")]
+    IOError(std::io::Error),
 }
 
 impl VaporettoError {
@@ -49,15 +55,18 @@ impl fmt::Display for VaporettoError {
             Self::InvalidModel(e) => e.fmt(f),
             Self::InvalidSentence(e) => e.fmt(f),
             Self::InvalidArgument(e) => e.fmt(f),
-            Self::IOError(e) => e.fmt(f),
             Self::UTF8Error(e) => e.fmt(f),
             Self::CastError(e) => e.fmt(f),
             Self::DecodeError(e) => e.fmt(f),
             Self::EncodeError(e) => e.fmt(f),
+
+            #[cfg(feature = "std")]
+            Self::IOError(e) => e.fmt(f),
         }
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for VaporettoError {}
 
 /// Error used when the model is invalid.
@@ -73,6 +82,7 @@ impl fmt::Display for InvalidModelError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for InvalidModelError {}
 
 /// Error used when the sentence is invalid.
@@ -88,6 +98,7 @@ impl fmt::Display for InvalidSentenceError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for InvalidSentenceError {}
 
 /// Error used when the argument is invalid.
@@ -106,22 +117,17 @@ impl fmt::Display for InvalidArgumentError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for InvalidArgumentError {}
 
-impl From<std::io::Error> for VaporettoError {
-    fn from(error: std::io::Error) -> Self {
-        Self::IOError(error)
-    }
-}
-
-impl From<std::string::FromUtf8Error> for VaporettoError {
-    fn from(error: std::string::FromUtf8Error) -> Self {
+impl From<alloc::string::FromUtf8Error> for VaporettoError {
+    fn from(error: alloc::string::FromUtf8Error) -> Self {
         Self::UTF8Error(error)
     }
 }
 
-impl From<std::num::TryFromIntError> for VaporettoError {
-    fn from(error: std::num::TryFromIntError) -> Self {
+impl From<core::num::TryFromIntError> for VaporettoError {
+    fn from(error: core::num::TryFromIntError) -> Self {
         Self::CastError(error)
     }
 }
@@ -135,5 +141,12 @@ impl From<bincode::error::DecodeError> for VaporettoError {
 impl From<bincode::error::EncodeError> for VaporettoError {
     fn from(error: bincode::error::EncodeError) -> Self {
         Self::EncodeError(error)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<std::io::Error> for VaporettoError {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
     }
 }

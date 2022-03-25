@@ -1,6 +1,9 @@
-use crate::ngram_model::NgramModel;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use bincode::{Decode, Encode};
+
+use crate::ngram_model::NgramModel;
 
 #[derive(Decode, Encode)]
 pub struct TagClassInfo {

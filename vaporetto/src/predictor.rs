@@ -1,9 +1,14 @@
-use std::mem;
+use core::mem;
+
+use alloc::vec::Vec;
 
 #[cfg(feature = "tag-prediction")]
-use std::cmp::Ordering;
+use core::cmp::Ordering;
+
 #[cfg(feature = "tag-prediction")]
-use std::sync::Arc;
+use alloc::string::String;
+#[cfg(feature = "tag-prediction")]
+use alloc::sync::Arc;
 
 use bincode::{BorrowDecode, Encode};
 
@@ -330,6 +335,8 @@ impl Predictor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use alloc::string::ToString;
 
     use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
