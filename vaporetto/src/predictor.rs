@@ -5,6 +5,8 @@ use std::cmp::Ordering;
 #[cfg(feature = "tag-prediction")]
 use std::sync::Arc;
 
+use bincode::{BorrowDecode, Encode};
+
 use crate::char_scorer::{self, CharScorer};
 use crate::errors::Result;
 use crate::model::Model;
@@ -14,6 +16,7 @@ use crate::type_scorer::TypeScorer;
 #[cfg(feature = "tag-prediction")]
 use crate::char_scorer::CharScorerWithTags;
 
+#[derive(BorrowDecode, Encode)]
 enum CharScorerWrapper {
     Boundary(CharScorer),
 
@@ -23,6 +26,13 @@ enum CharScorerWrapper {
 
 /// Predictor.
 pub struct Predictor {
+    data: PredictorData,
+}
+
+/// WARNING: The decode feature is inherently unsafe. Do not publish this feature outside this
+/// crate.
+#[derive(BorrowDecode, Encode)]
+struct PredictorData {
     bias: i32,
 
     char_scorer: CharScorerWrapper,
@@ -59,73 +69,110 @@ impl Predictor {
 
         #[cfg(feature = "tag-prediction")]
         let char_scorer = if predict_tags {
-            for cls in model.tag_model.class_info {
+            for cls in model.data.tag_model.class_info {
                 tag_names.push(Arc::new(cls.name));
                 tag_bias.push(cls.bias);
             }
             CharScorerWrapper::BoundaryAndTags(CharScorerWithTags::new(
-                model.char_ngram_model,
-                model.char_window_size,
-                model.dict_model,
+                model.data.char_ngram_model,
+                model.data.char_window_size,
+                model.data.dict_model,
                 tag_names.len(),
-                model.tag_model.left_char_model,
-                model.tag_model.right_char_model,
-                model.tag_model.self_char_model,
+                model.data.tag_model.left_char_model,
+                model.data.tag_model.right_char_model,
+                model.data.tag_model.self_char_model,
             )?)
         } else {
             CharScorerWrapper::Boundary(CharScorer::new(
-                model.char_ngram_model,
-                model.char_window_size,
-                model.dict_model,
+                model.data.char_ngram_model,
+                model.data.char_window_size,
+                model.data.dict_model,
             )?)
         };
 
         #[cfg(not(feature = "tag-prediction"))]
         let char_scorer = CharScorerWrapper::Boundary(CharScorer::new(
-            model.char_ngram_model,
-            model.char_window_size,
-            model.dict_model,
+            model.data.char_ngram_model,
+            model.data.char_window_size,
+            model.data.dict_model,
         )?);
 
-        let type_scorer = TypeScorer::new(model.type_ngram_model, model.type_window_size)?;
+        let type_scorer =
+            TypeScorer::new(model.data.type_ngram_model, model.data.type_window_size)?;
 
         Ok(Self {
-            bias: model.bias,
+            data: PredictorData {
+                bias: model.data.bias,
 
-            char_scorer,
-            type_scorer,
+                char_scorer,
+                type_scorer,
 
-            padding: model.char_window_size.max(model.type_window_size),
+                padding: model.data.char_window_size.max(model.data.type_window_size),
 
-            #[cfg(feature = "tag-prediction")]
-            tag_names,
-            #[cfg(feature = "tag-prediction")]
-            tag_bias,
+                #[cfg(feature = "tag-prediction")]
+                tag_names,
+                #[cfg(feature = "tag-prediction")]
+                tag_bias,
+            },
         })
+    }
+
+    /// Serializes the predictor into a Vec.
+    pub fn serialize_to_vec(&self) -> Result<Vec<u8>> {
+        let config = bincode::config::standard();
+        let result = bincode::encode_to_vec(&self.data, config)?;
+        Ok(result)
+    }
+
+    /// Deserializes a predictor from a given slice.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A source slice.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of a predictor and a slice not used for the deserialization.
+    ///
+    /// # Safety
+    ///
+    /// The given data must be a correct predictor exported by [`Predictor::serialize_to_vec()`]
+    /// function.
+    pub unsafe fn deserialize_from_slice_unchecked(data: &[u8]) -> Result<(Self, &[u8])> {
+        let config = bincode::config::standard();
+        // Deserialization is unsafe because the automaton will not be verified.
+        let (predictor_data, size) = bincode::decode_from_slice(data, config)?;
+        Ok((
+            Self {
+                data: predictor_data,
+            },
+            &data[size..],
+        ))
     }
 
     fn predict_impl(&self, mut sentence: Sentence) -> Sentence {
         let ys_size =
-            sentence.boundaries.len() + usize::from(self.padding) + char_scorer::SIMD_SIZE - 1;
+            sentence.boundaries.len() + usize::from(self.data.padding) + char_scorer::SIMD_SIZE - 1;
         let mut ys = mem::take(&mut sentence.boundary_scores);
         ys.clear();
-        ys.resize(ys_size, self.bias);
-        match &self.char_scorer {
+        ys.resize(ys_size, self.data.bias);
+        match &self.data.char_scorer {
             CharScorerWrapper::Boundary(char_scorer) => {
-                char_scorer.add_scores(&sentence, self.padding, &mut ys);
+                char_scorer.add_scores(&sentence, self.data.padding, &mut ys);
             }
 
             #[cfg(feature = "tag-prediction")]
             CharScorerWrapper::BoundaryAndTags(char_scorer) => {
                 let mut tag_ys = mem::take(&mut sentence.tag_scores);
-                tag_ys.init(sentence.chars.len(), self.tag_names.len());
-                char_scorer.add_scores(&sentence, self.padding, &mut ys, &mut tag_ys);
+                tag_ys.init(sentence.chars.len(), self.data.tag_names.len());
+                char_scorer.add_scores(&sentence, self.data.padding, &mut ys, &mut tag_ys);
                 sentence.tag_scores = tag_ys;
             }
         }
-        self.type_scorer
-            .add_scores(&sentence, self.padding, &mut ys);
-        for (&y, b) in ys[self.padding.into()..]
+        self.data
+            .type_scorer
+            .add_scores(&sentence, self.data.padding, &mut ys);
+        for (&y, b) in ys[self.data.padding.into()..]
             .iter()
             .zip(sentence.boundaries.iter_mut())
         {
@@ -165,7 +212,9 @@ impl Predictor {
     /// A sentence with predicted boundary information.
     pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
         let mut sentence = self.predict_impl(sentence);
-        sentence.boundary_scores.rotate_left(self.padding.into());
+        sentence
+            .boundary_scores
+            .rotate_left(self.data.padding.into());
         sentence.boundary_scores.truncate(sentence.boundaries.len());
         sentence
     }
@@ -175,7 +224,7 @@ impl Predictor {
         Arc::clone(
             scores
                 .iter()
-                .zip(&self.tag_names)
+                .zip(&self.data.tag_names)
                 .max_by_key(|(&x, _)| x)
                 .unwrap()
                 .1,
@@ -198,14 +247,14 @@ impl Predictor {
     #[cfg(feature = "tag-prediction")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     pub fn fill_tags(&self, mut sentence: Sentence) -> Sentence {
-        if self.tag_names.is_empty() {
+        if self.data.tag_names.is_empty() {
             return sentence;
         }
         if sentence.tags.is_empty() {
             sentence.tags.resize(sentence.chars().len(), None);
         }
-        let n_tags = self.tag_names.len();
-        let mut tag_score = self.tag_bias.clone();
+        let n_tags = self.data.tag_names.len();
+        let mut tag_score = self.data.tag_bias.clone();
         let mut left_scores_iter = sentence.tag_scores.left_scores.chunks(n_tags);
         for (t, l) in tag_score.iter_mut().zip(left_scores_iter.next().unwrap()) {
             *t += l;
@@ -243,7 +292,7 @@ impl Predictor {
                 tag.replace(self.best_tag(&tag_score));
                 for (t, (l, b)) in tag_score
                     .iter_mut()
-                    .zip(left_scores.iter().zip(&self.tag_bias))
+                    .zip(left_scores.iter().zip(&self.data.tag_bias))
                 {
                     *t = *l + *b;
                 }
@@ -319,48 +368,52 @@ mod tests {
     ///   世界:               43  44  45
     ///   世:                 40  42
     fn generate_model_1() -> Model {
-        Model {
-            char_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: "我ら".to_string(),
-                    weights: vec![1, 2, 3, 4, 5],
-                },
-                NgramData {
-                    ngram: "全世界".to_string(),
-                    weights: vec![6, 7, 8, 9],
-                },
-                NgramData {
-                    ngram: "国民".to_string(),
-                    weights: vec![10, 11, 12, 13, 14],
-                },
-                NgramData {
-                    ngram: "世界".to_string(),
-                    weights: vec![15, 16, 17, 18, 19],
-                },
-                NgramData {
-                    ngram: "界".to_string(),
-                    weights: vec![20, 21, 22, 23, 24, 25],
-                },
-            ]),
-            type_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: vec![Hiragana as u8],
-                    weights: vec![26, 27, 28, 29],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8],
-                    weights: vec![30, 31, 32, 33],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8, Hiragana as u8],
-                    weights: vec![34, 35, 36],
-                },
-                NgramData {
-                    ngram: vec![Hiragana as u8, Kanji as u8],
-                    weights: vec![37, 38, 39],
-                },
-            ]),
-            dict_model: DictModel {
+        Model::new(
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: "我ら".to_string(),
+                        weights: vec![1, 2, 3, 4, 5],
+                    },
+                    NgramData {
+                        ngram: "全世界".to_string(),
+                        weights: vec![6, 7, 8, 9],
+                    },
+                    NgramData {
+                        ngram: "国民".to_string(),
+                        weights: vec![10, 11, 12, 13, 14],
+                    },
+                    NgramData {
+                        ngram: "世界".to_string(),
+                        weights: vec![15, 16, 17, 18, 19],
+                    },
+                    NgramData {
+                        ngram: "界".to_string(),
+                        weights: vec![20, 21, 22, 23, 24, 25],
+                    },
+                ],
+            },
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: vec![Hiragana as u8],
+                        weights: vec![26, 27, 28, 29],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8],
+                        weights: vec![30, 31, 32, 33],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8, Hiragana as u8],
+                        weights: vec![34, 35, 36],
+                    },
+                    NgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8],
+                        weights: vec![37, 38, 39],
+                    },
+                ],
+            },
+            DictModel {
                 dict: vec![
                     WordWeightRecord {
                         word: "全世界".to_string(),
@@ -391,11 +444,11 @@ mod tests {
                     },
                 ],
             },
-            bias: -200,
-            char_window_size: 3,
-            type_window_size: 2,
-            tag_model: TagModel::default(),
-        }
+            -200,
+            3,
+            2,
+            TagModel::default(),
+        )
     }
 
     /// Input:  我  ら  は  全  世  界  の  国  民
@@ -425,48 +478,52 @@ mod tests {
     ///   世界:               41  42  43
     ///   世:                 38  40
     fn generate_model_2() -> Model {
-        Model {
-            char_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: "我ら".to_string(),
-                    weights: vec![1, 2, 3],
-                },
-                NgramData {
-                    ngram: "全世界".to_string(),
-                    weights: vec![4, 5],
-                },
-                NgramData {
-                    ngram: "国民".to_string(),
-                    weights: vec![6, 7, 8],
-                },
-                NgramData {
-                    ngram: "世界".to_string(),
-                    weights: vec![9, 10, 11],
-                },
-                NgramData {
-                    ngram: "界".to_string(),
-                    weights: vec![12, 13, 14, 15],
-                },
-            ]),
-            type_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: vec![Hiragana as u8],
-                    weights: vec![16, 17, 18, 19, 20, 21],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8],
-                    weights: vec![22, 23, 24, 25, 26, 27],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8, Hiragana as u8],
-                    weights: vec![28, 29, 30, 31, 32],
-                },
-                NgramData {
-                    ngram: vec![Hiragana as u8, Kanji as u8],
-                    weights: vec![33, 34, 35, 36, 37],
-                },
-            ]),
-            dict_model: DictModel {
+        Model::new(
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: "我ら".to_string(),
+                        weights: vec![1, 2, 3],
+                    },
+                    NgramData {
+                        ngram: "全世界".to_string(),
+                        weights: vec![4, 5],
+                    },
+                    NgramData {
+                        ngram: "国民".to_string(),
+                        weights: vec![6, 7, 8],
+                    },
+                    NgramData {
+                        ngram: "世界".to_string(),
+                        weights: vec![9, 10, 11],
+                    },
+                    NgramData {
+                        ngram: "界".to_string(),
+                        weights: vec![12, 13, 14, 15],
+                    },
+                ],
+            },
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: vec![Hiragana as u8],
+                        weights: vec![16, 17, 18, 19, 20, 21],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8],
+                        weights: vec![22, 23, 24, 25, 26, 27],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8, Hiragana as u8],
+                        weights: vec![28, 29, 30, 31, 32],
+                    },
+                    NgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8],
+                        weights: vec![33, 34, 35, 36, 37],
+                    },
+                ],
+            },
+            DictModel {
                 dict: vec![
                     WordWeightRecord {
                         word: "全世界".to_string(),
@@ -497,11 +554,11 @@ mod tests {
                     },
                 ],
             },
-            bias: -285,
-            char_window_size: 2,
-            type_window_size: 3,
-            tag_model: TagModel::default(),
-        }
+            -285,
+            2,
+            3,
+            TagModel::default(),
+        )
     }
 
     /// Input:  我  ら  は  全  世  界  の  国  民
@@ -531,48 +588,52 @@ mod tests {
     ///   世界:               41  42  43
     ///   世:                 44  46
     fn generate_model_3() -> Model {
-        Model {
-            char_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: "我ら".to_string(),
-                    weights: vec![1, 2, 3],
-                },
-                NgramData {
-                    ngram: "全世界".to_string(),
-                    weights: vec![4, 5],
-                },
-                NgramData {
-                    ngram: "国民".to_string(),
-                    weights: vec![6, 7, 8],
-                },
-                NgramData {
-                    ngram: "世界".to_string(),
-                    weights: vec![9, 10, 11],
-                },
-                NgramData {
-                    ngram: "界".to_string(),
-                    weights: vec![12, 13, 14, 15],
-                },
-            ]),
-            type_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: vec![Hiragana as u8],
-                    weights: vec![16, 17, 18, 19, 20, 21],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8],
-                    weights: vec![22, 23, 24, 25, 26, 27],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8, Hiragana as u8],
-                    weights: vec![28, 29, 30, 31, 32],
-                },
-                NgramData {
-                    ngram: vec![Hiragana as u8, Kanji as u8],
-                    weights: vec![33, 34, 35, 36, 37],
-                },
-            ]),
-            dict_model: DictModel {
+        Model::new(
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: "我ら".to_string(),
+                        weights: vec![1, 2, 3],
+                    },
+                    NgramData {
+                        ngram: "全世界".to_string(),
+                        weights: vec![4, 5],
+                    },
+                    NgramData {
+                        ngram: "国民".to_string(),
+                        weights: vec![6, 7, 8],
+                    },
+                    NgramData {
+                        ngram: "世界".to_string(),
+                        weights: vec![9, 10, 11],
+                    },
+                    NgramData {
+                        ngram: "界".to_string(),
+                        weights: vec![12, 13, 14, 15],
+                    },
+                ],
+            },
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: vec![Hiragana as u8],
+                        weights: vec![16, 17, 18, 19, 20, 21],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8],
+                        weights: vec![22, 23, 24, 25, 26, 27],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8, Hiragana as u8],
+                        weights: vec![28, 29, 30, 31, 32],
+                    },
+                    NgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8],
+                        weights: vec![33, 34, 35, 36, 37],
+                    },
+                ],
+            },
+            DictModel {
                 dict: vec![
                     WordWeightRecord {
                         word: "国民".to_string(),
@@ -603,11 +664,11 @@ mod tests {
                     },
                 ],
             },
-            bias: -285,
-            char_window_size: 2,
-            type_window_size: 3,
-            tag_model: TagModel::default(),
-        }
+            -285,
+            2,
+            3,
+            TagModel::default(),
+        )
     }
 
     /// Input:  我  ら  は  全  世  界  の  国  民
@@ -645,48 +706,52 @@ mod tests {
     ///                   20  21  22  23  24  25
     ///                    6   7   8   9
     fn generate_model_4() -> Model {
-        Model {
-            char_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: "我ら".to_string(),
-                    weights: vec![1, 2, 3, 4, 5],
-                },
-                NgramData {
-                    ngram: "全世界".to_string(),
-                    weights: vec![6, 7, 8, 9],
-                },
-                NgramData {
-                    ngram: "国民".to_string(),
-                    weights: vec![10, 11, 12, 13, 14],
-                },
-                NgramData {
-                    ngram: "世界".to_string(),
-                    weights: vec![15, 16, 17, 18, 19],
-                },
-                NgramData {
-                    ngram: "界".to_string(),
-                    weights: vec![20, 21, 22, 23, 24, 25],
-                },
-            ]),
-            type_ngram_model: NgramModel::new(vec![
-                NgramData {
-                    ngram: vec![Hiragana as u8],
-                    weights: vec![26, 27, 28, 29],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8],
-                    weights: vec![30, 31, 32, 33],
-                },
-                NgramData {
-                    ngram: vec![Kanji as u8, Hiragana as u8],
-                    weights: vec![34, 35, 36],
-                },
-                NgramData {
-                    ngram: vec![Hiragana as u8, Kanji as u8],
-                    weights: vec![37, 38, 39],
-                },
-            ]),
-            dict_model: DictModel {
+        Model::new(
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: "我ら".to_string(),
+                        weights: vec![1, 2, 3, 4, 5],
+                    },
+                    NgramData {
+                        ngram: "全世界".to_string(),
+                        weights: vec![6, 7, 8, 9],
+                    },
+                    NgramData {
+                        ngram: "国民".to_string(),
+                        weights: vec![10, 11, 12, 13, 14],
+                    },
+                    NgramData {
+                        ngram: "世界".to_string(),
+                        weights: vec![15, 16, 17, 18, 19],
+                    },
+                    NgramData {
+                        ngram: "界".to_string(),
+                        weights: vec![20, 21, 22, 23, 24, 25],
+                    },
+                ],
+            },
+            NgramModel {
+                data: vec![
+                    NgramData {
+                        ngram: vec![Hiragana as u8],
+                        weights: vec![26, 27, 28, 29],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8],
+                        weights: vec![30, 31, 32, 33],
+                    },
+                    NgramData {
+                        ngram: vec![Kanji as u8, Hiragana as u8],
+                        weights: vec![34, 35, 36],
+                    },
+                    NgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8],
+                        weights: vec![37, 38, 39],
+                    },
+                ],
+            },
+            DictModel {
                 dict: vec![
                     WordWeightRecord {
                         word: "全世界".to_string(),
@@ -735,11 +800,11 @@ mod tests {
                     },
                 ],
             },
-            bias: -200,
-            char_window_size: 3,
-            type_window_size: 2,
-            tag_model: TagModel::default(),
-        }
+            -200,
+            3,
+            2,
+            TagModel::default(),
+        )
     }
 
     /// Input:  人  と  人  を  つ  な  ぐ  人
@@ -780,20 +845,24 @@ mod tests {
     ///          30  75  81  39   0   0  48  51
     #[cfg(feature = "tag-prediction")]
     fn generate_model_5() -> Model {
-        Model {
-            char_ngram_model: NgramModel::new(vec![NgramData {
-                ngram: "xxxx".to_string(),
-                weights: vec![0],
-            }]),
-            type_ngram_model: NgramModel::new(vec![NgramData {
-                ngram: vec![Roman as u8, Roman as u8, Roman as u8, Roman as u8],
-                weights: vec![0],
-            }]),
-            dict_model: DictModel { dict: vec![] },
-            bias: 0,
-            char_window_size: 2,
-            type_window_size: 2,
-            tag_model: TagModel {
+        Model::new(
+            NgramModel {
+                data: vec![NgramData {
+                    ngram: "xxxx".to_string(),
+                    weights: vec![0],
+                }],
+            },
+            NgramModel {
+                data: vec![NgramData {
+                    ngram: vec![Roman as u8, Roman as u8, Roman as u8, Roman as u8],
+                    weights: vec![0],
+                }],
+            },
+            DictModel { dict: vec![] },
+            0,
+            2,
+            2,
+            TagModel {
                 class_info: vec![
                     TagClassInfo {
                         name: "名詞".to_string(),
@@ -808,62 +877,68 @@ mod tests {
                         bias: 1,
                     },
                 ],
-                left_char_model: NgramModel::new(vec![
-                    NgramData {
-                        ngram: "\0人".to_string(),
-                        weights: vec![1, 2, 3, 4, 5, 6],
-                    },
-                    NgramData {
-                        ngram: "人".to_string(),
-                        weights: vec![7, 8, 9, 10, 11, 12],
-                    },
-                    NgramData {
-                        ngram: "つなぐ".to_string(),
-                        weights: vec![13, 14, 15, 16, 17, 18, 19, 20, 21],
-                    },
-                    NgramData {
-                        ngram: "ぐ人\0".to_string(),
-                        weights: vec![22, 23, 24],
-                    },
-                ]),
-                right_char_model: NgramModel::new(vec![
-                    NgramData {
-                        ngram: "\0人と".to_string(),
-                        weights: vec![25, 26, 27, 28, 29, 30],
-                    },
-                    NgramData {
-                        ngram: "人を".to_string(),
-                        weights: vec![31, 32, 33, 34, 35, 36, 37, 38, 39],
-                    },
-                    NgramData {
-                        ngram: "を".to_string(),
-                        weights: vec![40, 41, 42, 43, 44, 45],
-                    },
-                    NgramData {
-                        ngram: "人\0".to_string(),
-                        weights: vec![46, 47, 48, 49, 50, 51],
-                    },
-                ]),
-                self_char_model: NgramModel::new(vec![
-                    NgramData {
-                        ngram: "人".to_string(),
-                        weights: vec![2, -1, -1],
-                    },
-                    NgramData {
-                        ngram: "と".to_string(),
-                        weights: vec![0, 0, 0],
-                    },
-                    NgramData {
-                        ngram: "つなぐ".to_string(),
-                        weights: vec![0, 1, 0],
-                    },
-                    NgramData {
-                        ngram: "を".to_string(),
-                        weights: vec![0, 0, 0],
-                    },
-                ]),
+                left_char_model: NgramModel {
+                    data: vec![
+                        NgramData {
+                            ngram: "\0人".to_string(),
+                            weights: vec![1, 2, 3, 4, 5, 6],
+                        },
+                        NgramData {
+                            ngram: "人".to_string(),
+                            weights: vec![7, 8, 9, 10, 11, 12],
+                        },
+                        NgramData {
+                            ngram: "つなぐ".to_string(),
+                            weights: vec![13, 14, 15, 16, 17, 18, 19, 20, 21],
+                        },
+                        NgramData {
+                            ngram: "ぐ人\0".to_string(),
+                            weights: vec![22, 23, 24],
+                        },
+                    ],
+                },
+                right_char_model: NgramModel {
+                    data: vec![
+                        NgramData {
+                            ngram: "\0人と".to_string(),
+                            weights: vec![25, 26, 27, 28, 29, 30],
+                        },
+                        NgramData {
+                            ngram: "人を".to_string(),
+                            weights: vec![31, 32, 33, 34, 35, 36, 37, 38, 39],
+                        },
+                        NgramData {
+                            ngram: "を".to_string(),
+                            weights: vec![40, 41, 42, 43, 44, 45],
+                        },
+                        NgramData {
+                            ngram: "人\0".to_string(),
+                            weights: vec![46, 47, 48, 49, 50, 51],
+                        },
+                    ],
+                },
+                self_char_model: NgramModel {
+                    data: vec![
+                        NgramData {
+                            ngram: "人".to_string(),
+                            weights: vec![2, -1, -1],
+                        },
+                        NgramData {
+                            ngram: "と".to_string(),
+                            weights: vec![0, 0, 0],
+                        },
+                        NgramData {
+                            ngram: "つなぐ".to_string(),
+                            weights: vec![0, 1, 0],
+                        },
+                        NgramData {
+                            ngram: "を".to_string(),
+                            weights: vec![0, 0, 0],
+                        },
+                    ],
+                },
             },
-        }
+        )
     }
 
     #[test]

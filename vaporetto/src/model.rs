@@ -1,11 +1,10 @@
 use std::io::{Read, Write};
 
+use bincode::{Decode, Encode};
+
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
-
-use crate::utils;
-
 use crate::tag_model::TagModel;
 
 /// Magic number.
@@ -13,6 +12,11 @@ const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.4.0\n";
 
 /// Model data.
 pub struct Model {
+    pub(crate) data: ModelData,
+}
+
+#[derive(Decode, Encode)]
+pub struct ModelData {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
     pub(crate) dict_model: DictModel,
@@ -23,6 +27,29 @@ pub struct Model {
 }
 
 impl Model {
+    #[cfg(any(feature = "train", feature = "kytea", test))]
+    pub(crate) const fn new(
+        char_ngram_model: NgramModel<String>,
+        type_ngram_model: NgramModel<Vec<u8>>,
+        dict_model: DictModel,
+        bias: i32,
+        char_window_size: u8,
+        type_window_size: u8,
+        tag_model: TagModel,
+    ) -> Self {
+        Self {
+            data: ModelData {
+                char_ngram_model,
+                type_ngram_model,
+                dict_model,
+                bias,
+                char_window_size,
+                type_window_size,
+                tag_model,
+            },
+        }
+    }
+
     /// Exports the model data.
     ///
     /// # Arguments
@@ -37,13 +64,8 @@ impl Model {
         W: Write,
     {
         wtr.write_all(MODEL_MAGIC)?;
-        self.char_ngram_model.serialize(&mut wtr)?;
-        self.type_ngram_model.serialize(&mut wtr)?;
-        self.dict_model.serialize(&mut wtr)?;
-        utils::write_i32(&mut wtr, self.bias)?;
-        utils::write_u8(&mut wtr, self.char_window_size)?;
-        utils::write_u8(&mut wtr, self.type_window_size)?;
-        self.tag_model.serialize(&mut wtr)?;
+        let config = bincode::config::standard();
+        bincode::encode_into_std_write(&self.data, &mut wtr, config)?;
         Ok(())
     }
 
@@ -69,22 +91,17 @@ impl Model {
         if magic != MODEL_MAGIC {
             return Err(VaporettoError::invalid_model("model version mismatch"));
         }
+        let config = bincode::config::standard();
         Ok(Self {
-            char_ngram_model: NgramModel::<String>::deserialize(&mut rdr)?,
-            type_ngram_model: NgramModel::<Vec<u8>>::deserialize(&mut rdr)?,
-            dict_model: DictModel::deserialize(&mut rdr)?,
-            bias: utils::read_i32(&mut rdr)?,
-            char_window_size: utils::read_u8(&mut rdr)?,
-            type_window_size: utils::read_u8(&mut rdr)?,
-            tag_model: TagModel::deserialize(&mut rdr)?,
+            data: bincode::decode_from_std_read(&mut rdr, config)?,
         })
     }
 
     pub fn dictionary(&self) -> &[WordWeightRecord] {
-        self.dict_model.dictionary()
+        self.data.dict_model.dictionary()
     }
 
     pub fn replace_dictionary(&mut self, dict: Vec<WordWeightRecord>) {
-        self.dict_model = DictModel::new(dict);
+        self.data.dict_model = DictModel::new(dict);
     }
 }

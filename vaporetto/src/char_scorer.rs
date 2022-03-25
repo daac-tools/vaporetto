@@ -3,6 +3,12 @@ use std::iter;
 #[cfg(feature = "tag-prediction")]
 use std::sync::Arc;
 
+use bincode::{
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+    BorrowDecode, Decode, Encode,
+};
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::dict_model::DictModel;
@@ -23,7 +29,7 @@ pub const SIMD_SIZE: usize = 8;
 #[cfg(feature = "portable-simd")]
 type I32Vec = i32x8;
 
-#[derive(Clone)]
+#[derive(Clone, Decode, Encode)]
 struct PositionalWeight<W> {
     pub weight: W,
     pub offset: i16,
@@ -68,20 +74,66 @@ enum WeightVector {
     Fixed(I32Vec),
 }
 
+impl Decode for WeightVector {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let v: Vec<i32> = Decode::decode(decoder)?;
+        #[cfg(feature = "fix-weight-length")]
+        let result = if v.len() <= SIMD_SIZE {
+            let mut arr = [0; SIMD_SIZE];
+            arr[..v.len()].copy_from_slice(&v);
+
+            #[cfg(feature = "portable-simd")]
+            let arr = I32Vec::from_array(arr);
+
+            Self::Fixed(arr)
+        } else {
+            Self::Variable(v)
+        };
+
+        #[cfg(not(feature = "fix-weight-length"))]
+        let result = Self::Variable(v);
+
+        Ok(result)
+    }
+}
+
+impl Encode for WeightVector {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        match self {
+            Self::Variable(v) => {
+                Encode::encode(v, encoder)?;
+            }
+
+            #[cfg(feature = "fix-weight-length")]
+            Self::Fixed(v) => {
+                #[cfg(feature = "portable-simd")]
+                let v = &v.as_array();
+
+                let mut len = v.len();
+                for (i, w) in v.iter().enumerate().rev() {
+                    if *w != 0 {
+                        break;
+                    }
+                    len = i;
+                }
+                Encode::encode(&v[..len].to_vec(), encoder)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl WeightVector {
     pub fn new(weight: Vec<i32>) -> Self {
         #[cfg(feature = "fix-weight-length")]
         let v = if weight.len() <= SIMD_SIZE {
-            let mut s = [0i32; SIMD_SIZE];
-            s[..weight.len()].copy_from_slice(weight.as_slice());
-            #[cfg(not(feature = "portable-simd"))]
-            {
-                Self::Fixed(s)
-            }
+            let mut arr = [0i32; SIMD_SIZE];
+            arr[..weight.len()].copy_from_slice(weight.as_slice());
+
             #[cfg(feature = "portable-simd")]
-            {
-                Self::Fixed(I32Vec::from_array(s))
-            }
+            let arr = I32Vec::from_array(arr);
+
+            Self::Fixed(arr)
         } else {
             Self::Variable(weight)
         };
@@ -117,10 +169,8 @@ impl WeightVector {
 }
 
 #[cfg(feature = "tag-prediction")]
-pub struct WeightSet<W>
-where
-    W: Clone,
-{
+#[derive(Decode, Encode)]
+pub struct WeightSet<W> {
     boundary: Option<PositionalWeight<W>>,
     tag_left: Option<PositionalWeight<Vec<i32>>>,
     tag_right: Option<PositionalWeight<Vec<i32>>>,
@@ -252,6 +302,29 @@ impl CharScorer {
             let offset = isize::from(padding) + m_end as isize + isize::from(pos_weights.offset);
             pos_weights.weight.add_weight(ys, offset as usize);
         }
+    }
+}
+
+impl<'de> BorrowDecode<'de> for CharScorer {
+    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
+    /// crate.
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        let (pma, _) =
+            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        Ok(Self {
+            pma,
+            weights: Decode::decode(decoder)?,
+        })
+    }
+}
+
+impl Encode for CharScorer {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let pma_data = self.pma.serialize_to_vec();
+        Encode::encode(&pma_data, encoder)?;
+        Encode::encode(&self.weights, encoder)?;
+        Ok(())
     }
 }
 
@@ -391,5 +464,32 @@ impl CharScorerWithTags {
                 tag_ys.self_scores[m_end - 1].replace(Arc::clone(weight));
             }
         }
+    }
+}
+
+#[cfg(feature = "tag-prediction")]
+impl<'de> BorrowDecode<'de> for CharScorerWithTags {
+    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
+    /// crate.
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        let (pma, _) =
+            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        Ok(Self {
+            pma,
+            weights: Decode::decode(decoder)?,
+            n_tags: Decode::decode(decoder)?,
+        })
+    }
+}
+
+#[cfg(feature = "tag-prediction")]
+impl Encode for CharScorerWithTags {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let pma_data = self.pma.serialize_to_vec();
+        Encode::encode(&pma_data, encoder)?;
+        Encode::encode(&self.weights, encoder)?;
+        Encode::encode(&self.n_tags, encoder)?;
+        Ok(())
     }
 }

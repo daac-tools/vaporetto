@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use bincode::{Decode, Encode};
+
 use crate::errors::{Result, VaporettoError};
 
 /// Character type.
@@ -91,7 +93,7 @@ pub struct Token<'a> {
 /// Weight array with the corresponding range.
 ///
 /// This data is placed on the end of each range.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Decode, Encode)]
 pub struct TagRangeScore {
     /// Weight array.
     pub weight: Vec<i32>,

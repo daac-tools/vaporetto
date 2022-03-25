@@ -491,14 +491,14 @@ impl TryFrom<KyteaModel> for Model {
             }
         }
 
-        Ok(Self {
-            char_ngram_model: NgramModel::new(char_ngrams),
-            type_ngram_model: NgramModel::new(type_ngrams),
-            dict_model: DictModel::new(dict),
+        Ok(Self::new(
+            NgramModel { data: char_ngrams },
+            NgramModel { data: type_ngrams },
+            DictModel::new(dict),
             bias,
-            tag_model: TagModel::default(),
-            char_window_size: config.char_w,
-            type_window_size: config.type_w,
-        })
+            config.char_w,
+            config.type_w,
+            TagModel::default(),
+        ))
     }
 }

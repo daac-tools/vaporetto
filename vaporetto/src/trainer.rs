@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 use std::str::FromStr;
 
@@ -363,20 +362,20 @@ impl<'a> Trainer<'a> {
             };
         }
         let tag_model = self.tag_trainer.train(epsilon, cost, solver)?;
-        Ok(Model {
-            char_ngram_model: NgramModel::new(
-                char_ngram_weights
+        Ok(Model::new(
+            NgramModel {
+                data: char_ngram_weights
                     .into_iter()
                     .map(|(ngram, weights)| NgramData { ngram, weights })
                     .collect(),
-            ),
-            type_ngram_model: NgramModel::new(
-                type_ngram_weights
+            },
+            NgramModel {
+                data: type_ngram_weights
                     .into_iter()
                     .map(|(ngram, weights)| NgramData { ngram, weights })
                     .collect(),
-            ),
-            dict_model: DictModel::new(
+            },
+            DictModel::new(
                 self.dictionary
                     .into_iter()
                     .map(|word| {
@@ -390,9 +389,9 @@ impl<'a> Trainer<'a> {
                     .collect(),
             ),
             bias,
+            self.char_window_size,
+            self.type_window_size,
             tag_model,
-            char_window_size: self.char_window_size,
-            type_window_size: self.type_window_size,
-        })
+        ))
     }
 }
