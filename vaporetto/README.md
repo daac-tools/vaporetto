@@ -33,6 +33,7 @@ The following features are disabled by default:
 
 The following features are enabled by default:
 
+* `std` - Uses the standard library. If disabled, it uses the core library instead.
 * `cache-type-score` - Enables caching type scores for faster processing. If disabled, type scores are calculated in a straightforward manner.
 * `fix-weight-length` - Uses fixed-size arrays for storing scores to facilitate optimization. If disabled, vectors are used instead.
 * `tag-prediction` - Enables tag prediction.
