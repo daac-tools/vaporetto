@@ -57,8 +57,6 @@ impl Model {
 
     /// Exports the model data into a [`Vec`].
     ///
-    /// * `wtr` - Byte-oriented sink object.
-    ///
     /// # Errors
     ///
     /// When bincode generates an error, it will be returned as is.
