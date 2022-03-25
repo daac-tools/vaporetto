@@ -180,24 +180,24 @@ impl<'a> TagTrainer<'a> {
         }
         Ok(TagModel {
             class_info,
-            left_char_model: NgramModel::new(
-                left_char_weights
+            left_char_model: NgramModel {
+                data: left_char_weights
                     .into_iter()
                     .map(|(ngram, weights)| NgramData { ngram, weights })
                     .collect(),
-            ),
-            right_char_model: NgramModel::new(
-                right_char_weights
+            },
+            right_char_model: NgramModel {
+                data: right_char_weights
                     .into_iter()
                     .map(|(ngram, weights)| NgramData { ngram, weights })
                     .collect(),
-            ),
-            self_char_model: NgramModel::new(
-                self_char_weights
+            },
+            self_char_model: NgramModel {
+                data: self_char_weights
                     .into_iter()
                     .map(|(ngram, weights)| NgramData { ngram, weights })
                     .collect(),
-            ),
+            },
         })
     }
 }

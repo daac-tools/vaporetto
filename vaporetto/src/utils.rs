@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::io::{self, Read, Write};
+
+#[cfg(feature = "kytea")]
+use std::io::{self, Read};
 
 pub trait AddWeight {
     fn add_weight(&self, target: &mut [i32], offset: usize);
@@ -109,6 +111,7 @@ where
     )
 }
 
+#[cfg(feature = "kytea")]
 pub fn read_u8<R>(mut rdr: R) -> io::Result<u8>
 where
     R: Read,
@@ -116,14 +119,6 @@ where
     let mut buf = [0];
     rdr.read_exact(&mut buf)?;
     Ok(buf[0])
-}
-
-pub fn write_u8<W>(mut wtr: W, data: u8) -> io::Result<()>
-where
-    W: Write,
-{
-    wtr.write_all(&[data])?;
-    Ok(())
 }
 
 #[cfg(feature = "kytea")]
@@ -146,6 +141,7 @@ where
     Ok(i16::from_le_bytes(buf))
 }
 
+#[cfg(feature = "kytea")]
 pub fn read_u32<R>(mut rdr: R) -> io::Result<u32>
 where
     R: Read,
@@ -155,14 +151,7 @@ where
     Ok(u32::from_le_bytes(buf))
 }
 
-pub fn write_u32<W>(mut wtr: W, data: u32) -> io::Result<()>
-where
-    W: Write,
-{
-    wtr.write_all(&data.to_le_bytes())?;
-    Ok(())
-}
-
+#[cfg(feature = "kytea")]
 pub fn read_i32<R>(mut rdr: R) -> io::Result<i32>
 where
     R: Read,
@@ -170,14 +159,6 @@ where
     let mut buf = [0; 4];
     rdr.read_exact(&mut buf)?;
     Ok(i32::from_le_bytes(buf))
-}
-
-pub fn write_i32<W>(mut wtr: W, data: i32) -> io::Result<()>
-where
-    W: Write,
-{
-    wtr.write_all(&data.to_le_bytes())?;
-    Ok(())
 }
 
 #[cfg(feature = "kytea")]

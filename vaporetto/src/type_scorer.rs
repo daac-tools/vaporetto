@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
+use bincode::{de::BorrowDecoder, error::DecodeError, BorrowDecode, Decode, Encode};
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::errors::{Result, VaporettoError};
@@ -8,6 +9,9 @@ use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 use crate::utils::AddWeight;
 
+/// WARNING: The decode feature is inherently unsafe. Do not publish this feature outside this
+/// crate.
+#[derive(BorrowDecode, Encode)]
 pub enum TypeScorer {
     Pma(TypeScorerPma),
 
@@ -110,7 +114,36 @@ impl TypeScorerPma {
     }
 }
 
+impl<'de> BorrowDecode<'de> for TypeScorerPma {
+    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
+    /// crate.
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        let (pma, _) =
+            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        Ok(Self {
+            pma,
+            weights: Decode::decode(decoder)?,
+            window_size: Decode::decode(decoder)?,
+        })
+    }
+}
+
+impl Encode for TypeScorerPma {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let pma_data = self.pma.serialize_to_vec();
+        Encode::encode(&pma_data, encoder)?;
+        Encode::encode(&self.weights, encoder)?;
+        Encode::encode(&self.window_size, encoder)?;
+        Ok(())
+    }
+}
+
 #[cfg(feature = "cache-type-score")]
+#[derive(Decode, Encode)]
 pub struct TypeScorerCache {
     scores: Vec<i32>,
     window_size: u8,
