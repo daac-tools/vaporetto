@@ -12,7 +12,7 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing"]
 
 [dependencies]
-bincode = { version = "2.0.0-rc.1", features = ["derive"] }  # MIT
+bincode = { version = "2.0.0-rc.1", default-features = false, features = ["alloc", "derive"] }  # MIT
 daachorse = { version = "0.4.1", default-features = false }  # MIT or Apache-2.0
 
 liblinear = { version = "1", optional = true }  # MIT
@@ -21,10 +21,10 @@ liblinear = { version = "1", optional = true }  # MIT
 default = ["std", "cache-type-score", "fix-weight-length", "tag-prediction"]
 
 # default: on
-std = ["daachorse/std"]
+std = ["bincode/std", "daachorse/std"]
 cache-type-score = []
 fix-weight-length = []
-tag-prediction = []
+tag-prediction = ["bincode/atomic"]
 
 kytea = ["std"]
 train = ["std", "liblinear"]
