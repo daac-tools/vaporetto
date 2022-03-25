@@ -9,6 +9,10 @@ use bincode::{
     error::{DecodeError, EncodeError},
     BorrowDecode, Decode, Encode,
 };
+
+#[cfg(feature = "charwise-daachorse")]
+use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
+#[cfg(not(feature = "charwise-daachorse"))]
 use daachorse::DoubleArrayAhoCorasick;
 
 use crate::dict_model::DictModel;
@@ -245,6 +249,9 @@ impl MergableWeight for NaiveWeightSet {
 }
 
 pub struct CharScorer {
+    #[cfg(feature = "charwise-daachorse")]
+    pma: CharwiseDoubleArrayAhoCorasick,
+    #[cfg(not(feature = "charwise-daachorse"))]
     pma: DoubleArrayAhoCorasick,
     weights: Vec<PositionalWeight<WeightVector>>,
 }
@@ -282,6 +289,10 @@ impl CharScorer {
                 weight: WeightVector::new(weight),
             });
         }
+        #[cfg(feature = "charwise-daachorse")]
+        let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
+        #[cfg(not(feature = "charwise-daachorse"))]
         let pma = DoubleArrayAhoCorasick::new(ngrams)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self { pma, weights })
@@ -310,6 +321,10 @@ impl<'de> BorrowDecode<'de> for CharScorer {
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        #[cfg(feature = "charwise-daachorse")]
+        let (pma, _) =
+            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        #[cfg(not(feature = "charwise-daachorse"))]
         let (pma, _) =
             unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
         Ok(Self {
@@ -330,6 +345,9 @@ impl Encode for CharScorer {
 
 #[cfg(feature = "tag-prediction")]
 pub struct CharScorerWithTags {
+    #[cfg(feature = "charwise-daachorse")]
+    pma: CharwiseDoubleArrayAhoCorasick,
+    #[cfg(not(feature = "charwise-daachorse"))]
     pma: DoubleArrayAhoCorasick,
     weights: Vec<WeightSet<WeightVector>>,
     n_tags: usize,
@@ -409,6 +427,10 @@ impl CharScorerWithTags {
                 tag_self,
             });
         }
+        #[cfg(feature = "charwise-daachorse")]
+        let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
+        #[cfg(not(feature = "charwise-daachorse"))]
         let pma = DoubleArrayAhoCorasick::new(ngrams)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self {
@@ -426,11 +448,23 @@ impl CharScorerWithTags {
         ys: &mut [i32],
         tag_ys: &mut TagScores,
     ) {
-        for m in self.pma.find_overlapping_no_suffix_iter_from_iter(
+        #[cfg(not(feature = "charwise-daachorse"))]
+        let no_suffix_iter = self.pma.find_overlapping_no_suffix_iter_from_iter(
             iter::once(0)
                 .chain(sentence.text.as_bytes().iter().cloned())
                 .chain(iter::once(0)),
-        ) {
+        );
+        // Since `sentence.text` is a valid UTF-8 string ensured by type `String`,
+        // the following code is safe.
+        #[cfg(feature = "charwise-daachorse")]
+        let no_suffix_iter = unsafe {
+            self.pma.find_overlapping_no_suffix_iter_from_iter(
+                iter::once(0)
+                    .chain(sentence.text.as_bytes().iter().cloned())
+                    .chain(iter::once(0)),
+            )
+        };
+        for m in no_suffix_iter {
             let m_end = sentence
                 .str_to_char_pos
                 .get(m.end() - 1)
@@ -473,6 +507,10 @@ impl<'de> BorrowDecode<'de> for CharScorerWithTags {
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        #[cfg(feature = "charwise-daachorse")]
+        let (pma, _) =
+            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        #[cfg(not(feature = "charwise-daachorse"))]
         let (pma, _) =
             unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
         Ok(Self {

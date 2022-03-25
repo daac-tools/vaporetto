@@ -29,6 +29,7 @@ The following features are disabled by default:
 * `train` - Enables the trainer.
 * `portable-simd` - Uses the [portable SIMD API](https://github.com/rust-lang/portable-simd) instead
   of our SIMD-conscious data layout. (Nightly Rust is required.)
+* `charwise-daachorse` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster prediction, although it can make to load a model file slower.
 
 The following features are enabled by default:
 

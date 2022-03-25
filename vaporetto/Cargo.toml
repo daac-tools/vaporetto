@@ -28,6 +28,7 @@ tag-prediction = []
 kytea = []
 train = ["liblinear"]
 portable-simd = ["fix-weight-length"]
+charwise-daachorse = []
 
 [package.metadata.docs.rs]
 all-features = true
