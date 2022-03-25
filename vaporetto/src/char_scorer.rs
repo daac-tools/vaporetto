@@ -9,7 +9,11 @@ use bincode::{
     error::{DecodeError, EncodeError},
     BorrowDecode, Decode, Encode,
 };
+
+#[cfg(not(feature = "charwise-daachorse"))]
 use daachorse::DoubleArrayAhoCorasick;
+#[cfg(feature = "charwise-daachorse")]
+type DoubleArrayAhoCorasick = daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
@@ -426,11 +430,23 @@ impl CharScorerWithTags {
         ys: &mut [i32],
         tag_ys: &mut TagScores,
     ) {
-        for m in self.pma.find_overlapping_no_suffix_iter_from_iter(
+        #[cfg(not(feature = "charwise-daachorse"))]
+        let no_suffix_iter = self.pma.find_overlapping_no_suffix_iter_from_iter(
             iter::once(0)
                 .chain(sentence.text.as_bytes().iter().cloned())
                 .chain(iter::once(0)),
-        ) {
+        );
+        // Since `sentence.text` is a valid UTF-8 string ensured by type `String`,
+        // the following code is safe.
+        #[cfg(feature = "charwise-daachorse")]
+        let no_suffix_iter = unsafe {
+            self.pma.find_overlapping_no_suffix_iter_from_iter(
+                iter::once(0)
+                    .chain(sentence.text.as_bytes().iter().cloned())
+                    .chain(iter::once(0)),
+            )
+        };
+        for m in no_suffix_iter {
             let m_end = sentence
                 .str_to_char_pos
                 .get(m.end() - 1)
