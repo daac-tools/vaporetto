@@ -35,7 +35,7 @@ The following features are enabled by default:
 * `cache-type-score` - Enables caching type scores for faster processing. If disabled, type scores are calculated in a straightforward manner.
 * `fix-weight-length` - Uses fixed-size arrays for storing scores to facilitate optimization. If disabled, vectors are used instead.
 * `tag-prediction` - Enables tag prediction.
-* `charwise-daachorse` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster tokenization. Note that it can make to load a model file slower.
+* `charwise-daachorse` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster prediction, although it can make to load a model file slower.
 
 ## License
 
