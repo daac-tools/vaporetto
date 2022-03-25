@@ -150,6 +150,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    out.flush()?;
+
     let duration = start.elapsed();
 
     eprintln!("Elapsed: {} [sec]", duration.as_secs_f64());
