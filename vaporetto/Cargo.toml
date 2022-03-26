@@ -21,7 +21,7 @@ liblinear = { version = "1", optional = true }  # MIT
 default = ["std", "cache-type-score", "fix-weight-length", "tag-prediction"]
 
 # default: on
-std = ["bincode/std", "daachorse/std"]
+std = ["bincode/std"]
 cache-type-score = []
 fix-weight-length = []
 tag-prediction = ["bincode/atomic"]
