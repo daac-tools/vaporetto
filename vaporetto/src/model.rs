@@ -95,7 +95,7 @@ impl Model {
     ///
     /// # Returns
     ///
-    /// A model data read from `slice`.
+    /// A tuple of the model data read from `slice` and the remaining slice.
     ///
     /// # Errors
     ///
