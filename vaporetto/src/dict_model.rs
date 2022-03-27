@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use bincode::{Decode, Encode};
 
 #[derive(Clone, Copy, Default, Decode, Encode)]

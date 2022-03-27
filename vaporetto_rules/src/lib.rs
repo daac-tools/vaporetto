@@ -47,8 +47,14 @@
 //! ```
 //!
 
+#![no_std]
+
+extern crate alloc;
+
 pub mod sentence_filters;
 pub mod string_filters;
+
+use alloc::string::String;
 
 use vaporetto::Sentence;
 

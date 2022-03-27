@@ -52,13 +52,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --features kytea
+          args: --release -p vaporetto --no-default-features --features kytea
 
       - name: Run cargo test (vaporetto / features train)
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --features train
+          args: --release -p vaporetto --no-default-features --features train
 
       - name: Run cargo test (vaporetto / features cache-type-score)
         uses: actions-rs/cargo@v1
@@ -83,6 +83,12 @@ jobs:
         with:
           command: test
           args: --release -p vaporetto --no-default-features --features charwise-daachorse
+
+      - name: Run cargo test (vaporetto / features std)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features std
 
   nightly:
     name: Nightly
@@ -135,13 +141,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --features kytea
+          args: --release -p vaporetto --no-default-features --features kytea
 
       - name: Run cargo test (vaporetto / features train)
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --features train
+          args: --release -p vaporetto --no-default-features --features train
 
       - name: Run cargo test (vaporetto / features cache-type-score)
         uses: actions-rs/cargo@v1
@@ -166,3 +172,9 @@ jobs:
         with:
           command: test
           args: --release -p vaporetto --no-default-features --features charwise-daachorse
+
+      - name: Run cargo test (vaporetto / features std)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release -p vaporetto --no-default-features --features std

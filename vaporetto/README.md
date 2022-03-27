@@ -6,13 +6,15 @@ Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 
 ```rust
 use std::fs::File;
-use std::io::{prelude::*, stdin, BufReader};
+use std::io::Read;
 
 use vaporetto::{Model, Predictor, Sentence};
 
-let mut f = BufReader::new(File::open("model.raw").unwrap());
-let model = Model::read(&mut f).unwrap();
-let predictor = Predictor::new(model);
+let mut f = File::open("model.bin").unwrap();
+let mut model_data = vec![];
+f.read_to_end(&mut model_data).unwrap();
+let (model, _) = Model::read_slice(&model_data).unwrap();
+let predictor = Predictor::new(model, false).unwrap();
 
 let s = Sentence::from_raw("火星猫の生態").unwrap();
 let s = predictor.predict(s);
@@ -33,6 +35,7 @@ The following features are disabled by default:
 
 The following features are enabled by default:
 
+* `std` - Uses the standard library. If disabled, it uses the core library instead.
 * `cache-type-score` - Enables caching type scores for faster processing. If disabled, type scores are calculated in a straightforward manner.
 * `fix-weight-length` - Uses fixed-size arrays for storing scores to facilitate optimization. If disabled, vectors are used instead.
 * `tag-prediction` - Enables tag prediction.

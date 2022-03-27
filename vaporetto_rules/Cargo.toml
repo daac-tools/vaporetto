@@ -13,4 +13,4 @@ categories = ["text-processing"]
 
 [dependencies]
 unicode-segmentation = "1.9.0"  # MIT or Apache-2.0
-vaporetto = { path = "../vaporetto", version = "0.3.0" }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "0.3.0", default-features = false }  # MIT or Apache-2.0

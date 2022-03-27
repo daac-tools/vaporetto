@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::StringFilter;
 
 /// Half-width to full-width filter. This filter works like KyTea's preprocessor.

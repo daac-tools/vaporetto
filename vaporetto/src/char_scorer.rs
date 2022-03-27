@@ -1,7 +1,11 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 #[cfg(feature = "tag-prediction")]
-use std::iter;
+use core::iter;
+
 #[cfg(feature = "tag-prediction")]
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use bincode::{
     de::{BorrowDecoder, Decoder},
@@ -27,7 +31,7 @@ use crate::sentence::{TagRangeScore, TagRangeScores, TagScores};
 use crate::utils;
 
 #[cfg(feature = "portable-simd")]
-use std::simd::i32x8;
+use core::simd::i32x8;
 
 pub const SIMD_SIZE: usize = 8;
 #[cfg(feature = "portable-simd")]
