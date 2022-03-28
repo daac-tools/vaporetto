@@ -59,7 +59,7 @@ struct Args {
     cost: f64,
 
     /// The solver. {0, 1, 2, 3, 4, 5, 6, 7} (see LIBLINEAR documentation for more details)
-    #[clap(long, default_value = "1")]
+    #[clap(long)]
     solver: SolverType,
 
     /// Do not normalize training data.
