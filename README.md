@@ -100,7 +100,7 @@ Here is an example:
 To train a model, use the following command:
 
 ```
-% cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt
+% cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt --solver 5
 ```
 
 `--tok` argument specifies a fully annotated corpus, and `--part` argument specifies a partially annotated corpus.
