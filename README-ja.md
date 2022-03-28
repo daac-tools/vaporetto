@@ -99,7 +99,7 @@ Vaporetto は2種類のコーパス、すなわちフルアノテーションコ
 
 モデルを学習するには、以下のコマンドを使用します。
 ```
-% cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt
+% cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt --solver 5
 ```
 
 `--tok` 引数ではフルアノテーションコーパスを指定し、 `--part` 引数では部分アノテーションコーパスを指定します。
