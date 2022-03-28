@@ -18,12 +18,6 @@ alloc-cortex-m = "0.4.0"
 vaporetto = { path = "../../vaporetto", default-features = false }
 ruzstd = "0.2.4"  # MIT
 
-# this lets you use `cargo fix`!
-#[[bin]]
-#name = "arm-device-exercise"
-#test = false
-#bench = false
-
 [profile.release]
 codegen-units = 1
 debug = true
