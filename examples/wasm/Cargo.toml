@@ -1,15 +1,15 @@
 [package]
 name = "vaporetto_wasm"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 js-sys = "0.3.52"  # MIT or Apache-2.0
-vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
-vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
+vaporetto = { path = "../../vaporetto" }  # MIT or Apache-2.0
+vaporetto_rules = { path = "../../vaporetto_rules" }  # MIT or Apache-2.0
 wasm-bindgen = "0.2.75"  # MIT or Apache-2.0
 ruzstd = "0.2.4"  # MIT
 wee_alloc = "0.4.5"  # MPL-2.0

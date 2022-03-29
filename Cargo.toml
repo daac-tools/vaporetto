@@ -12,5 +12,5 @@ members = [
 ]
 
 exclude = [
-    "vaporetto_wasm",
+    "examples",
 ]

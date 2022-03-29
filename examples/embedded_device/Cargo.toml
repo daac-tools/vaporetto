@@ -1,0 +1,24 @@
+[package]
+name = "vaporetto_embedded_device"
+edition = "2021"
+version = "0.1.0"
+
+[dependencies]
+cortex-m = "0.6.0"
+cortex-m-rt = "0.6.10"
+cortex-m-semihosting = "0.3.3"
+panic-halt = "0.2.0"
+
+vaporetto = { path = "../../vaporetto", default-features = false }
+vaporetto_rules = { path = "../../vaporetto_rules" }
+
+alloc-cortex-m = "0.4.0"
+
+[build-dependencies]
+vaporetto = { path = "../../vaporetto", default-features = false }
+ruzstd = "0.2.4"  # MIT
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
