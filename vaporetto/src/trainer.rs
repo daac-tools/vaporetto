@@ -379,10 +379,14 @@ impl<'a> Trainer<'a> {
                 self.dictionary
                     .into_iter()
                     .map(|word| {
-                        let idx = word.chars().count().min(dict_weights.len()) - 1;
+                        let word_len = word.chars().count();
+                        let idx = word_len.min(dict_weights.len()) - 1;
+                        let mut weights = vec![dict_weights[idx].inside; word_len + 1];
+                        *weights.first_mut().unwrap() = dict_weights[idx].right;
+                        *weights.last_mut().unwrap() = dict_weights[idx].left;
                         WordWeightRecord {
                             word,
-                            weights: dict_weights[idx],
+                            weights,
                             comment: "".to_string(),
                         }
                     })

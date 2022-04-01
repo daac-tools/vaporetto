@@ -31,9 +31,7 @@ struct Args {
 #[derive(Deserialize, Serialize)]
 struct WordWeightRecordFlatten {
     word: String,
-    right: i32,
-    inside: i32,
-    left: i32,
+    weights: String,
     comment: String,
 }
 
@@ -49,11 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let file = fs::File::create(path)?;
         let mut wtr = csv::Writer::from_writer(file);
         for data in model.dictionary() {
+            let str_weights: Vec<_> = data.get_weights().iter().map(|w| w.to_string()).collect();
             wtr.serialize(WordWeightRecordFlatten {
                 word: data.get_word().to_string(),
-                right: data.get_right_weight(),
-                inside: data.get_inside_weight(),
-                left: data.get_left_weight(),
+                weights: str_weights.join(" "),
                 comment: data.get_comment().to_string(),
             })?;
         }
@@ -66,13 +63,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut dict = vec![];
         for result in rdr.deserialize() {
             let record: WordWeightRecordFlatten = result?;
-            dict.push(WordWeightRecord::new(
-                record.word,
-                record.right,
-                record.inside,
-                record.left,
-                record.comment,
-            ));
+            let mut weights = vec![];
+            for w in record.weights.split(' ') {
+                weights.push(w.parse()?);
+            }
+            dict.push(WordWeightRecord::new(record.word, weights, record.comment)?);
         }
         model.replace_dictionary(dict);
     }

@@ -3,7 +3,9 @@ use alloc::vec::Vec;
 
 use bincode::{Decode, Encode};
 
-#[derive(Clone, Copy, Default, Decode, Encode)]
+use crate::errors::{Result, VaporettoError};
+
+#[derive(Clone, Copy, Default)]
 pub struct DictWeight {
     pub right: i32,
     pub inside: i32,
@@ -14,7 +16,7 @@ pub struct DictWeight {
 #[derive(Clone, Decode, Encode)]
 pub struct WordWeightRecord {
     pub(crate) word: String,
-    pub(crate) weights: DictWeight,
+    pub(crate) weights: Vec<i32>,
     pub(crate) comment: String,
 }
 
@@ -24,24 +26,24 @@ impl WordWeightRecord {
     /// # Arguments
     ///
     /// * `word` - A word.
-    /// * `right` - A weight of the boundary when the word is found at right.
-    /// * `inside` - A weight of the boundary when the word is overlapped on the boundary.
-    /// * `left` - A weight of the boundary when the word is found at left.
+    /// * `weights` - A weight of boundaries.
     /// * `comment` - A comment that does not affect the behaviour.
     ///
     /// # Returns
     ///
     /// A new record.
-    pub const fn new(word: String, right: i32, inside: i32, left: i32, comment: String) -> Self {
-        Self {
-            word,
-            weights: DictWeight {
-                right,
-                inside,
-                left,
-            },
-            comment,
+    pub fn new(word: String, weights: Vec<i32>, comment: String) -> Result<Self> {
+        if weights.len() != word.chars().count() + 1 {
+            return Err(VaporettoError::invalid_argument(
+                "weights",
+                "does not match the length of the `word`",
+            ));
         }
+        Ok(Self {
+            word,
+            weights,
+            comment,
+        })
     }
 
     /// Gets a reference to the word.
@@ -49,19 +51,9 @@ impl WordWeightRecord {
         &self.word
     }
 
-    /// Gets a `right` weight.
-    pub const fn get_right_weight(&self) -> i32 {
-        self.weights.right
-    }
-
-    /// Gets a `inside` weight.
-    pub const fn get_inside_weight(&self) -> i32 {
-        self.weights.inside
-    }
-
-    /// Gets a `left` weight.
-    pub const fn get_left_weight(&self) -> i32 {
-        self.weights.left
+    /// Gets weights.
+    pub fn get_weights(&self) -> &[i32] {
+        &self.weights
     }
 
     /// Gets a reference to the comment.
