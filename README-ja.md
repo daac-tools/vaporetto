@@ -114,30 +114,29 @@ Vaporetto は2種類のコーパス、すなわちフルアノテーションコ
 ### モデルの編集
 
 モデルが期待とは異なる結果を出力することがあるでしょう。
-例えば、以下のコマンドで `メロンパン` は2つのトークンに分割されます。
+例えば、以下のコマンドで `外国人参政権` は誤ったトークンに分割されます。
 `--scores` オプションを使って、各文字間のスコアを出力します。
 ```
-% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
-朝食 は メロン パン 1 個 だっ た
-0:朝食 -13493
-1:食は 14521
-2:はメ 20176
-3:メロ -16104
-4:ロン -29147
-5:ンパ 15985
-6:パン -11210
-7:ン１ 11978
-8:１個 6535
-9:個だ 17437
-10:だっ -20284
-11:った 11869
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
+外国 人 参 政権 と 政権 交代
+0:外国 -11785
+1:国人 16634
+2:人参 5450
+3:参政 4480
+4:政権 -3697
+5:権と 17702
+6:と政 18699
+7:政権 -12742
+8:権交 14578
+9:交代 -7658
 ```
 
-`メロンパン` を単一のトークンに連結するには、以下の手順でモデルを編集し、 `ンパ` のスコアを負にします。
+正しくは `外国 人 参政 権` です。
+`外国人参政権` を正しいトークンに分割するには、以下の手順でモデルを編集し、 `参政権` のスコアを反転させます。
 
 1. 以下のコマンドで辞書を吐き出します。
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --dump-dict path/to/dictionary.csv
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --dump-dict path/to/dictionary.csv
    ```
 
 2. 辞書を編集します。
@@ -150,14 +149,14 @@ Vaporetto は2種類のコーパス、すなわちフルアノテーションコ
 
    Vaporetto は、重みの合計が正の値になった際にテキストを分割するので、以下のように新しいエントリを追加します。
    ```diff
-    メロレオストーシス,6944 -2553 -2553 -2553 -2553 -2553 -2553 -2553 -2553 5319,
-    メロン,8924 -10861 -10861 7081,
-   +メロンパン,0 -20000 -20000 -20000 -20000 0,melon🍈 bread🍞 in English.
-    メロン果実,4168 -1165 -1165 -1165 -1165 3558,
-    メロヴィング,6999 -15413 -15413 -15413 -15413 -15413 7583,
+    参撾,3167 -6074 3790,
+    参政,3167 -6074 3790,
+   +参政権,10000 -10000 10000 10000,参政/権
+    参朝,3167 -6074 3790,
+    参校,3167 -6074 3790,
    ```
 
-   この場合、境界が `メロンパン` の内側だった際に `-20000` が追加されます。
+   この場合、 `参` と `政` の間に `-10000` が、 `政` と `権` の間に `10000` が加算されます。
 
    Vaporetto は重みの合計値に 32-bit 整数を利用しているため、オーバーフローに気をつけてください。
 
@@ -166,25 +165,23 @@ Vaporetto は2種類のコーパス、すなわちフルアノテーションコ
 
 3. モデルファイルの重みを置換します。
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/jp-0.4.7-5-tokenize-new.model.zst
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic-new.model.zst
    ```
 
 これで `メロンパン` が単一のトークンに分割されます。
 ```
-% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize-new.model.zst
-朝食 は メロンパン 1 個 だっ た
-0:朝食 -13493
-1:食は 14521
-2:はメ 20176
-3:メロ -36104
-4:ロン -49147
-5:ンパ -4015
-6:パン -31210
-7:ン１ 11978
-8:１個 6535
-9:個だ 17437
-10:だっ -20284
-11:った 11869
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic-new.model.zst
+外国 人 参政 権 と 政権 交代
+0:外国 -11785
+1:国人 16634
+2:人参 15450
+3:参政 -5520
+4:政権 6303
+5:権と 27702
+6:と政 18699
+7:政権 -12742
+8:権交 14578
+9:交代 -7658
 ```
 
 ### 品詞推定

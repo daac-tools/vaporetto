@@ -115,30 +115,29 @@ You can specify all arguments above multiple times.
 ### Model Manipulation
 
 Sometimes, your model will output different results than what you expect.
-For example, `メロンパン` is split into two tokens in the following command.
+For example, `外国人参政権` is split into wrong tokens in the following command.
 We use `--scores` option to show the score of each character boundary:
 ```
-% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
-朝食 は メロン パン 1 個 だっ た
-0:朝食 -13493
-1:食は 14521
-2:はメ 20176
-3:メロ -16104
-4:ロン -29147
-5:ンパ 15985
-6:パン -11210
-7:ン１ 11978
-8:１個 6535
-9:個だ 17437
-10:だっ -20284
-11:った 11869
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
+外国 人 参 政権 と 政権 交代
+0:外国 -11785
+1:国人 16634
+2:人参 5450
+3:参政 4480
+4:政権 -3697
+5:権と 17702
+6:と政 18699
+7:政権 -12742
+8:権交 14578
+9:交代 -7658
 ```
 
-To concatenate `メロンパン` into a single token, manipulate the model in the following steps so that the score of `ンパ` becomes negative:
+The correct is `外国 人 参政 権`.
+To split `外国人参政権` into correct tokens, manipulate the model in the following steps so that the score of `参政権` becomes inverted:
 
 1. Dump a dictionary by the following command:
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --dump-dict path/to/dictionary.csv
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --dump-dict path/to/dictionary.csv
    ```
 
 2. Edit the dictionary.
@@ -151,14 +150,14 @@ To concatenate `メロンパン` into a single token, manipulate the model in th
 
    Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
    ```diff
-    メロレオストーシス,6944 -2553 -2553 -2553 -2553 -2553 -2553 -2553 -2553 5319,
-    メロン,8924 -10861 -10861 7081,
-   +メロンパン,0 -20000 -20000 -20000 -20000 0,melon🍈 bread🍞 in English.
-    メロン果実,4168 -1165 -1165 -1165 -1165 3558,
-    メロヴィング,6999 -15413 -15413 -15413 -15413 -15413 7583,
+    参撾,3167 -6074 3790,
+    参政,3167 -6074 3790,
+   +参政権,10000 -10000 10000 10000,参政/権
+    参朝,3167 -6074 3790,
+    参校,3167 -6074 3790,
    ```
 
-   In this case, `-20000` will be added when the boundary is inside of the word `メロンパン`.
+   In this case, `-10000` will be added between `参` and `政`, and `10000` will be added between `政` and `権`.
 
    Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
 
@@ -167,25 +166,23 @@ To concatenate `メロンパン` into a single token, manipulate the model in th
 
 3. Replaces weight data of a model file
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/jp-0.4.7-5-tokenize.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/jp-0.4.7-5-tokenize-new.model.zst
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic-new.model.zst
    ```
 
 Now `メロンパン` is split into a single token.
 ```
-% echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize-new.model.zst
-朝食 は メロンパン 1 個 だっ た
-0:朝食 -13493
-1:食は 14521
-2:はメ 20176
-3:メロ -36104
-4:ロン -49147
-5:ンパ -4015
-6:パン -31210
-7:ン１ 11978
-8:１個 6535
-9:個だ 17437
-10:だっ -20284
-11:った 11869
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic-new.model.zst
+外国 人 参政 権 と 政権 交代
+0:外国 -11785
+1:国人 16634
+2:人参 15450
+3:参政 -5520
+4:政権 6303
+5:権と 27702
+6:と政 18699
+7:政権 -12742
+8:権交 14578
+9:交代 -7658
 ```
 
 ### POS tagging
