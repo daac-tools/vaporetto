@@ -169,7 +169,7 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
    % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic-new.model.zst
    ```
 
-Now `メロンパン` is split into a single token.
+Now `外国人参政権` is split into correct tokens.
 ```
 % echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic-new.model.zst
 外国 人 参政 権 と 政権 交代
