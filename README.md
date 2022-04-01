@@ -120,18 +120,18 @@ We use `--scores` option to show the score of each character boundary:
 ```
 % echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
 朝食 は メロン パン 1 個 だっ た
-0:朝食 -15398
-1:食は 24623
-2:はメ 30261
-3:メロ -26885
-4:ロン -38896
-5:ンパ 8162
-6:パン -23416
-7:ン１ 23513
-8:１個 18435
-9:個だ 24964
-10:だっ -15065
-11:った 14178
+0:朝食 -13493
+1:食は 14521
+2:はメ 20176
+3:メロ -16104
+4:ロン -29147
+5:ンパ 15985
+6:パン -11210
+7:ン１ 11978
+8:１個 6535
+9:個だ 17437
+10:だっ -20284
+11:った 11869
 ```
 
 To concatenate `メロンパン` into a single token, manipulate the model in the following steps so that the score of `ンパ` becomes negative:
@@ -143,23 +143,22 @@ To concatenate `メロンパン` into a single token, manipulate the model in th
 
 2. Edit the dictionary.
 
-   The dictionary is a csv file. Each row contains a word, corresponding weights, and a comment in the following order:
+   The dictionary is a csv file. Each row contains a string pattern, corresponding weights, and a comment in the following order:
 
-   * `right_weight` - A weight that is added when the word is found to the right of the boundary.
-   * `inside_weight` - A weight that is added when the word is overlapped on the boundary.
-   * `left_weight` - A weight that is added when the word is found to the left of the boundary.
+   * `word` - A string pattern (usually, a word)
+   * `weights` - A weight array. Weights are concatenated by white spaces.
    * `comment` - A comment that does not affect the behaviour.
 
    Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
    ```diff
-    メロレオストーシス,6944,-2553,5319,
-    メロン,8924,-10861,7081,
-   +メロンパン,0,-100000,0,melon🍈 bread🍞 in English.
-    メロン果実,4168,-1165,3558,
-    メロヴィング,6999,-15413,7583,
+    メロレオストーシス,6944 -2553 -2553 -2553 -2553 -2553 -2553 -2553 -2553 5319,
+    メロン,8924 -10861 -10861 7081,
+   +メロンパン,0 -20000 -20000 -20000 -20000 0,melon🍈 bread🍞 in English.
+    メロン果実,4168 -1165 -1165 -1165 -1165 3558,
+    メロヴィング,6999 -15413 -15413 -15413 -15413 -15413 7583,
    ```
 
-   In this case, `-100000` will be added when the boundary is inside of the word `メロンパン`.
+   In this case, `-20000` will be added when the boundary is inside of the word `メロンパン`.
 
    Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
 
@@ -175,18 +174,18 @@ Now `メロンパン` is split into a single token.
 ```
 % echo '朝食はメロンパン1個だった' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize-new.model.zst
 朝食 は メロンパン 1 個 だっ た
-0:朝食 -15398
-1:食は 24623
-2:はメ 30261
-3:メロ -126885
-4:ロン -138896
-5:ンパ -91838
-6:パン -123416
-7:ン１ 23513
-8:１個 18435
-9:個だ 24964
-10:だっ -15065
-11:った 14178
+0:朝食 -13493
+1:食は 14521
+2:はメ 20176
+3:メロ -36104
+4:ロン -49147
+5:ンパ -4015
+6:パン -31210
+7:ン１ 11978
+8:１個 6535
+9:個だ 17437
+10:だっ -20284
+11:った 11869
 ```
 
 ### POS tagging
