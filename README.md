@@ -143,10 +143,10 @@ To concatenate `メロンパン` into a single token, manipulate the model in th
 
 2. Edit the dictionary.
 
-   The dictionary is a csv file. Each row contains a string pattern, corresponding weights, and a comment in the following order:
+   The dictionary is a csv file. Each row contains a string pattern, corresponding weight array, and a comment in the following order:
 
    * `word` - A string pattern (usually, a word)
-   * `weights` - A weight array. Weights are concatenated by white spaces.
+   * `weights` - A weight array. When the string pattern is contained in the input string, these weights are added to character boundaries of the range of the found pattern.
    * `comment` - A comment that does not affect the behaviour.
 
    Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
