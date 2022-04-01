@@ -118,7 +118,7 @@ Sometimes, your model will output different results than what you expect.
 For example, `外国人参政権` is split into wrong tokens in the following command.
 We use `--scores` option to show the score of each character boundary:
 ```
-% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/jp-0.4.7-5-tokenize.model.zst
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic.model.zst
 外国 人 参 政権 と 政権 交代
 0:外国 -11785
 1:国人 16634
@@ -152,12 +152,13 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
    ```diff
     参撾,3167 -6074 3790,
     参政,3167 -6074 3790,
-   +参政権,10000 -10000 10000 10000,参政/権
+   +参政権,0 -10000 10000 0,参政/権
     参朝,3167 -6074 3790,
     参校,3167 -6074 3790,
    ```
 
    In this case, `-10000` will be added between `参` and `政`, and `10000` will be added between `政` and `権`.
+   Because `0` is specified at both ends of the pattern, no scores are added at those positions.
 
    Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
 
@@ -175,10 +176,10 @@ Now `外国人参政権` is split into correct tokens.
 外国 人 参政 権 と 政権 交代
 0:外国 -11785
 1:国人 16634
-2:人参 15450
+2:人参 5450
 3:参政 -5520
 4:政権 6303
-5:権と 27702
+5:権と 17702
 6:と政 18699
 7:政権 -12742
 8:権交 14578
