@@ -133,7 +133,7 @@ We use `--scores` option to show the score of each character boundary:
 ```
 
 The correct is `外国 人 参政 権`.
-To split `外国人参政権` into correct tokens, manipulate the model in the following steps so that the score of `参政権` becomes inverted:
+To split `外国人参政権` into correct tokens, manipulate the model in the following steps so that the sign of score of `参政権` becomes inverted:
 
 1. Dump a dictionary by the following command:
    ```
