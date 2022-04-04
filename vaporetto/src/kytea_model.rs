@@ -473,16 +473,19 @@ impl TryFrom<KyteaModel> for Model {
         let mut dict = vec![];
         if let Some(kytea_dict) = model.dict {
             for (w, data) in kytea_dict.dump_items() {
-                let word_len = std::cmp::min(w.len(), config.dict_n as usize) - 1;
-                let mut weights = DictWeight::default();
+                let idx = std::cmp::min(w.len(), config.dict_n as usize) - 1;
+                let mut dict_weight = DictWeight::default();
                 for j in 0..kytea_dict.n_dicts as usize {
                     if data.in_dict >> j & 1 == 1 {
-                        let offset = 3 * config.dict_n as usize * j + 3 * word_len;
-                        weights.right += i32::from(feature_lookup.dict_vec[offset]);
-                        weights.inside += i32::from(feature_lookup.dict_vec[offset + 1]);
-                        weights.left += i32::from(feature_lookup.dict_vec[offset + 2]);
+                        let offset = 3 * config.dict_n as usize * j + 3 * idx;
+                        dict_weight.right += i32::from(feature_lookup.dict_vec[offset]);
+                        dict_weight.inside += i32::from(feature_lookup.dict_vec[offset + 1]);
+                        dict_weight.left += i32::from(feature_lookup.dict_vec[offset + 2]);
                     }
                 }
+                let mut weights = vec![dict_weight.inside; w.len() + 1];
+                *weights.first_mut().unwrap() = dict_weight.right;
+                *weights.last_mut().unwrap() = dict_weight.left;
                 dict.push(WordWeightRecord {
                     word: w.into_iter().collect(),
                     weights,

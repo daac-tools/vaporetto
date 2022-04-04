@@ -270,16 +270,12 @@ impl CharScorer {
         }
         for d in dict.dict {
             let word_len = d.word.chars().count();
-            let mut weight = Vec::with_capacity(word_len + 1);
-            weight.push(d.weights.right);
-            weight.resize(word_len, d.weights.inside);
-            weight.push(d.weights.left);
             let word_len = i16::try_from(word_len).map_err(|_| {
                 VaporettoError::invalid_model(
                     "words must be shorter than or equal to 32767 characters",
                 )
             })?;
-            let weight = PositionalWeight::new(-word_len - 1, weight);
+            let weight = PositionalWeight::new(-word_len - 1, d.weights);
             weight_merger.add(&d.word, weight);
         }
 
@@ -376,16 +372,12 @@ impl CharScorerWithTags {
         }
         for d in dict.dict {
             let word_len = d.word.chars().count();
-            let mut weight = Vec::with_capacity(word_len + 1);
-            weight.push(d.weights.right);
-            weight.resize(word_len, d.weights.inside);
-            weight.push(d.weights.left);
             let word_len = i16::try_from(word_len).map_err(|_| {
                 VaporettoError::invalid_model(
                     "words must be shorter than or equal to 32767 characters",
                 )
             })?;
-            let weight = WeightSet::boundary_weight(-word_len, weight);
+            let weight = WeightSet::boundary_weight(-word_len, d.weights);
             weight_merger.add(&d.word, weight);
         }
         for d in tag_left_model.data {

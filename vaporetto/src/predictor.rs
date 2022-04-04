@@ -338,7 +338,7 @@ mod tests {
 
     use alloc::string::ToString;
 
-    use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
+    use crate::dict_model::{DictModel, WordWeightRecord};
     use crate::ngram_model::{NgramData, NgramModel};
     use crate::sentence::CharacterType::*;
     use crate::tag_model::TagModel;
@@ -424,29 +424,17 @@ mod tests {
                 dict: vec![
                     WordWeightRecord {
                         word: "全世界".to_string(),
-                        weights: DictWeight {
-                            right: 43,
-                            inside: 44,
-                            left: 45,
-                        },
+                        weights: vec![43, 44, 44, 45],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世界".to_string(),
-                        weights: DictWeight {
-                            right: 43,
-                            inside: 44,
-                            left: 45,
-                        },
+                        weights: vec![43, 44, 45],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世".to_string(),
-                        weights: DictWeight {
-                            right: 40,
-                            inside: 41,
-                            left: 42,
-                        },
+                        weights: vec![40, 42],
                         comment: "".to_string(),
                     },
                 ],
@@ -534,29 +522,17 @@ mod tests {
                 dict: vec![
                     WordWeightRecord {
                         word: "全世界".to_string(),
-                        weights: DictWeight {
-                            right: 44,
-                            inside: 45,
-                            left: 46,
-                        },
+                        weights: vec![44, 45, 45, 46],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世界".to_string(),
-                        weights: DictWeight {
-                            right: 41,
-                            inside: 42,
-                            left: 43,
-                        },
+                        weights: vec![41, 42, 43],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世".to_string(),
-                        weights: DictWeight {
-                            right: 38,
-                            inside: 39,
-                            left: 40,
-                        },
+                        weights: vec![38, 40],
                         comment: "".to_string(),
                     },
                 ],
@@ -644,29 +620,17 @@ mod tests {
                 dict: vec![
                     WordWeightRecord {
                         word: "国民".to_string(),
-                        weights: DictWeight {
-                            right: 38,
-                            inside: 39,
-                            left: 40,
-                        },
+                        weights: vec![38, 39, 40],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世界".to_string(),
-                        weights: DictWeight {
-                            right: 41,
-                            inside: 42,
-                            left: 43,
-                        },
+                        weights: vec![41, 42, 43],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世".to_string(),
-                        weights: DictWeight {
-                            right: 44,
-                            inside: 45,
-                            left: 46,
-                        },
+                        weights: vec![44, 46],
                         comment: "".to_string(),
                     },
                 ],
@@ -762,47 +726,27 @@ mod tests {
                 dict: vec![
                     WordWeightRecord {
                         word: "全世界".to_string(),
-                        weights: DictWeight {
-                            right: 43,
-                            inside: 44,
-                            left: 45,
-                        },
+                        weights: vec![43, 44, 44, 45],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世界".to_string(),
-                        weights: DictWeight {
-                            right: 43,
-                            inside: 44,
-                            left: 45,
-                        },
+                        weights: vec![43, 44, 45],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世".to_string(),
-                        weights: DictWeight {
-                            right: 40,
-                            inside: 41,
-                            left: 42,
-                        },
+                        weights: vec![40, 42],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "世界の国民".to_string(),
-                        weights: DictWeight {
-                            right: 43,
-                            inside: 44,
-                            left: 45,
-                        },
+                        weights: vec![43, 44, 44, 44, 44, 45],
                         comment: "".to_string(),
                     },
                     WordWeightRecord {
                         word: "は全世界".to_string(),
-                        weights: DictWeight {
-                            right: 43,
-                            inside: 44,
-                            left: 45,
-                        },
+                        weights: vec![43, 44, 44, 44, 45],
                         comment: "".to_string(),
                     },
                 ],
