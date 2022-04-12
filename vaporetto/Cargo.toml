@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto: a pointwise prediction based tokenizer"
@@ -9,7 +9,7 @@ homepage = "https://github.com/daac-tools/vaporetto"
 repository = "https://github.com/daac-tools/vaporetto"
 readme = "README.md"
 keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
-categories = ["text-processing"]
+categories = ["text-processing", "no-std"]
 
 [dependencies]
 bincode = { version = "2.0.0-rc.1", default-features = false, features = ["alloc", "derive"] }  # MIT
