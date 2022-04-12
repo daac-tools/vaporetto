@@ -208,7 +208,7 @@ In prediction, tags are not predicted by default, so you have to specify `--pred
 
 ## Speed Comparison of Various Tokenizers
 
-Vaporetto is 8.25 times faster than KyTea.
+Vaporetto is 8.7 times faster than KyTea.
 
 Details can be found [here](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison).
 
