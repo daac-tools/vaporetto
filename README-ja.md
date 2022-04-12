@@ -207,7 +207,7 @@ Vaporettoは実験的に品詞推定に対応しています。
 
 ## 各種トークナイザの速度比較
 
-Vaporetto は KyTea に比べて 8.25 倍速く動作します。
+Vaporetto は KyTea に比べて 8.7 倍速く動作します。
 
 詳細は[ここ](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison)を参照してください。
 
