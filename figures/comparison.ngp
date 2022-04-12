@@ -753,7 +753,7 @@ new text
 	text::A=255
 	text::clip=true
 	text::redraw_flag=true
-	text::text='Lindera (0.8.1)'
+	text::text='Lindera (0.13.2)'
 	text::x=200
 	text::y=7000
 	text::pt=1200
@@ -772,7 +772,7 @@ new text
 	text::A=255
 	text::clip=true
 	text::redraw_flag=true
-	text::text='sudachi.rs (0.6.4-a4)'
+	text::text='sudachi.rs (0.6.4-a1)'
 	text::x=200
 	text::y=8000
 	text::pt=1200
