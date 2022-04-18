@@ -10,7 +10,7 @@ use vaporetto_rules::{string_filters::KyteaFullwidthFilter, StringFilter};
 #[derive(Parser, Debug)]
 #[clap(
     name = "train",
-    about = "A program to train models of Vespa.",
+    about = "A program to train models of Vaporetto.",
     group = ArgGroup::new("dataset").required(true).multiple(true),
 )]
 struct Args {
