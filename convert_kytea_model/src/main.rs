@@ -16,7 +16,7 @@ struct Args {
     #[clap(long)]
     model_in: PathBuf,
 
-    /// Vespa model file
+    /// Vaporetto model file
     #[clap(long)]
     model_out: PathBuf,
 }
