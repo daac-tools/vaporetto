@@ -1708,8 +1708,9 @@ mod tests {
 
     #[test]
     fn test_sentence_from_tokenized_with_tags_two_slashes() {
-        let s =
-            Sentence::from_tokenized("Rust/名詞 で 良い/形容詞/動詞 プログラミング 体験 を ！/補助記号");
+        let s = Sentence::from_tokenized(
+            "Rust/名詞 で 良い/形容詞/動詞 プログラミング 体験 を ！/補助記号",
+        );
 
         assert_eq!(
             "InvalidArgumentError: tokenized_text: invalid slash found",
@@ -1868,7 +1869,8 @@ mod tests {
     #[test]
     fn test_sentence_update_tokenized_two_slashes() {
         let mut s = Sentence::from_raw("12345").unwrap();
-        let result = s.update_tokenized("Rust/名詞 で 良い/形容詞/動詞 プログラミング 体験 を ！/補助記号");
+        let result =
+            s.update_tokenized("Rust/名詞 で 良い/形容詞/動詞 プログラミング 体験 を ！/補助記号");
 
         assert_eq!(
             "InvalidArgumentError: tokenized_text: invalid slash found",
