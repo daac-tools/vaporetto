@@ -750,11 +750,9 @@ impl Sentence {
         for (i, (c, b)) in chars_iter.zip(&self.boundaries).enumerate() {
             match b {
                 BoundaryType::WordBoundary => {
-                    if !self.tags.is_empty() {
-                        if let Some(tag) = self.tags.get(i).and_then(|x| x.as_ref()) {
-                            buffer.push('/');
-                            buffer.push_str(tag);
-                        }
+                    if let Some(tag) = self.tags.get(i).and_then(|x| x.as_ref()) {
+                        buffer.push('/');
+                        buffer.push_str(tag);
                     }
                     buffer.push(' ');
                 }
@@ -812,51 +810,34 @@ impl Sentence {
     pub fn to_tokenized_vec(&self) -> Result<Vec<Token>> {
         let mut result = vec![];
         let mut start = 0;
-        if self.tags.is_empty() {
-            for (i, b) in self.boundaries.iter().enumerate() {
-                match b {
-                    BoundaryType::WordBoundary => {
-                        let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
-                        let surface = unsafe { self.text.get_unchecked(start..end) };
-                        result.push(Token { surface, tag: None });
-                        start = end;
-                    }
-                    BoundaryType::NotWordBoundary => (),
-                    BoundaryType::Unknown => {
-                        return Err(VaporettoError::invalid_sentence(
-                            "contains an unknown boundary",
-                        ));
-                    }
+        for (i, b) in self.boundaries.iter().enumerate() {
+            match b {
+                BoundaryType::WordBoundary => {
+                    let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
+                    let surface = unsafe { self.text.get_unchecked(start..end) };
+                    let tag = self
+                        .tags
+                        .get(i)
+                        .and_then(|x| x.as_ref())
+                        .map(|x| x.as_str());
+                    result.push(Token { surface, tag });
+                    start = end;
+                }
+                BoundaryType::NotWordBoundary => (),
+                BoundaryType::Unknown => {
+                    return Err(VaporettoError::invalid_sentence(
+                        "contains an unknown boundary",
+                    ));
                 }
             }
-            let surface = unsafe { self.text.get_unchecked(start..) };
-            result.push(Token { surface, tag: None });
-        } else {
-            for (i, (b, tag)) in self.boundaries.iter().zip(&self.tags).enumerate() {
-                match b {
-                    BoundaryType::WordBoundary => {
-                        let end = unsafe { *self.char_to_str_pos.get_unchecked(i + 1) };
-                        let surface = unsafe { self.text.get_unchecked(start..end) };
-                        let tag = tag.as_ref().map(|x| x.as_str());
-                        result.push(Token { surface, tag });
-                        start = end;
-                    }
-                    BoundaryType::NotWordBoundary => (),
-                    BoundaryType::Unknown => {
-                        return Err(VaporettoError::invalid_sentence(
-                            "contains an unknown boundary",
-                        ));
-                    }
-                }
-            }
-            let surface = unsafe { self.text.get_unchecked(start..) };
-            let tag = self
-                .tags
-                .last()
-                .and_then(|x| x.as_ref())
-                .map(|x| x.as_str());
-            result.push(Token { surface, tag });
         }
+        let surface = unsafe { self.text.get_unchecked(start..) };
+        let tag = self
+            .tags
+            .last()
+            .and_then(|x| x.as_ref())
+            .map(|x| x.as_str());
+        result.push(Token { surface, tag });
         Ok(result)
     }
 
