@@ -1,5 +1,4 @@
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use crate::StringFilter;
 
@@ -7,11 +6,14 @@ use crate::StringFilter;
 #[derive(Clone, Default)]
 pub struct KyteaFullwidthFilter;
 
-impl StringFilter for KyteaFullwidthFilter {
-    fn filter(&self, string: &str) -> String {
-        let mut chars: Vec<_> = string.chars().collect();
-        for c in &mut chars {
-            *c = match *c {
+impl<S> StringFilter<S> for KyteaFullwidthFilter
+where
+    S: AsRef<str>,
+{
+    fn filter(&self, string: S) -> String {
+        let mut result = String::new();
+        for c in string.as_ref().chars() {
+            result.push(match c {
                 'a' => 'ａ',
                 'b' => 'ｂ',
                 'c' => 'ｃ',
@@ -109,8 +111,8 @@ impl StringFilter for KyteaFullwidthFilter {
                 '@' => '＠',
                 '=' => '＝',
                 c => c,
-            };
+            });
         }
-        chars.into_iter().collect()
+        result
     }
 }

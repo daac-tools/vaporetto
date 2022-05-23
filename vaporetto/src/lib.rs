@@ -16,35 +16,37 @@
 //! let (model, _) = Model::read_slice(&model_data).unwrap();
 //! let predictor = Predictor::new(model, false).unwrap();
 //!
-//! let s = Sentence::from_raw("火星猫の生態").unwrap();
-//! let s = predictor.predict(s);
+//! let mut s = Sentence::from_raw("火星猫の生態").unwrap();
+//! predictor.predict(&mut s);
 //!
-//! println!("{:?}", s.to_tokenized_vec().unwrap());
+//! let mut buf = String::new();
+//! s.write_tokenized_text(&mut buf);
+//! println!("{}", buf);
 //! ```
 //!
 //! Training requires **crate feature** `train`. For more details, see [`Trainer`].
 
+#![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(feature = "portable-simd", feature(portable_simd))]
+
+#[cfg(not(feature = "alloc"))]
+compile_error!("`alloc` feature is currently required to build this crate");
 
 #[macro_use]
 extern crate alloc;
 
 mod char_scorer;
 mod dict_model;
+mod errors;
 mod model;
 mod ngram_model;
 mod predictor;
 mod sentence;
-mod tag_model;
 mod type_scorer;
 mod utils;
 
-pub mod errors;
-
-#[cfg(feature = "train")]
-mod feature;
 #[cfg(feature = "train")]
 mod tag_trainer;
 #[cfg(feature = "train")]
@@ -53,10 +55,10 @@ mod trainer;
 #[cfg(feature = "kytea")]
 mod kytea_model;
 
-pub use dict_model::WordWeightRecord;
 pub use model::Model;
 pub use predictor::Predictor;
-pub use sentence::{BoundaryType, CharacterType, Sentence, Token};
+pub use sentence::{CharacterBoundary, CharacterType, Sentence};
+pub use dict_model::WordWeightRecord;
 
 #[cfg(feature = "train")]
 pub use trainer::{SolverType, Trainer};

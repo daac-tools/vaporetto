@@ -8,19 +8,26 @@ use bincode::{Decode, Encode};
 
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
-use crate::ngram_model::NgramModel;
-use crate::tag_model::TagModel;
+use crate::ngram_model::{NgramModel, TagNgramModel};
 use crate::utils::VecWriter;
 
 /// Magic number.
-const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.4.0\n";
+const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
 
-/// Model data.
-pub struct Model {
-    pub(crate) data: ModelData,
+#[derive(Debug, Decode, Encode)]
+pub struct TagModel {
+    pub(crate) token: String,
+    pub(crate) tags: Vec<Vec<String>>,
+    pub(crate) char_ngram_model: TagNgramModel<String>,
+    pub(crate) type_ngram_model: TagNgramModel<Vec<u8>>,
+    pub(crate) bias: Vec<i32>,
 }
 
-#[derive(Decode, Encode)]
+/// Model data.
+#[derive(Debug)]
+pub struct Model(pub(crate) ModelData);
+
+#[derive(Debug, Decode, Encode)]
 pub struct ModelData {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
@@ -28,7 +35,7 @@ pub struct ModelData {
     pub(crate) bias: i32,
     pub(crate) char_window_size: u8,
     pub(crate) type_window_size: u8,
-    pub(crate) tag_model: TagModel,
+    pub(crate) tag_models: Vec<TagModel>,
 }
 
 impl Model {
@@ -40,19 +47,17 @@ impl Model {
         bias: i32,
         char_window_size: u8,
         type_window_size: u8,
-        tag_model: TagModel,
+        tag_models: Vec<TagModel>,
     ) -> Self {
-        Self {
-            data: ModelData {
-                char_ngram_model,
-                type_ngram_model,
-                dict_model,
-                bias,
-                char_window_size,
-                type_window_size,
-                tag_model,
-            },
-        }
+        Self(ModelData {
+            char_ngram_model,
+            type_ngram_model,
+            dict_model,
+            bias,
+            char_window_size,
+            type_window_size,
+            tag_models,
+        })
     }
 
     /// Exports the model data into a [`Vec`].
@@ -63,15 +68,11 @@ impl Model {
     pub fn to_vec(&self) -> Result<Vec<u8>> {
         let mut wtr = VecWriter(MODEL_MAGIC.to_vec());
         let config = bincode::config::standard();
-        bincode::encode_into_writer(&self.data, &mut wtr, config)?;
+        bincode::encode_into_writer(&self.0, &mut wtr, config)?;
         Ok(wtr.0)
     }
 
     /// Exports the model data.
-    ///
-    /// # Arguments
-    ///
-    /// * `wtr` - Byte-oriented sink object.
     ///
     /// # Errors
     ///
@@ -83,19 +84,11 @@ impl Model {
     {
         wtr.write_all(MODEL_MAGIC)?;
         let config = bincode::config::standard();
-        bincode::encode_into_std_write(&self.data, &mut wtr, config)?;
+        bincode::encode_into_std_write(&self.0, &mut wtr, config)?;
         Ok(())
     }
 
-    /// Creates a model from a slice.
-    ///
-    /// # Arguments
-    ///
-    /// * `slice` - A data source.
-    ///
-    /// # Returns
-    ///
-    /// A tuple of the model data read from `slice` and the remaining slice.
+    /// Creates a model from a slice and returns a tuple of the model and the remaining slice.
     ///
     /// # Errors
     ///
@@ -106,18 +99,10 @@ impl Model {
         }
         let config = bincode::config::standard();
         let (data, size) = bincode::decode_from_slice(&slice[MODEL_MAGIC.len()..], config)?;
-        Ok((Self { data }, &slice[MODEL_MAGIC.len() + size..]))
+        Ok((Self(data), &slice[MODEL_MAGIC.len() + size..]))
     }
 
     /// Creates a model from a reader.
-    ///
-    /// # Arguments
-    ///
-    /// * `rdr` - A data source.
-    ///
-    /// # Returns
-    ///
-    /// A model data read from `rdr`.
     ///
     /// # Errors
     ///
@@ -133,16 +118,16 @@ impl Model {
             return Err(VaporettoError::invalid_model("model version mismatch"));
         }
         let config = bincode::config::standard();
-        Ok(Self {
-            data: bincode::decode_from_std_read(&mut rdr, config)?,
-        })
+        Ok(Self(bincode::decode_from_std_read(&mut rdr, config)?))
     }
 
+    /// Returns the slice of dictionary words.
     pub fn dictionary(&self) -> &[WordWeightRecord] {
-        self.data.dict_model.dictionary()
+        self.0.dict_model.dictionary()
     }
 
+    /// Replaces the dictionary with the given data.
     pub fn replace_dictionary(&mut self, dict: Vec<WordWeightRecord>) {
-        self.data.dict_model = DictModel::new(dict);
+        self.0.dict_model = DictModel::new(dict);
     }
 }

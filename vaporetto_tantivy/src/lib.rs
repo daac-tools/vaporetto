@@ -51,7 +51,7 @@
 use std::sync::Arc;
 
 use tantivy::tokenizer::{BoxTokenStream, Token, TokenStream, Tokenizer};
-use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
+use vaporetto::{CharacterBoundary, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter, SplitLinebreaksFilter},
     string_filters::KyteaFullwidthFilter,
@@ -125,22 +125,22 @@ impl Tokenizer for VaporettoTokenizer {
 
         // pre filter
         let prefiltered_text = self.prefilter.filter(text);
-        let prefiltered_sentence = Sentence::from_raw(prefiltered_text).unwrap();
+        let mut s = Sentence::from_raw(prefiltered_text).unwrap();
 
         // tokenize
-        let tokenized_sentence = self.predictor.predict(prefiltered_sentence);
+        self.predictor.predict(&mut s);
 
         // post filter
-        let postfiltered_sentence = self
+        self
             .postfilters
             .iter()
-            .fold(tokenized_sentence, |s, filter| filter.filter(s));
+            .for_each(|filter| filter.filter(&mut s));
 
         let mut char_indices = text.char_indices();
         char_indices.next();
-        let mut boundary_pos = Vec::with_capacity(postfiltered_sentence.chars().len());
-        for ((i, _), &b) in char_indices.zip(postfiltered_sentence.boundaries()) {
-            if b == BoundaryType::WordBoundary {
+        let mut boundary_pos = Vec::with_capacity(s.boundaries().len() + 1);
+        for ((i, _), &b) in char_indices.zip(s.boundaries()) {
+            if b == CharacterBoundary::WordBoundary {
                 boundary_pos.push(i);
             }
         }

@@ -64,8 +64,11 @@ struct Args {
 }
 
 fn print_scores(s: &Sentence, out: &mut dyn Write) -> Result<(), Box<dyn std::error::Error>> {
-    for (i, score) in s.boundary_scores().iter().enumerate() {
-        writeln!(out, "{}:{}{} {}", i, s.chars()[i], s.chars()[i + 1], score)?;
+    let mut chars_iter = s.as_raw_text().chars();
+    let mut prev_c = chars_iter.next().unwrap();
+    for (i, (c, score)) in chars_iter.zip(s.boundary_scores()).enumerate() {
+        writeln!(out, "{}:{}{} {}", i, prev_c, c, score)?;
+        prev_c = c;
     }
     writeln!(out)?;
     Ok(())
@@ -92,28 +95,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Start tokenization");
     let start = Instant::now();
-    let stdout = io::stdout();
     let mut out: Box<dyn Write> = if args.buffered_out {
-        Box::new(BufWriter::new(stdout.lock()))
+        Box::new(BufWriter::new(io::stdout().lock()))
     } else {
-        Box::new(stdout.lock())
+        Box::new(io::stdout().lock())
     };
     let mut buf = String::new();
-    let mut s = Sentence::from_raw(" ")?;
+    let mut s = Sentence::default();
     if args.no_norm {
         for line in io::stdin().lock().lines() {
             let line = line?;
             if s.update_raw(line).is_ok() {
-                s = if args.scores {
-                    predictor.predict_with_score(s)
-                } else {
-                    predictor.predict(s)
-                };
-                s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+                predictor.predict(&mut s);
+                post_filters.iter().for_each(|filter| filter.filter(&mut s));
                 if args.predict_tags {
-                    s = predictor.fill_tags(s);
+                    s.fill_tags();
                 }
-                s.write_tokenized_string(&mut buf)?;
+                s.write_tokenized_text(&mut buf);
                 writeln!(out, "{}", buf)?;
                 if args.scores {
                     print_scores(&s, &mut *out)?;
@@ -123,24 +121,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else {
-        let mut s_orig = Sentence::from_raw(" ")?;
+        let mut s_orig = Sentence::default();
         for line in io::stdin().lock().lines() {
             let line = line?;
             let line_preproc = pre_filter.filter(&line);
             if s.update_raw(line_preproc).is_ok() {
-                s = if args.scores {
-                    predictor.predict_with_score(s)
-                } else {
-                    predictor.predict(s)
-                };
-                s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
+                predictor.predict(&mut s);
+                post_filters.iter().for_each(|filter| filter.filter(&mut s));
                 if args.predict_tags {
-                    s = predictor.fill_tags(s);
+                    s.fill_tags();
                 }
                 s_orig.update_raw(line)?;
+                s_orig.reset_tags(s.n_tags());
                 s_orig.boundaries_mut().copy_from_slice(s.boundaries());
                 s_orig.tags_mut().clone_from_slice(s.tags());
-                s_orig.write_tokenized_string(&mut buf)?;
+                s_orig.write_tokenized_text(&mut buf);
                 writeln!(out, "{}", buf)?;
                 if args.scores {
                     print_scores(&s, &mut *out)?;

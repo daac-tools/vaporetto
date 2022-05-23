@@ -16,11 +16,13 @@ f.read_to_end(&mut model_data).unwrap();
 let (model, _) = Model::read_slice(&model_data).unwrap();
 let predictor = Predictor::new(model, false).unwrap();
 
-let s = Sentence::from_raw("火星猫の生態").unwrap();
-let s = predictor.predict(s);
+let mut s = Sentence::from_raw("火星猫の生態").unwrap();
+predictor.predict(&mut s);
 
-println!("{:?}", s.to_tokenized_vec().unwrap());
-// ["火星", "猫", "の", "生態"]
+let mut buf = String::new();
+s.write_tokenized_text(&mut buf);
+println!("{}", buf);
+// "火星 猫 の 生態"
 ```
 
 ## Feature flags
@@ -31,7 +33,6 @@ The following features are disabled by default:
 * `train` - Enables the trainer.
 * `portable-simd` - Uses the [portable SIMD API](https://github.com/rust-lang/portable-simd) instead
   of our SIMD-conscious data layout. (Nightly Rust is required.)
-* `charwise-daachorse` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster prediction, although it can make to load a model file slower.
 
 The following features are enabled by default:
 

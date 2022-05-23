@@ -12,8 +12,8 @@ keywords = ["japanese", "tokenizer", "tantivy"]
 categories = ["text-processing"]
 
 [dependencies]
-vaporetto = { path = "../vaporetto", version = "0.4.0" }  # MIT or Apache-2.0
-vaporetto_rules = { path = "../vaporetto_rules", version = "0.4.0" }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "0.5.0" }  # MIT or Apache-2.0
+vaporetto_rules = { path = "../vaporetto_rules", version = "0.5.0" }  # MIT or Apache-2.0
 tantivy = "0.17"  # MIT
 
 [dev-dependencies]

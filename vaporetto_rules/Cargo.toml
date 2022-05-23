@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_rules"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Rule-base filters for Vaporetto"
@@ -10,7 +10,11 @@ repository = "https://github.com/daac-tools/vaporetto"
 readme = "README.md"
 keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
+resolver = "2"
 
 [dependencies]
 unicode-segmentation = "1.9.0"  # MIT or Apache-2.0
-vaporetto = { path = "../vaporetto", version = "0.4.0", default-features = false }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "0.5.0", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
+
+[dev-dependencies]
+vaporetto = { path = "../vaporetto", version = "0.5.0" }  # MIT or Apache-2.0

@@ -19,31 +19,31 @@ use vaporetto_rules::{
 
 let mut f = BufReader::new(File::open("model.bin").unwrap());
 let model = Model::read(&mut f).unwrap();
-let mut predictor = Predictor::new(model).unwrap();
+let mut predictor = Predictor::new(model, false).unwrap();
 
-let pre_filters: Vec<Box<dyn StringFilter>> = vec![
-    Box::new(KyteaFullwidthFilter::new()),
+let pre_filters: Vec<Box<dyn StringFilter<String>>> = vec![
+    Box::new(KyteaFullwidthFilter),
 ];
 let post_filters: Vec<Box<dyn SentenceFilter>> = vec![
-    Box::new(ConcatGraphemeClustersFilter::new()),
+    Box::new(ConcatGraphemeClustersFilter),
     Box::new(KyteaWsConstFilter::new(CharacterType::Digit)),
 ];
 
 let input = "Vaporettoは仲良し家族👨‍👨‍👧‍👦を離れ離れにさせません。"
     .to_string();
 
-let input = Rc::new(input);
-let preproc_input = pre_filters.iter().fold(input, |s, filter| Rc::new(filter.filter(&s)));
-let preproc_input = Rc::try_unwrap(preproc_input).unwrap();
+let preproc_input = pre_filters.iter().fold(input, |s, filter| filter.filter(s));
 
-let sentence = Sentence::from_raw(preproc_input).unwrap();
-let sentence = predictor.predict(sentence);
+let mut sentence = Sentence::from_raw(preproc_input).unwrap();
+predictor.predict(&mut sentence);
 
-let postproc_result = post_filters.iter().fold(sentence, |s, filter| filter.filter(s));
+post_filters.iter().for_each(|filter| filter.filter(&mut sentence));
 
+let mut buf = String::new();
+sentence.write_tokenized_text(&mut buf);
 assert_eq!(
     "Ｖａｐｏｒｅｔｔｏ は 仲良 し 家族 👨‍👨‍👧‍👦 を 離れ離れ に さ せ ま せ ん 。",
-    postproc_result.to_tokenized_string().unwrap(),
+    buf,
 );
 ```
 

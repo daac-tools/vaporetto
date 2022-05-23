@@ -12,7 +12,6 @@ pub type Result<T, E = VaporettoError> = core::result::Result<T, E>;
 #[derive(Debug)]
 pub enum VaporettoError {
     InvalidModel(InvalidModelError),
-    InvalidSentence(InvalidSentenceError),
     InvalidArgument(InvalidArgumentError),
     UTF8Error(alloc::string::FromUtf8Error),
     CastError(core::num::TryFromIntError),
@@ -31,13 +30,6 @@ impl VaporettoError {
         Self::InvalidModel(InvalidModelError { msg: msg.into() })
     }
 
-    pub(crate) fn invalid_sentence<S>(msg: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self::InvalidSentence(InvalidSentenceError { msg: msg.into() })
-    }
-
     pub(crate) fn invalid_argument<S>(arg: &'static str, msg: S) -> Self
     where
         S: Into<String>,
@@ -53,7 +45,6 @@ impl fmt::Display for VaporettoError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidModel(e) => e.fmt(f),
-            Self::InvalidSentence(e) => e.fmt(f),
             Self::InvalidArgument(e) => e.fmt(f),
             Self::UTF8Error(e) => e.fmt(f),
             Self::CastError(e) => e.fmt(f),
@@ -84,22 +75,6 @@ impl fmt::Display for InvalidModelError {
 
 #[cfg(feature = "std")]
 impl Error for InvalidModelError {}
-
-/// Error used when the sentence is invalid.
-#[derive(Debug)]
-pub struct InvalidSentenceError {
-    /// Error message.
-    pub(crate) msg: String,
-}
-
-impl fmt::Display for InvalidSentenceError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "InvalidSentenceError: {}", self.msg)
-    }
-}
-
-#[cfg(feature = "std")]
-impl Error for InvalidSentenceError {}
 
 /// Error used when the argument is invalid.
 #[derive(Debug)]
