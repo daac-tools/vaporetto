@@ -131,8 +131,7 @@ impl Tokenizer for VaporettoTokenizer {
         self.predictor.predict(&mut s);
 
         // post filter
-        self
-            .postfilters
+        self.postfilters
             .iter()
             .for_each(|filter| filter.filter(&mut s));
 

@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ref_tags = vec![];
         for i in 0..ref_boundaries.len() + 1 {
             ref_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
-        };
+        }
         if !args.no_norm {
             let new_line = fullwidth_filter.filter(s.as_raw_text());
             s = Sentence::from_raw(new_line)?
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut sys_tags = vec![];
         for i in 0..sys_boundaries.len() + 1 {
             sys_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
-        };
+        }
         results.push((ref_boundaries, ref_tags, sys_boundaries, sys_tags));
     }
 
@@ -167,7 +167,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut n_cor = 0;
             for (refs_b, refs_t, syss_b, syss_t) in results {
                 let mut matched = true;
-                for (((r_b, r_t), s_b), s_t) in refs_b.iter().zip(&refs_t).zip(&syss_b).zip(&syss_t) {
+                for (((r_b, r_t), s_b), s_t) in refs_b.iter().zip(&refs_t).zip(&syss_b).zip(&syss_t)
+                {
                     if r_b == s_b {
                         if *s_b == CharacterBoundary::WordBoundary {
                             if matched && r_t == s_t {

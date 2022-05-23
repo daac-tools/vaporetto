@@ -152,18 +152,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
-            eprint!(
-                "# of features: {}\r",
-                trainer.n_features(),
-            );
+            eprint!("# of features: {}\r", trainer.n_features(),);
             stderr().flush()?;
         }
         trainer.add_example(s);
     }
-    eprintln!(
-        "# of features: {}",
-        trainer.n_features(),
-    );
+    eprintln!("# of features: {}", trainer.n_features(),);
 
     eprintln!("Start training...");
     let model = trainer.train(args.eps, args.cost, args.solver)?;
