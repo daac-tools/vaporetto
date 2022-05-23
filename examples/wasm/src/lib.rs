@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
 use js_sys::{Array, Object};
-use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
+use vaporetto::{CharacterBoundary, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
@@ -61,22 +61,19 @@ impl Vaporetto {
             return result.into();
         };
         let norm = self.fullwidth_filter.filter(text);
-        let s_norm = if let Ok(s) = Sentence::from_raw(norm) {
+        let mut s_norm = if let Ok(s) = Sentence::from_raw(norm) {
             s
         } else {
             return result.into();
         };
-        let s_norm = self.predictor.predict(s_norm);
+        self.predictor.predict(&mut s_norm);
         s.boundaries_mut().clone_from_slice(s_norm.boundaries());
-        let s = self
-            .post_filters
+        self.post_filters
             .iter()
-            .fold(s, |s, filter| filter.filter(s));
+            .for_each(|filter| filter.filter(&mut s));
 
-        if let Ok(tokens) = s.to_tokenized_vec() {
-            for token in tokens {
-                result.push(&JsValue::from_str(token.surface));
-            }
+        for token in s.iter_tokens() {
+            result.push(&JsValue::from_str(token.surface()));
         }
         result.into()
     }
@@ -85,41 +82,19 @@ impl Vaporetto {
     pub fn predict(&self, text: &str) -> Object {
         let result = Array::new();
         let text = self.fullwidth_filter.filter(text);
-        let s = if let Ok(s) = Sentence::from_raw(text) {
+        let mut s = if let Ok(s) = Sentence::from_raw(text) {
             s
         } else {
             return result.into();
         };
-        let s = self.predictor.predict(s);
-        let s = self
-            .post_filters
+        self.predictor.predict(&mut s);
+        self.post_filters
             .iter()
-            .fold(s, |s, filter| filter.filter(s));
-
-        for &b in s.boundaries() {
-            result.push(&JsValue::from_bool(b == BoundaryType::WordBoundary));
-        }
-        result.into()
-    }
-
-    #[wasm_bindgen]
-    pub fn predict_with_score(&self, text: &str) -> Object {
-        let result = Array::new();
-        let text = self.fullwidth_filter.filter(text);
-        let s = if let Ok(s) = Sentence::from_raw(text) {
-            s
-        } else {
-            return result.into();
-        };
-        let s = self.predictor.predict_with_score(s);
-        let s = self
-            .post_filters
-            .iter()
-            .fold(s, |s, filter| filter.filter(s));
+            .for_each(|filter| filter.filter(&mut s));
 
         for (&score, &b) in s.boundary_scores().iter().zip(s.boundaries()) {
             let boundary = Array::new();
-            boundary.push(&(b == BoundaryType::WordBoundary).into());
+            boundary.push(&(b == CharacterBoundary::WordBoundary).into());
             boundary.push(&score.into());
             result.push(&boundary);
         }

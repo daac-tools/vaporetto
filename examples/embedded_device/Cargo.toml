@@ -15,7 +15,7 @@ vaporetto_rules = { path = "../../vaporetto_rules" }
 alloc-cortex-m = "0.4.0"
 
 [build-dependencies]
-vaporetto = { path = "../../vaporetto", default-features = false }
+vaporetto = { path = "../../vaporetto", default-features = false, features = ["alloc"] }
 ruzstd = "0.2.4"  # MIT
 
 [profile.release]
