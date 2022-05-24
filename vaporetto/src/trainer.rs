@@ -167,6 +167,7 @@ impl<'a> BoundaryFeature<'a> {
 /// let mut f = BufWriter::new(File::create("model.bin").unwrap());
 /// model.write(&mut f).unwrap();
 /// ```
+#[cfg_attr(docsrs, doc(cfg(feature = "train")))]
 pub struct Trainer<'a> {
     char_window_size: u8,
     char_ngram_size: u8,

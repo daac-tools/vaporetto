@@ -39,13 +39,14 @@ extern crate alloc;
 
 mod char_scorer;
 mod dict_model;
-mod errors;
 mod model;
 mod ngram_model;
 mod predictor;
 mod sentence;
 mod type_scorer;
 mod utils;
+
+pub mod errors;
 
 #[cfg(feature = "train")]
 mod tag_trainer;
@@ -58,7 +59,7 @@ mod kytea_model;
 pub use dict_model::WordWeightRecord;
 pub use model::Model;
 pub use predictor::Predictor;
-pub use sentence::{CharacterBoundary, CharacterType, Sentence};
+pub use sentence::{CharacterBoundary, CharacterType, Sentence, Token, TokenIterator};
 
 #[cfg(feature = "train")]
 pub use trainer::{SolverType, Trainer};

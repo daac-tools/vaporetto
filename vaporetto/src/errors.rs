@@ -7,18 +7,33 @@ use alloc::string::String;
 #[cfg(feature = "std")]
 use std::error::Error;
 
+/// A specialized Result type for Vaporetto.
 pub type Result<T, E = VaporettoError> = core::result::Result<T, E>;
 
+/// The error type for Vaporetto.
 #[derive(Debug)]
 pub enum VaporettoError {
+    /// The error variant for [`InvalidModelError`].
     InvalidModel(InvalidModelError),
+
+    /// The error variant for [`InvalidArgumentError`].
     InvalidArgument(InvalidArgumentError),
+
+    /// The error variant for [`FromUtf8Error`](alloc::string::FromUtf8Error).
     UTF8Error(alloc::string::FromUtf8Error),
+
+    /// The error variant for [`TryFromIntError`](core::num::TryFromIntError).
     CastError(core::num::TryFromIntError),
+
+    /// The error variant for [`DecodeError`](bincode::error::DecodeError).
     DecodeError(bincode::error::DecodeError),
+
+    /// The error variant for [`EncodeError`](bincode::error::EncodeError).
     EncodeError(bincode::error::EncodeError),
 
+    /// The error variant for [`std::io::Error`].
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     IOError(std::io::Error),
 }
 

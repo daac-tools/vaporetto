@@ -881,6 +881,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// If you want to predict tags, call this function after calling [`Predictor::predict()`] and
     /// word boundaries are fixed.
     #[cfg(feature = "tag-prediction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     #[inline]
     pub fn fill_tags(&mut self) {
         if let Some(p) = self.predictor.as_ref() {
@@ -920,6 +921,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     }
 }
 
+/// A Token information.
 #[derive(Clone, Copy)]
 pub struct Token<'a, 'b> {
     sentence: &'a Sentence<'a, 'b>,
@@ -928,11 +930,13 @@ pub struct Token<'a, 'b> {
 }
 
 impl<'a, 'b> Token<'a, 'b> {
+    /// Returns the surface of this token.
     #[inline]
     pub fn surface(&self) -> &'a str {
         self.sentence.text_substring(self.start, self.end)
     }
 
+    /// Returns tags of this token.
     #[inline]
     pub fn tags(&self) -> &'a [Option<Cow<'b, str>>] {
         let start = (self.end - 1) * self.sentence.n_tags();
@@ -940,17 +944,20 @@ impl<'a, 'b> Token<'a, 'b> {
         &self.sentence.tags[start..end]
     }
 
+    /// Returns the start position of this token.
     #[inline]
     pub const fn start(&self) -> usize {
         self.start
     }
 
+    /// Returns the end position of this token.
     #[inline]
     pub const fn end(&self) -> usize {
         self.end
     }
 }
 
+/// Iterator returned by [`Sentence::iter_tokens()`].
 pub struct TokenIterator<'a, 'b> {
     token: Token<'a, 'b>,
 }
