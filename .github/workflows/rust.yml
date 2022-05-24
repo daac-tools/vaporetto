@@ -129,7 +129,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --no-default-features
+          args: --release -p vaporetto --no-default-features --features alloc
 
       - name: Run cargo test (vaporetto / all-features)
         uses: actions-rs/cargo@v1
