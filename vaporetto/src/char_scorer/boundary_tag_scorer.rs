@@ -7,10 +7,10 @@ use bincode::{
     error::{DecodeError, EncodeError},
     BorrowDecode, Decode, Encode,
 };
-#[cfg(not(feature = "charwise-pma"))]
-use daachorse::DoubleArrayAhoCorasick;
 #[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
+#[cfg(not(feature = "charwise-pma"))]
+use daachorse::DoubleArrayAhoCorasick;
 use hashbrown::HashMap;
 
 use crate::char_scorer::CharWeightMerger;
@@ -138,7 +138,9 @@ impl CharScorerBoundaryTag {
         sentence.char_pma_states.clear();
         sentence.char_pma_states.resize(sentence.len(), u32::MAX);
         #[cfg(not(feature = "charwise-pma"))]
-        let it = self.pma.find_overlapping_no_suffix_iter(sentence.text.as_bytes());
+        let it = self
+            .pma
+            .find_overlapping_no_suffix_iter(sentence.text.as_bytes());
         #[cfg(feature = "charwise-pma")]
         let it = self.pma.find_overlapping_no_suffix_iter(&sentence.text);
         for m in it {

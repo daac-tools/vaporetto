@@ -5,10 +5,10 @@ use bincode::{
     de::BorrowDecoder, enc::Encoder, error::DecodeError, error::EncodeError, BorrowDecode, Decode,
     Encode,
 };
-#[cfg(not(feature = "charwise-pma"))]
-use daachorse::DoubleArrayAhoCorasick;
 #[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
+#[cfg(not(feature = "charwise-pma"))]
+use daachorse::DoubleArrayAhoCorasick;
 
 use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
@@ -93,7 +93,9 @@ impl CharScorerBoundary {
     pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
         sentence.char_pma_states.clear();
         #[cfg(not(feature = "charwise-pma"))]
-        let it = self.pma.find_overlapping_no_suffix_iter(sentence.text.as_bytes());
+        let it = self
+            .pma
+            .find_overlapping_no_suffix_iter(sentence.text.as_bytes());
         #[cfg(feature = "charwise-pma")]
         let it = self.pma.find_overlapping_no_suffix_iter(&sentence.text);
         for m in it {
