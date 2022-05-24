@@ -249,7 +249,8 @@ impl<'a> Trainer<'a> {
                 {
                     features.push(BoundaryFeature::char_ngram(
                         sentence.text_substring(j, j + usize::from(n) + 1),
-                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1).unwrap(),
+                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1)
+                            .unwrap(),
                     ));
                 }
             }
@@ -262,7 +263,8 @@ impl<'a> Trainer<'a> {
                 {
                     features.push(BoundaryFeature::type_ngram(
                         &sentence.char_types()[j..j + usize::from(n) + 1],
-                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1).unwrap(),
+                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1)
+                            .unwrap(),
                     ));
                 }
             }
@@ -384,7 +386,9 @@ impl<'a> Trainer<'a> {
                 }) => {
                     let len = ngram.chars().count();
                     let pos = usize::try_from(
-                        isize::from(self.char_window_size) - isize::try_from(len)? - isize::from(rel_position),
+                        isize::from(self.char_window_size)
+                            - isize::try_from(len)?
+                            - isize::from(rel_position),
                     )
                     .unwrap();
                     if let Some(weights) = char_ngram_weights.get_mut(ngram) {
@@ -401,7 +405,9 @@ impl<'a> Trainer<'a> {
                 }) => {
                     let len = ngram.len();
                     let pos = usize::try_from(
-                        isize::from(self.char_window_size) - isize::try_from(len)? - isize::from(rel_position),
+                        isize::from(self.char_window_size)
+                            - isize::try_from(len)?
+                            - isize::from(rel_position),
                     )
                     .unwrap();
                     if let Some(weights) = type_ngram_weights.get_mut(ngram) {
