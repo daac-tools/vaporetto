@@ -68,7 +68,7 @@ impl CharacterType {
 }
 
 /// Boundary type.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum CharacterBoundary {
     /// Inner of a word.
