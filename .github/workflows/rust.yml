@@ -171,7 +171,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --no-default-features --features charwise-daachorse
+          args: --release -p vaporetto --no-default-features --features charwise-pma
 
       - name: Run cargo test (vaporetto / features std)
         uses: actions-rs/cargo@v1
