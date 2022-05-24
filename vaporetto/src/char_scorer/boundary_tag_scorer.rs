@@ -7,6 +7,9 @@ use bincode::{
     error::{DecodeError, EncodeError},
     BorrowDecode, Decode, Encode,
 };
+#[cfg(not(feature = "charwise-pma"))]
+use daachorse::DoubleArrayAhoCorasick;
+#[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 use hashbrown::HashMap;
 
@@ -19,6 +22,9 @@ use crate::sentence::Sentence;
 use crate::utils::SplitMix64Builder;
 
 pub struct CharScorerBoundaryTag {
+    #[cfg(not(feature = "charwise-pma"))]
+    pma: DoubleArrayAhoCorasick,
+    #[cfg(feature = "charwise-pma")]
     pma: CharwiseDoubleArrayAhoCorasick,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
     tag_weight: Vec<Vec<HashMap<u32, WeightVector, SplitMix64Builder>>>,
@@ -29,6 +35,10 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+        #[cfg(not(feature = "charwise-pma"))]
+        let (pma, _) =
+            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        #[cfg(feature = "charwise-pma")]
         let (pma, _) =
             unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
         let tag_weight: Vec<Vec<Vec<(u32, WeightVector)>>> = Decode::decode(decoder)?;
@@ -108,6 +118,10 @@ impl CharScorerBoundaryTag {
                     .insert(u32::try_from(i).unwrap(), weight.into());
             }
         }
+        #[cfg(not(feature = "charwise-pma"))]
+        let pma = DoubleArrayAhoCorasick::new(ngrams)
+            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
+        #[cfg(feature = "charwise-pma")]
         let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self {
@@ -123,7 +137,11 @@ impl CharScorerBoundaryTag {
     pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
         sentence.char_pma_states.clear();
         sentence.char_pma_states.resize(sentence.len(), u32::MAX);
-        for m in self.pma.find_overlapping_no_suffix_iter(&sentence.text) {
+        #[cfg(not(feature = "charwise-pma"))]
+        let it = self.pma.find_overlapping_no_suffix_iter(sentence.text.as_bytes());
+        #[cfg(feature = "charwise-pma")]
+        let it = self.pma.find_overlapping_no_suffix_iter(&sentence.text);
+        for m in it {
             let end = unsafe { *sentence.str_to_char_pos().get_unchecked(m.end()) };
             if let Some(weight) = unsafe { self.weights.get_unchecked(m.value()).as_ref() } {
                 weight.add_score(

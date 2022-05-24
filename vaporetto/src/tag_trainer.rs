@@ -20,14 +20,14 @@ enum TagFeature<'a> {
 }
 
 impl<'a> TagFeature<'a> {
-    pub const fn char_ngram(ngram: &'a str, rel_position: u8) -> Self {
+    pub const fn char_ngram(ngram: &'a str, rel_position: isize) -> Self {
         Self::CharacterNgram(NgramFeature {
             ngram,
             rel_position,
         })
     }
 
-    pub const fn type_ngram(ngram: &'a [u8], rel_position: u8) -> Self {
+    pub const fn type_ngram(ngram: &'a [u8], rel_position: isize) -> Self {
         Self::CharacterTypeNgram(NgramFeature {
             ngram,
             rel_position,
@@ -67,6 +67,9 @@ impl<'a> TagTrainer<'a> {
 
     pub fn add_example<'b>(&mut self, sentence: &'a Sentence<'a, 'b>) {
         for token in sentence.iter_tokens() {
+            if token.tags().is_empty() {
+                continue;
+            }
             let mut features = vec![];
             let token_len = token.end() - token.start();
             for n in 0..usize::from(self.char_ngram_size) {
@@ -76,7 +79,7 @@ impl<'a> TagTrainer<'a> {
                 {
                     features.push(TagFeature::char_ngram(
                         sentence.text_substring(i, i + ngram_len),
-                        u8::try_from(i + ngram_len - token.end()).unwrap(),
+                        isize::try_from(i + ngram_len - token.end()).unwrap(),
                     ));
                 }
             }
@@ -87,7 +90,7 @@ impl<'a> TagTrainer<'a> {
                 {
                     features.push(TagFeature::type_ngram(
                         &sentence.char_types()[i..i + ngram_len],
-                        u8::try_from(i + ngram_len - token.end()).unwrap(),
+                        isize::try_from(i + ngram_len - token.end()).unwrap(),
                     ));
                 }
             }
@@ -224,7 +227,7 @@ impl<'a> TagTrainer<'a> {
                                 continue;
                             }
                             char_ngram_weights
-                                .entry((*ngram, *rel_position))
+                                .entry((*ngram, u8::try_from(*rel_position).unwrap()))
                                 .or_insert_with(|| vec![0; n_class])
                                 [class_offset + usize::try_from(cls).unwrap()] = weight;
                         }
@@ -245,7 +248,7 @@ impl<'a> TagTrainer<'a> {
                                 continue;
                             }
                             type_ngram_weights
-                                .entry((*ngram, *rel_position))
+                                .entry((*ngram, u8::try_from(*rel_position).unwrap()))
                                 .or_insert_with(|| vec![0; n_class])
                                 [class_offset + usize::try_from(cls).unwrap()] = weight;
                         }

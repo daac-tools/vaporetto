@@ -81,7 +81,7 @@ impl From<SolverType> for liblinear::SolverType {
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct NgramFeature<T> {
     pub ngram: T,
-    pub rel_position: u8,
+    pub rel_position: isize,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
@@ -105,14 +105,14 @@ enum BoundaryFeature<'a> {
 }
 
 impl<'a> BoundaryFeature<'a> {
-    pub const fn char_ngram(ngram: &'a str, rel_position: u8) -> Self {
+    pub const fn char_ngram(ngram: &'a str, rel_position: isize) -> Self {
         Self::CharacterNgram(NgramFeature {
             ngram,
             rel_position,
         })
     }
 
-    pub const fn type_ngram(ngram: &'a [u8], rel_position: u8) -> Self {
+    pub const fn type_ngram(ngram: &'a [u8], rel_position: isize) -> Self {
         Self::CharacterTypeNgram(NgramFeature {
             ngram,
             rel_position,
@@ -249,8 +249,7 @@ impl<'a> Trainer<'a> {
                 {
                     features.push(BoundaryFeature::char_ngram(
                         sentence.text_substring(j, j + usize::from(n) + 1),
-                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1)
-                            .unwrap(),
+                        isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1,
                     ));
                 }
             }
@@ -263,8 +262,7 @@ impl<'a> Trainer<'a> {
                 {
                     features.push(BoundaryFeature::type_ngram(
                         &sentence.char_types()[j..j + usize::from(n) + 1],
-                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1)
-                            .unwrap(),
+                        isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1,
                     ));
                 }
             }

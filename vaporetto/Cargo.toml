@@ -14,8 +14,8 @@ categories = ["text-processing", "no-std"]
 [dependencies]
 bincode = { version = "2.0.0-rc.1", default-features = false, features = ["derive"] }  # MIT
 daachorse = { version = "0.4.1", default-features = false }  # MIT or Apache-2.0
-hashbrown = "0.12.1"  # MIT or Apache-2.0
 
+hashbrown = { version = "0.12.1", optional = true }  # MIT or Apache-2.0
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
@@ -26,7 +26,7 @@ alloc = ["bincode/alloc"]
 std = ["bincode/std"]
 cache-type-score = []
 fix-weight-length = []
-tag-prediction = ["bincode/atomic"]
+tag-prediction = ["bincode/atomic", "hashbrown"]
 
 kytea = ["std"]
 train = ["std", "liblinear"]
