@@ -186,15 +186,15 @@ Now `外国人参政権` is split into correct tokens.
 9:交代 -7658
 ```
 
-### POS tagging
+### Tagging
 
-Vaporetto experimentally supports POS tagging.
+Vaporetto experimentally supports tagging (e.g., part-of-speech tagging).
 
-To train tags, add a slash and tag name following each token in the dataset as follows:
+To train tags, add slashes and tags following each token in the dataset as follows:
 
 * For fully annotated corpora
   ```
-  この/連体詞 人/名詞 は/助詞 火星/名詞 人/接尾辞 です/助動詞
+  この/連体詞/コノ 人/名詞/ヒト は/助詞/ワ 火星/名詞/カセイ 人/接尾辞/ジン です/助動詞/デス
   ```
 
 * For partially annotated corpora
