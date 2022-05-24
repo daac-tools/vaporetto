@@ -19,7 +19,7 @@ fn main() {
     let mut buff = vec![];
     decoder.read_to_end(&mut buff).unwrap();
     let (model, _) = Model::read_slice(&buff).unwrap();
-    let predictor = Predictor::new(model).unwrap();
+    let predictor = Predictor::new(model, false).unwrap();
     let mut buf = BufWriter::new(File::create(out.join("predictor.bin")).unwrap());
     let model_data = predictor.serialize_to_vec().unwrap();
     buf.write_all(&model_data).unwrap();
