@@ -24,10 +24,10 @@ default = ["std", "cache-type-score", "fix-weight-length", "tag-prediction", "ch
 # default: on
 alloc = ["bincode/alloc"]
 std = ["alloc", "bincode/std"]
-cache-type-score = []
-fix-weight-length = []
-tag-prediction = ["bincode/atomic", "hashbrown"]
-charwise-pma = []
+cache-type-score = ["alloc"]
+fix-weight-length = ["alloc"]
+tag-prediction = ["alloc", "bincode/atomic", "hashbrown"]
+charwise-pma = ["alloc"]
 
 kytea = ["std"]
 train = ["std", "liblinear"]

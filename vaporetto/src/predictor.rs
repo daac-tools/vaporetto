@@ -368,10 +368,7 @@ impl Predictor {
     /// # Errors
     ///
     /// Returns an error variant when the model is invalid.
-    pub fn new(
-        model: Model,
-        #[cfg(feature = "tag-prediction")] predict_tags: bool,
-    ) -> Result<Self> {
+    pub fn new(model: Model, predict_tags: bool) -> Result<Self> {
         #[cfg(feature = "tag-prediction")]
         let mut tag_predictor = HashMap::new();
         #[cfg(feature = "tag-prediction")]
@@ -381,6 +378,10 @@ impl Predictor {
         #[cfg(feature = "tag-prediction")]
         let mut n_tags = 0;
 
+        #[cfg(not(feature = "tag-prediction"))]
+        if predict_tags {
+            panic!("tag prediction is unsupported");
+        }
         #[cfg(feature = "tag-prediction")]
         if predict_tags {
             for (i, tag_model) in model.0.tag_models.into_iter().enumerate() {
@@ -698,12 +699,7 @@ mod tests {
     #[test]
     fn test_predict_boundaries() {
         let model = create_test_model();
-        let predictor = Predictor::new(
-            model,
-            #[cfg(feature = "tag-prediction")]
-            false,
-        )
-        .unwrap();
+        let predictor = Predictor::new(model, false).unwrap();
         let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
         predictor.predict(&mut sentence);
         assert_eq!(&[-22, 54, 58, 43, -54, 68, 48], sentence.boundary_scores(),);
