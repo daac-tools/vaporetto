@@ -20,14 +20,14 @@ enum TagFeature<'a> {
 }
 
 impl<'a> TagFeature<'a> {
-    pub fn char_ngram(ngram: &'a str, rel_position: isize) -> Self {
+    pub const fn char_ngram(ngram: &'a str, rel_position: u8) -> Self {
         Self::CharacterNgram(NgramFeature {
             ngram,
             rel_position,
         })
     }
 
-    pub fn type_ngram(ngram: &'a [u8], rel_position: isize) -> Self {
+    pub const fn type_ngram(ngram: &'a [u8], rel_position: u8) -> Self {
         Self::CharacterTypeNgram(NgramFeature {
             ngram,
             rel_position,
@@ -76,7 +76,7 @@ impl<'a> TagTrainer<'a> {
                 {
                     features.push(TagFeature::char_ngram(
                         sentence.text_substring(i, i + ngram_len),
-                        isize::try_from(i + ngram_len - token.end()).unwrap(),
+                        u8::try_from(i + ngram_len - token.end()).unwrap(),
                     ));
                 }
             }
@@ -87,13 +87,13 @@ impl<'a> TagTrainer<'a> {
                 {
                     features.push(TagFeature::type_ngram(
                         &sentence.char_types()[i..i + ngram_len],
-                        isize::try_from(i + ngram_len - token.end()).unwrap(),
+                        u8::try_from(i + ngram_len - token.end()).unwrap(),
                     ));
                 }
             }
             self.examples
                 .entry(token.surface())
-                .or_insert_with(|| vec![])
+                .or_insert_with(Vec::new)
                 .push(TagExample {
                     tags: token.tags(),
                     features,
@@ -101,6 +101,7 @@ impl<'a> TagTrainer<'a> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn gen_feature_vecs<'b>(
         examples: &'b [TagExample<'a>],
         idx: usize,
@@ -190,7 +191,7 @@ impl<'a> TagTrainer<'a> {
             // Calculates the quantize multiplier
             let mut weight_max = 1e-6f64;
             for i in 0..i32::try_from(tag_ids.len()).unwrap() {
-                let bias = model.label_bias(i32::try_from(i).unwrap()).abs();
+                let bias = model.label_bias(i).abs();
                 weight_max = weight_max.max(bias);
                 for fid in 0..model.num_features() {
                     let weight = model.feature_coefficient(i32::try_from(fid + 1)?, i).abs();
@@ -258,15 +259,15 @@ impl<'a> TagTrainer<'a> {
         for ((ngram, rel_position), weight) in char_ngram_weights {
             char_ngram_model
                 .entry(ngram.to_string())
-                .or_insert_with(|| vec![])
-                .push((rel_position as u8, weight));
+                .or_insert_with(Vec::new)
+                .push((rel_position, weight));
         }
         let mut type_ngram_model = BTreeMap::new();
         for ((ngram, rel_position), weight) in type_ngram_weights {
             type_ngram_model
                 .entry(ngram.to_vec())
-                .or_insert_with(|| vec![])
-                .push((rel_position as u8, weight));
+                .or_insert_with(Vec::new)
+                .push((rel_position, weight));
         }
         Ok(TagModel {
             token: token.to_string(),

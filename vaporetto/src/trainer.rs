@@ -81,7 +81,7 @@ impl From<SolverType> for liblinear::SolverType {
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct NgramFeature<T> {
     pub ngram: T,
-    pub rel_position: isize,
+    pub rel_position: u8,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
@@ -105,35 +105,35 @@ enum BoundaryFeature<'a> {
 }
 
 impl<'a> BoundaryFeature<'a> {
-    pub fn char_ngram(ngram: &'a str, rel_position: isize) -> Self {
+    pub const fn char_ngram(ngram: &'a str, rel_position: u8) -> Self {
         Self::CharacterNgram(NgramFeature {
             ngram,
             rel_position,
         })
     }
 
-    pub fn type_ngram(ngram: &'a [u8], rel_position: isize) -> Self {
+    pub const fn type_ngram(ngram: &'a [u8], rel_position: u8) -> Self {
         Self::CharacterTypeNgram(NgramFeature {
             ngram,
             rel_position,
         })
     }
 
-    pub fn dict_word_left(length: usize) -> Self {
+    pub const fn dict_word_left(length: usize) -> Self {
         Self::DictionaryWord(DictionaryWordFeature {
             length,
             position: DictionaryWordPosition::Left,
         })
     }
 
-    pub fn dict_word_inside(length: usize) -> Self {
+    pub const fn dict_word_inside(length: usize) -> Self {
         Self::DictionaryWord(DictionaryWordFeature {
             length,
             position: DictionaryWordPosition::Inside,
         })
     }
 
-    pub fn dict_word_right(length: usize) -> Self {
+    pub const fn dict_word_right(length: usize) -> Self {
         Self::DictionaryWord(DictionaryWordFeature {
             length,
             position: DictionaryWordPosition::Right,
@@ -249,7 +249,7 @@ impl<'a> Trainer<'a> {
                 {
                     features.push(BoundaryFeature::char_ngram(
                         sentence.text_substring(j, j + usize::from(n) + 1),
-                        isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1,
+                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1).unwrap(),
                     ));
                 }
             }
@@ -262,7 +262,7 @@ impl<'a> Trainer<'a> {
                 {
                     features.push(BoundaryFeature::type_ngram(
                         &sentence.char_types()[j..j + usize::from(n) + 1],
-                        isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1,
+                        u8::try_from(isize::try_from(j).unwrap() - isize::try_from(i).unwrap() - 1).unwrap(),
                     ));
                 }
             }
@@ -306,7 +306,7 @@ impl<'a> Trainer<'a> {
                 *feature_vector.entry(feature_id).or_insert(0f64) += 1f64;
             }
             self.xs.push(feature_vector.into_iter().collect());
-            self.ys.push(b as u8 as f64);
+            self.ys.push(f64::from(b as u8));
         }
 
         self.tag_trainer.add_example(sentence);
@@ -384,7 +384,7 @@ impl<'a> Trainer<'a> {
                 }) => {
                     let len = ngram.chars().count();
                     let pos = usize::try_from(
-                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position,
+                        isize::from(self.char_window_size) - isize::try_from(len)? - isize::from(rel_position),
                     )
                     .unwrap();
                     if let Some(weights) = char_ngram_weights.get_mut(ngram) {
@@ -401,7 +401,7 @@ impl<'a> Trainer<'a> {
                 }) => {
                     let len = ngram.len();
                     let pos = usize::try_from(
-                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position,
+                        isize::from(self.char_window_size) - isize::try_from(len)? - isize::from(rel_position),
                     )
                     .unwrap();
                     if let Some(weights) = type_ngram_weights.get_mut(ngram) {

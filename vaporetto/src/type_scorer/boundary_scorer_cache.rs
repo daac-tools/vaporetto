@@ -83,7 +83,7 @@ impl TypeScorerBoundaryCache {
 
     fn seqid_to_seq(mut seqid: usize, sequence: &mut [u8]) -> bool {
         for type_id in sequence.iter_mut().rev() {
-            *type_id = (seqid & ALPHABET_MASK) as u8;
+            *type_id = u8::try_from(seqid & ALPHABET_MASK).unwrap();
             if usize::from(*type_id) == ALPHABET_MASK {
                 return false; // invalid
             }

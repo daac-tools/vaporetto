@@ -883,7 +883,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
     #[cfg(feature = "tag-prediction")]
     #[inline]
     pub fn fill_tags(&mut self) {
-        self.predictor.map(|p| p.predict_tags(self));
+        if let Some(p) = self.predictor.as_ref() {
+            p.predict_tags(self);
+        }
     }
 
     /// Returns the maximum number of tags.

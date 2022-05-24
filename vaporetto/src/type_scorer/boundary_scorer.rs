@@ -60,6 +60,7 @@ impl TypeScorerBoundary {
         Ok(Self { pma, weights })
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
     pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
         sentence.type_pma_states.clear();

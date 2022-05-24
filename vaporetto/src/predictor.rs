@@ -12,6 +12,7 @@ use alloc::string::String;
 
 use bincode::{
     de::BorrowDecoder,
+    de::Decoder,
     enc::Encoder,
     error::{DecodeError, EncodeError},
     BorrowDecode, Decode, Encode,
@@ -33,12 +34,45 @@ pub type I32Simd = [i32; WEIGHT_FIXED_LEN];
 #[cfg(all(feature = "fix-weight-length", feature = "portable-simd"))]
 pub type I32Simd = Simd<i32, WEIGHT_FIXED_LEN>;
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug)]
 pub enum WeightVector {
     Variable(Vec<i32>),
 
     #[cfg(feature = "fix-weight-length")]
     Fixed(I32Simd),
+}
+
+impl Decode for WeightVector {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let weight: Vec<i32> = Decode::decode(decoder)?;
+        Ok(Self::from(weight))
+    }
+}
+
+impl Encode for WeightVector {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        match self {
+            WeightVector::Variable(w) => {
+                Encode::encode(&w, encoder)?;
+            }
+
+            #[cfg(feature = "fix-weight-length")]
+            WeightVector::Fixed(w) => {
+                #[cfg(feature = "portable-simd")]
+                let w = w.as_array();
+
+                let mut i = w.len();
+                for &w in w.iter().rev() {
+                    if w != 0 {
+                        break;
+                    }
+                    i -= 1;
+                }
+                Encode::encode(&w[..i].to_vec(), encoder)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "tag-prediction")]
@@ -235,14 +269,14 @@ struct TagPredictor {
 #[cfg(feature = "tag-prediction")]
 impl TagPredictor {
     pub fn new(tags: Vec<Vec<String>>, bias: Vec<i32>) -> Self {
-        TagPredictor {
+        Self {
             tags,
             bias: bias.into(),
         }
     }
 
     #[inline]
-    pub fn bias(&self) -> &WeightVector {
+    pub const fn bias(&self) -> &WeightVector {
         &self.bias
     }
 
