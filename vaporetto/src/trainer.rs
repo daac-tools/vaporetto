@@ -386,7 +386,7 @@ impl<'a> Trainer<'a> {
                     let pos = usize::try_from(
                         isize::from(self.char_window_size)
                             - isize::try_from(len)?
-                            - isize::from(rel_position),
+                            - rel_position,
                     )
                     .unwrap();
                     if let Some(weights) = char_ngram_weights.get_mut(ngram) {
@@ -405,7 +405,7 @@ impl<'a> Trainer<'a> {
                     let pos = usize::try_from(
                         isize::from(self.char_window_size)
                             - isize::try_from(len)?
-                            - isize::from(rel_position),
+                            - rel_position,
                     )
                     .unwrap();
                     if let Some(weights) = type_ngram_weights.get_mut(ngram) {
