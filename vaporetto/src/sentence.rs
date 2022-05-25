@@ -1044,31 +1044,36 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// If you want to predict tags, call this function after calling [`Predictor::predict()`] and
     /// word boundaries are fixed.
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::fs::File;
-    ///
-    /// use vaporetto::{Model, Predictor, Sentence};
-    ///
-    /// let f = File::open("../resources/model.bin").unwrap();
-    /// let model = Model::read(f).unwrap();
-    /// let predictor = Predictor::new(model, true).unwrap();
-    ///
-    /// let mut s = Sentence::from_raw("まぁ良いだろう").unwrap();
-    /// predictor.predict(&mut s);
-    /// let mut buf = String::new();
-    /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("まぁ 良い だろう", buf);
-    ///
-    /// s.fill_tags();
-    ///
-    /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!(
-    ///     "まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー",
-    ///     buf,
-    /// );
-    /// ```
+    #[cfg_attr(
+        feature = "std",
+        doc = "
+# Examples
+
+```
+use std::fs::File;
+
+use vaporetto::{Model, Predictor, Sentence};
+
+let f = File::open(\"../resources/model.bin\").unwrap();
+let model = Model::read(f).unwrap();
+let predictor = Predictor::new(model, true).unwrap();
+
+let mut s = Sentence::from_raw(\"まぁ良いだろう\").unwrap();
+predictor.predict(&mut s);
+let mut buf = String::new();
+s.write_tokenized_text(&mut buf);
+assert_eq!(\"まぁ 良い だろう\", buf);
+
+s.fill_tags();
+
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    \"まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー\",
+    buf,
+);
+```
+"
+    )]
     #[cfg(feature = "tag-prediction")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     #[inline]
