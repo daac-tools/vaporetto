@@ -355,52 +355,55 @@ impl Encode for PredictorData {
 
 /// Predictor created from the model.
 ///
-/// # Example 1: without tag prediction
-///
-/// ```
-/// use std::fs::File;
-///
-/// use vaporetto::{Model, Predictor, Sentence};
-///
-/// let f = File::open("../resources/model.bin").unwrap();
-/// let model = Model::read(f).unwrap();
-/// let predictor = Predictor::new(model, false).unwrap();
-///
-/// let mut s = Sentence::from_raw("まぁ社長は火星猫だ").unwrap();
-/// predictor.predict(&mut s);
-/// // s.fill_tags(); will panic!
-///
-/// let mut buf = String::new();
-/// s.write_tokenized_text(&mut buf);
-/// assert_eq!(
-///     "まぁ 社長 は 火星 猫 だ",
-///     buf,
-/// );
-/// ```
-///
-/// # Example 2: with tag prediction
-///
-/// Tag prediction requires **crate feature** `tag-prediction`.
-/// ```
-/// use std::fs::File;
-///
-/// use vaporetto::{Model, Predictor, Sentence};
-///
-/// let mut f = File::open("../resources/model.bin").unwrap();
-/// let model = Model::read(f).unwrap();
-/// let predictor = Predictor::new(model, true).unwrap();
-///
-/// let mut s = Sentence::from_raw("まぁ社長は火星猫だ").unwrap();
-/// predictor.predict(&mut s);
-/// s.fill_tags();
-///
-/// let mut buf = String::new();
-/// s.write_tokenized_text(&mut buf);
-/// assert_eq!(
-///     "まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星/名詞/カセー 猫/名詞/ネコ だ/助動詞/ダ",
-///     buf,
-/// );
-/// ```
+#[cfg_attr(feature = "std", doc = "
+# Example 1: without tag prediction
+
+```
+use std::fs::File;
+
+use vaporetto::{Model, Predictor, Sentence};
+
+let f = File::open(\"../resources/model.bin\").unwrap();
+let model = Model::read(f).unwrap();
+let predictor = Predictor::new(model, false).unwrap();
+
+let mut s = Sentence::from_raw(\"まぁ社長は火星猫だ\").unwrap();
+predictor.predict(&mut s);
+// s.fill_tags(); will panic!
+
+let mut buf = String::new();
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    \"まぁ 社長 は 火星 猫 だ\",
+    buf,
+);
+```
+")]
+#[cfg_attr(all(feature = "std", feature = "tag-prediction"), doc = "
+# Example 2: with tag prediction
+
+Tag prediction requires **crate feature** `tag-prediction`.
+```
+use std::fs::File;
+
+use vaporetto::{Model, Predictor, Sentence};
+
+let mut f = File::open(\"../resources/model.bin\").unwrap();
+let model = Model::read(f).unwrap();
+let predictor = Predictor::new(model, true).unwrap();
+
+let mut s = Sentence::from_raw(\"まぁ社長は火星猫だ\").unwrap();
+predictor.predict(&mut s);
+s.fill_tags();
+
+let mut buf = String::new();
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    \"まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星/名詞/カセー 猫/名詞/ネコ だ/助動詞/ダ\",
+    buf,
+);
+```
+")]
 pub struct Predictor(PredictorData);
 
 impl Predictor {
