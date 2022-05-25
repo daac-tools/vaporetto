@@ -18,6 +18,7 @@ impl Writer for VecWriter {
     }
 }
 
+/// Copied from https://prng.di.unimi.it/splitmix64.c
 pub struct SplitMix64 {
     x: Wrapping<u64>,
 }
