@@ -26,7 +26,7 @@ impl WordWeightRecord {
     /// # Arguments
     ///
     /// * `word` - A word.
-    /// * `weights` - A weight of boundaries.
+    /// * `weights` - Weights of each character boundary.
     /// * `comment` - A comment that does not affect the behaviour.
     pub fn new(word: String, weights: Vec<i32>, comment: String) -> Result<Self> {
         if weights.len() != word.chars().count() + 1 {
