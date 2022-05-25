@@ -2,8 +2,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use bincode::{
-    de::BorrowDecoder, enc::Encoder, error::DecodeError, error::EncodeError, BorrowDecode, Decode,
-    Encode,
+    de::BorrowDecoder,
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+    BorrowDecode, Decode, Encode,
 };
 #[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;

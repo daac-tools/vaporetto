@@ -11,8 +11,7 @@ use alloc::borrow::Cow;
 use alloc::string::String;
 
 use bincode::{
-    de::BorrowDecoder,
-    de::Decoder,
+    de::{BorrowDecoder, Decoder},
     enc::Encoder,
     error::{DecodeError, EncodeError},
     BorrowDecode, Decode, Encode,

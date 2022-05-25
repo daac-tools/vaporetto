@@ -188,7 +188,7 @@ Now `外国人参政権` is split into correct tokens.
 
 ### Tagging
 
-Vaporetto experimentally supports tagging (e.g., part-of-speech tagging).
+Vaporetto experimentally supports tagging (e.g., part-of-speech and pronunciation tags).
 
 To train tags, add slashes and tags following each token in the dataset as follows:
 
