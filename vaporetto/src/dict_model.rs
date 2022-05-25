@@ -28,6 +28,11 @@ impl WordWeightRecord {
     /// * `word` - A word.
     /// * `weights` - Weights of each character boundary.
     /// * `comment` - A comment that does not affect the behaviour.
+    ///
+    /// # Errors
+    ///
+    /// If `weights.len() != word.chars().count() + 1`,
+    /// an error variant will be returned.
     pub fn new(word: String, weights: Vec<i32>, comment: String) -> Result<Self> {
         if weights.len() != word.chars().count() + 1 {
             return Err(VaporettoError::invalid_argument(
