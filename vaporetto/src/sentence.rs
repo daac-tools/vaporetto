@@ -81,7 +81,7 @@ pub enum CharacterBoundary {
     Unknown = 2,
 }
 
-/// Sentence data containing boundary and tag annotations..
+/// Sentence data containing boundary and tag annotations.
 pub struct Sentence<'a, 'b> {
     pub(crate) text: Cow<'a, str>,
     pub(crate) char_types: Vec<u8>,
