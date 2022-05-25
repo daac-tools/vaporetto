@@ -179,15 +179,17 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// # Errors
     ///
-    /// If the given `raw_text` is empty, an error variant will be returned.
+    /// If the given `text` is empty, an error variant will be returned.
     ///
     /// # Examples
     ///
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_raw("How are you?");
-    /// assert!(s.is_ok());
+    /// let s = Sentence::from_raw("火星に行きました").unwrap();
+    /// let mut buf = String::new();
+    /// s.write_partial_annotation_text(&mut buf);
+    /// assert_eq!("火 星 に 行 き ま し た", buf);
     ///
     /// let s = Sentence::from_raw("");
     /// assert!(s.is_err());
@@ -225,7 +227,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// # Errors
     ///
-    /// If the given `raw_text` is empty, an error variant will be returned.
+    /// If the given `text` is empty, an error variant will be returned.
     /// When an error is occurred, the sentence will be replaced with a white space.
     ///
     /// # Examples
@@ -233,9 +235,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let mut s = Sentence::from_raw("How are you?").unwrap();
-    /// s.update_raw("I am file.").unwrap();
-    /// assert_eq!("I am file.", s.as_raw_text());
+    /// let mut s = Sentence::from_raw("火星に行きました").unwrap();
+    /// s.update_raw("地球に帰りました").unwrap();
+    /// assert_eq!("地球に帰りました", s.as_raw_text());
     /// ```
     pub fn update_raw(&mut self, text: impl Into<Cow<'a, str>>) -> Result<()> {
         self.text = text.into();
@@ -398,13 +400,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_tokenized("How are you?");
+    /// let s = Sentence::from_tokenized("火星 に 行き まし た");
     /// assert!(s.is_ok());
     ///
-    /// let s = Sentence::from_tokenized("How/WRB are/VBP you?");
+    /// let s = Sentence::from_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞/イキ まし た/助動詞/タ");
     /// assert!(s.is_ok());
     ///
-    /// let s = Sentence::from_tokenized("How  are you?");
+    /// let s = Sentence::from_tokenized("火星 に  行き まし た");
     /// assert!(s.is_err());
     /// ```
     pub fn from_tokenized(tokenized_text: &str) -> Result<Self> {
@@ -457,13 +459,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let mut s = Sentence::from_tokenized("How are you?").unwrap();
+    /// let mut s = Sentence::from_tokenized("地球 に 帰り まし た").unwrap();
     ///
-    /// s.update_tokenized("I am fine").unwrap();
-    /// assert_eq!("Iamfine", s.as_raw_text());
+    /// s.update_tokenized("火星 に 行き まし た").unwrap();
+    /// assert_eq!("火星に行きました", s.as_raw_text());
     ///
-    /// s.update_tokenized("How/WRB are/VBP you ?/.").unwrap();
-    /// assert_eq!("Howareyou?", s.as_raw_text());
+    /// s.update_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞/イキ まし た/助動詞/タ").unwrap();
+    /// assert_eq!("火星に行きました", s.as_raw_text());
     /// ```
     pub fn update_tokenized(&mut self, tokenized_text: &str) -> Result<()> {
         if let Err(e) = Self::parse_tokenized(
@@ -623,10 +625,10 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_partial_annotation("g-o-o-d|i-d e-a");
+    /// let s = Sentence::from_partial_annotation("火-星|に|行-き|ま-し た");
     /// assert!(s.is_ok());
     ///
-    /// let s = Sentence::from_partial_annotation("I-t/PRP|'-s/VBZ|o-k-a-y/JJ|./.");
+    /// let s = Sentence::from_partial_annotation("火-星/名詞/カセー|に/助詞/ニ|行-き/動詞/イキ|ま-し た");
     /// assert!(s.is_ok());
     /// ```
     pub fn from_partial_annotation(partial_annotation_text: &str) -> Result<Self> {
@@ -681,12 +683,12 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let mut s = Sentence::from_raw("g-o-o-d|i-d e-a").unwrap();
-    /// s.update_partial_annotation("h-e-l-l-o").unwrap();
-    /// assert_eq!("hello", s.as_raw_text());
+    /// let mut s = Sentence::from_raw("地球に帰りました").unwrap();
+    /// s.update_partial_annotation("火-星|に|行-き|ま-し た").unwrap();
+    /// assert_eq!("火星に行きました", s.as_raw_text());
     ///
-    /// s.update_partial_annotation("I-t/PRP|'-s/VBZ|o-k-a-y/JJ|./.").unwrap();
-    /// assert_eq!("It'sokay.", s.as_raw_text());
+    /// s.update_partial_annotation("地-球/名詞/チキュー|に/助詞/ニ|帰-り/動詞/カエリ|ま-し た").unwrap();
+    /// assert_eq!("地球に帰りました", s.as_raw_text());
     /// ```
     pub fn update_partial_annotation(&mut self, partial_annotation_text: &str) -> Result<()> {
         if let Err(e) = Self::parse_partial_annotation(
@@ -717,15 +719,40 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_raw("How are you?").unwrap();
-    /// assert_eq!("How are you?", s.as_raw_text());
+    /// let s = Sentence::from_raw("火星に行きました").unwrap();
+    /// assert_eq!("火星に行きました", s.as_raw_text());
     /// ```
     #[inline]
     pub fn as_raw_text(&self) -> &str {
         &self.text
     }
 
-    /// Returns an iterator of tokens.
+    /// Returns an iterator of tokens. Tokens around [`CharacterBoundary::Unknown`] will be
+    /// skipped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_tokenized("火星 に 行き まし た").unwrap();
+    /// let mut it = s.iter_tokens();
+    ///
+    /// assert_eq!("火星", it.next().unwrap().surface());
+    /// assert_eq!("に", it.next().unwrap().surface());
+    /// assert_eq!("行き", it.next().unwrap().surface());
+    /// assert_eq!("まし", it.next().unwrap().surface());
+    /// assert_eq!("た", it.next().unwrap().surface());
+    /// assert!(it.next().is_none());
+    ///
+    /// let s = Sentence::from_partial_annotation("地-球|に|帰-り|ま-し た").unwrap();
+    /// let mut it = s.iter_tokens();
+    ///
+    /// assert_eq!("地球", it.next().unwrap().surface());
+    /// assert_eq!("に", it.next().unwrap().surface());
+    /// assert_eq!("帰り", it.next().unwrap().surface());
+    /// assert!(it.next().is_none());
+    /// ```
     pub const fn iter_tokens(&'a self) -> TokenIterator<'a, 'b> {
         TokenIterator {
             token: Token {
@@ -736,7 +763,23 @@ impl<'a, 'b> Sentence<'a, 'b> {
         }
     }
 
-    /// Writes a tokenized text.
+    /// Writes a tokenized text. Tokens around [`CharacterBoundary::Unknown`] will be skipped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut buf = String::new();
+    ///
+    /// let s = Sentence::from_tokenized("火星/名詞/カセー に 行き まし た").unwrap();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("火星/名詞/カセー に 行き まし た", buf);
+    ///
+    /// let s = Sentence::from_partial_annotation("地-球|に|帰-り|ま-し た").unwrap();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("地球 に 帰り", buf);
+    /// ```
     pub fn write_tokenized_text(&self, buf: &mut String) {
         buf.clear();
         unsafe {
@@ -754,7 +797,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
                     }
                     buf.push(b);
                 }
-                for tag in token.tags() {
+                let ts = token.tags();
+                for tag in &ts[..ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)] {
                     buf.push(b'/');
                     if let Some(tag) = tag {
                         for &b in tag.as_bytes() {
@@ -781,14 +825,14 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// let mut buf = String::new();
     ///
-    /// let s = Sentence::from_tokenized("How are you ?").unwrap();
+    /// let s = Sentence::from_tokenized("火星 に 行き まし た").unwrap();
     /// s.write_partial_annotation_text(&mut buf);
-    /// assert_eq!("H-o-w|a-r-e|y-o-u|?", buf);
+    /// assert_eq!("火-星|に|行-き|ま-し|た", buf);
     ///
-    /// let s = Sentence::from_tokenized("How/WRB are you/PRP ?").unwrap();
+    /// let s = Sentence::from_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞/イキ まし た/助動詞/タ").unwrap();
     /// dbg!(s.tags());
     /// s.write_partial_annotation_text(&mut buf);
-    /// assert_eq!("H-o-w/WRB|a-r-e|y-o-u/PRP|?", buf);
+    /// assert_eq!("火-星/名詞/カセー|に/助詞/ニ|行-き/動詞/イキ|ま-し|た/助動詞/タ", buf);
     /// ```
     pub fn write_partial_annotation_text(&self, buf: &mut String) {
         buf.clear();
@@ -830,6 +874,25 @@ impl<'a, 'b> Sentence<'a, 'b> {
     }
 
     /// Removes tag information and updates the number of tags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut s = Sentence::from_tokenized("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た").unwrap();
+    /// let mut buf = String::new();
+    /// assert_eq!(2, s.n_tags());
+    /// assert_eq!(16, s.tags().len());
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た", buf);
+    ///
+    /// s.reset_tags(1);
+    /// assert_eq!(1, s.n_tags());
+    /// assert_eq!(8, s.tags().len());
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("火星 に 行き まし た", buf);
+    /// ```
     #[inline]
     pub fn reset_tags(&mut self, n_tags: usize) {
         self.tags.clear();
@@ -866,12 +929,38 @@ impl<'a, 'b> Sentence<'a, 'b> {
     }
 
     /// Returns a reference to the internal representation of tags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut s = Sentence::from_tokenized("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た").unwrap();
+    /// assert_eq!(16, s.tags().len());
+    /// assert_eq!("名詞", s.tags()[2].as_ref().unwrap().as_ref());
+    /// assert_eq!("カセー", s.tags()[3].as_ref().unwrap().as_ref());
+    /// assert_eq!("動詞", s.tags()[8].as_ref().unwrap().as_ref());
+    /// assert_eq!("助動詞", s.tags()[12].as_ref().unwrap().as_ref());
+    /// assert_eq!("マシ", s.tags()[13].as_ref().unwrap().as_ref());
+    /// ```
     #[inline]
     pub fn tags(&self) -> &[Option<Cow<'b, str>>] {
         &self.tags
     }
 
     /// Returns a mutable reference to the internal representation of tags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let mut s = Sentence::from_tokenized("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た").unwrap();
+    /// s.tags_mut()[4].replace("助詞".into());
+    /// let mut buf = String::new();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("火星/名詞/カセー に/助詞 行き/動詞 まし/助動詞/マシ た", buf);
+    /// ```
     #[inline]
     pub fn tags_mut(&mut self) -> &mut [Option<Cow<'b, str>>] {
         &mut self.tags
@@ -890,6 +979,15 @@ impl<'a, 'b> Sentence<'a, 'b> {
     }
 
     /// Returns the maximum number of tags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::from_tokenized("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た").unwrap();
+    /// assert_eq!(2, s.n_tags());
+    /// ```
     #[inline]
     pub const fn n_tags(&self) -> usize {
         self.n_tags
@@ -2166,7 +2264,7 @@ mod tests {
         s.write_tokenized_text(&mut buf);
 
         assert_eq!(
-            "Rust/名詞 で/ 良い/形容詞 プログラミング/ 体験/ を/ ！/補助記号",
+            "Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号",
             buf,
         );
     }
