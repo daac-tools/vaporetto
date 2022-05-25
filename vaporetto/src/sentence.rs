@@ -829,10 +829,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// s.write_partial_annotation_text(&mut buf);
     /// assert_eq!("火-星|に|行-き|ま-し|た", buf);
     ///
-    /// let s = Sentence::from_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞/イキ まし た/助動詞/タ").unwrap();
-    /// dbg!(s.tags());
+    /// let s = Sentence::from_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞 まし た/助動詞/タ").unwrap();
     /// s.write_partial_annotation_text(&mut buf);
-    /// assert_eq!("火-星/名詞/カセー|に/助詞/ニ|行-き/動詞/イキ|ま-し|た/助動詞/タ", buf);
+    /// assert_eq!("火-星/名詞/カセー|に/助詞/ニ|行-き/動詞|ま-し|た/助動詞/タ", buf);
     /// ```
     pub fn write_partial_annotation_text(&self, buf: &mut String) {
         buf.clear();
@@ -901,18 +900,65 @@ impl<'a, 'b> Sentence<'a, 'b> {
     }
 
     /// Returns a slice of character types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::{CharacterType, Sentence};
+    ///
+    /// let s = Sentence::from_tokenized("火星 に 行き まし た").unwrap();
+    /// assert_eq!(&[
+    ///     CharacterType::Kanji as u8,
+    ///     CharacterType::Kanji as u8,
+    ///     CharacterType::Hiragana as u8,
+    ///     CharacterType::Kanji as u8,
+    ///     CharacterType::Hiragana as u8,
+    ///     CharacterType::Hiragana as u8,
+    ///     CharacterType::Hiragana as u8,
+    ///     CharacterType::Hiragana as u8,
+    /// ], s.char_types());
+    /// ```
     #[inline]
     pub fn char_types(&self) -> &[u8] {
         &self.char_types
     }
 
     /// Returns a slice of boundary types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::{CharacterBoundary, Sentence};
+    ///
+    /// let s = Sentence::from_partial_annotation("火-星|に|行-き|ま-し た").unwrap();
+    /// assert_eq!(&[
+    ///     CharacterBoundary::NotWordBoundary,
+    ///     CharacterBoundary::WordBoundary,
+    ///     CharacterBoundary::WordBoundary,
+    ///     CharacterBoundary::NotWordBoundary,
+    ///     CharacterBoundary::WordBoundary,
+    ///     CharacterBoundary::NotWordBoundary,
+    ///     CharacterBoundary::Unknown,
+    /// ], s.boundaries());
+    /// ```
     #[inline]
     pub fn boundaries(&self) -> &[CharacterBoundary] {
         &self.boundaries
     }
 
     /// Returns a mutable slice of boundary types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::{CharacterBoundary, Sentence};
+    ///
+    /// let mut s = Sentence::from_partial_annotation("火-星|に|行-き|ま-し た").unwrap();
+    /// s.boundaries_mut()[6] = CharacterBoundary::WordBoundary;
+    /// let mut buf = String::new();
+    /// s.write_partial_annotation_text(&mut buf);
+    /// assert_eq!("火-星|に|行-き|ま-し|た", buf);
+    /// ```
     #[inline]
     pub fn boundaries_mut(&mut self) -> &mut [CharacterBoundary] {
         &mut self.boundaries
