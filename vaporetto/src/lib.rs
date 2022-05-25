@@ -4,25 +4,39 @@
 //!
 //! ## Examples
 //!
-//! ```no_run
+//! ```
 //! use std::fs::File;
-//! use std::io::Read;
 //!
 //! use vaporetto::{Model, Predictor, Sentence};
 //!
-//! let mut f = File::open("model.bin").unwrap();
-//! let mut model_data = vec![];
-//! f.read_to_end(&mut model_data).unwrap();
-//! let (model, _) = Model::read_slice(&model_data).unwrap();
-//! let predictor = Predictor::new(model, false).unwrap();
-//!
-//! let mut s = Sentence::from_raw("火星猫の生態").unwrap();
-//! predictor.predict(&mut s);
+//! let f = File::open("../resources/model.bin").unwrap();
+//! let model = Model::read(f).unwrap();
+//! let predictor = Predictor::new(model, true).unwrap();
 //!
 //! let mut buf = String::new();
+//!
+//! let mut s = Sentence::default();
+//!
+//! s.update_raw("まぁ社長は火星猫だ").unwrap();
+//! predictor.predict(&mut s);
+//! s.fill_tags();
 //! s.write_tokenized_text(&mut buf);
-//! println!("{}", buf);
+//! assert_eq!(
+//!     "まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星/名詞/カセー 猫/名詞/ネコ だ/助動詞/ダ",
+//!     buf,
+//! );
+//!
+//! s.update_raw("まぁ良いだろう").unwrap();
+//! predictor.predict(&mut s);
+//! s.fill_tags();
+//! s.write_tokenized_text(&mut buf);
+//! assert_eq!(
+//!     "まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー",
+//!     buf,
+//! );
 //! ```
+//!
+//! Tag prediction requires **crate feature** `tag-prediction`.
 //!
 //! Training requires **crate feature** `train`. For more details, see [`Trainer`].
 

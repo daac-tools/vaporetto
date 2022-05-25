@@ -198,10 +198,10 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_raw("火星に行きました").unwrap();
+    /// let s = Sentence::from_raw("まぁ良いだろう").unwrap();
     /// let mut buf = String::new();
     /// s.write_partial_annotation_text(&mut buf);
-    /// assert_eq!("火 星 に 行 き ま し た", buf);
+    /// assert_eq!("ま ぁ 良 い だ ろ う", buf);
     ///
     /// let s = Sentence::from_raw("");
     /// assert!(s.is_err());
@@ -247,9 +247,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let mut s = Sentence::from_raw("火星に行きました").unwrap();
-    /// s.update_raw("地球に帰りました").unwrap();
-    /// assert_eq!("地球に帰りました", s.as_raw_text());
+    /// let mut s = Sentence::from_raw("まぁ良いだろう").unwrap();
+    /// s.update_raw("まぁ社長は火星猫だ").unwrap();
+    /// assert_eq!("まぁ社長は火星猫だ", s.as_raw_text());
     /// ```
     pub fn update_raw(&mut self, text: impl Into<Cow<'a, str>>) -> Result<()> {
         self.text = text.into();
@@ -412,13 +412,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_tokenized("火星 に 行き まし た");
-    /// assert!(s.is_ok());
+    /// let s = Sentence::from_tokenized("まぁ 社長 は 火星 猫 だ");
+    /// assert_eq!("まぁ社長は火星猫だ", s.unwrap().as_raw_text());
     ///
-    /// let s = Sentence::from_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞/イキ まし た/助動詞/タ");
-    /// assert!(s.is_ok());
+    /// let s = Sentence::from_tokenized("まぁ/名詞 社長/名詞 は/助詞 火星/名詞 猫/名詞 だ/助動詞");
+    /// assert_eq!("まぁ社長は火星猫だ", s.unwrap().as_raw_text());
     ///
-    /// let s = Sentence::from_tokenized("火星 に  行き まし た");
+    /// let s = Sentence::from_tokenized("まぁ 社長  は 火星 猫 だ");
     /// assert!(s.is_err());
     /// ```
     pub fn from_tokenized(tokenized_text: &str) -> Result<Self> {
@@ -471,13 +471,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let mut s = Sentence::from_tokenized("地球 に 帰り まし た").unwrap();
+    /// let mut s = Sentence::default();
     ///
-    /// s.update_tokenized("火星 に 行き まし た").unwrap();
-    /// assert_eq!("火星に行きました", s.as_raw_text());
+    /// s.update_tokenized("まぁ 良い だろう").unwrap();
+    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
     ///
-    /// s.update_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞/イキ まし た/助動詞/タ").unwrap();
-    /// assert_eq!("火星に行きました", s.as_raw_text());
+    /// s.update_tokenized("まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー").unwrap();
+    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
     /// ```
     pub fn update_tokenized(&mut self, tokenized_text: &str) -> Result<()> {
         if let Err(e) = Self::parse_tokenized(
@@ -637,11 +637,15 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_partial_annotation("火-星|に|行-き|ま-し た");
-    /// assert!(s.is_ok());
+    /// let s = Sentence::from_partial_annotation(
+    ///     "ま-ぁ|良-い|だ ろ う"
+    /// ).unwrap();
+    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
     ///
-    /// let s = Sentence::from_partial_annotation("火-星/名詞/カセー|に/助詞/ニ|行-き/動詞/イキ|ま-し た");
-    /// assert!(s.is_ok());
+    /// let s = Sentence::from_partial_annotation(
+    ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火-星 猫|だ/助動詞/ダ"
+    /// ).unwrap();
+    /// assert_eq!("まぁ社長は火星猫だ", s.as_raw_text());
     /// ```
     pub fn from_partial_annotation(partial_annotation_text: &str) -> Result<Self> {
         let mut text = String::new();
@@ -695,12 +699,15 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let mut s = Sentence::from_raw("地球に帰りました").unwrap();
-    /// s.update_partial_annotation("火-星|に|行-き|ま-し た").unwrap();
-    /// assert_eq!("火星に行きました", s.as_raw_text());
+    /// let mut s = Sentence::default();
     ///
-    /// s.update_partial_annotation("地-球/名詞/チキュー|に/助詞/ニ|帰-り/動詞/カエリ|ま-し た").unwrap();
-    /// assert_eq!("地球に帰りました", s.as_raw_text());
+    /// s.update_partial_annotation("ま-ぁ|良-い|だ ろ う").unwrap();
+    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
+    ///
+    /// s.update_partial_annotation(
+    ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火-星 猫|だ/助動詞/ダ"
+    /// ).unwrap();
+    /// assert_eq!("まぁ社長は火星猫だ", s.as_raw_text());
     /// ```
     pub fn update_partial_annotation(&mut self, partial_annotation_text: &str) -> Result<()> {
         if let Err(e) = Self::parse_partial_annotation(
@@ -731,8 +738,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_raw("火星に行きました").unwrap();
-    /// assert_eq!("火星に行きました", s.as_raw_text());
+    /// let s = Sentence::from_raw("まぁ良いだろう").unwrap();
+    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
     /// ```
     #[inline]
     pub fn as_raw_text(&self) -> &str {
@@ -747,22 +754,29 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_tokenized("火星 に 行き まし た").unwrap();
+    /// let s = Sentence::from_partial_annotation("ま-ぁ|社-長|は|火-星 猫|だ").unwrap();
     /// let mut it = s.iter_tokens();
     ///
-    /// assert_eq!("火星", it.next().unwrap().surface());
-    /// assert_eq!("に", it.next().unwrap().surface());
-    /// assert_eq!("行き", it.next().unwrap().surface());
-    /// assert_eq!("まし", it.next().unwrap().surface());
-    /// assert_eq!("た", it.next().unwrap().surface());
-    /// assert!(it.next().is_none());
+    /// let token = it.next().unwrap();
+    /// assert_eq!("まぁ", token.surface());
+    /// assert_eq!(0, token.start());
+    /// assert_eq!(2, token.end());
     ///
-    /// let s = Sentence::from_partial_annotation("地-球|に|帰-り|ま-し た").unwrap();
-    /// let mut it = s.iter_tokens();
+    /// let token = it.next().unwrap();
+    /// assert_eq!("社長", token.surface());
+    /// assert_eq!(2, token.start());
+    /// assert_eq!(4, token.end());
     ///
-    /// assert_eq!("地球", it.next().unwrap().surface());
-    /// assert_eq!("に", it.next().unwrap().surface());
-    /// assert_eq!("帰り", it.next().unwrap().surface());
+    /// let token = it.next().unwrap();
+    /// assert_eq!("は", token.surface());
+    /// assert_eq!(4, token.start());
+    /// assert_eq!(5, token.end());
+    ///
+    /// let token = it.next().unwrap();
+    /// assert_eq!("だ", token.surface());
+    /// assert_eq!(8, token.start());
+    /// assert_eq!(9, token.end());
+    ///
     /// assert!(it.next().is_none());
     /// ```
     pub const fn iter_tokens(&'a self) -> TokenIterator<'a, 'b> {
@@ -784,13 +798,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// let mut buf = String::new();
     ///
-    /// let s = Sentence::from_tokenized("火星/名詞/カセー に 行き まし た").unwrap();
+    /// let s = Sentence::from_partial_annotation("ま-ぁ|社-長|は|火-星|猫|だ").unwrap();
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("火星/名詞/カセー に 行き まし た", buf);
+    /// assert_eq!("まぁ 社長 は 火星 猫 だ", buf);
     ///
-    /// let s = Sentence::from_partial_annotation("地-球|に|帰-り|ま-し た").unwrap();
+    /// let s = Sentence::from_partial_annotation("ま-ぁ|社-長|は|火-星 猫|だ").unwrap();
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("地球 に 帰り", buf);
+    /// assert_eq!("まぁ 社長 は だ", buf);
     /// ```
     pub fn write_tokenized_text(&self, buf: &mut String) {
         buf.clear();
@@ -837,13 +851,15 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// let mut buf = String::new();
     ///
-    /// let s = Sentence::from_tokenized("火星 に 行き まし た").unwrap();
+    /// let s = Sentence::from_tokenized("まぁ 良い だろう").unwrap();
     /// s.write_partial_annotation_text(&mut buf);
-    /// assert_eq!("火-星|に|行-き|ま-し|た", buf);
+    /// assert_eq!("ま-ぁ|良-い|だ-ろ-う", buf);
     ///
-    /// let s = Sentence::from_tokenized("火星/名詞/カセー に/助詞/ニ 行き/動詞 まし た/助動詞/タ").unwrap();
+    /// let s = Sentence::from_tokenized(
+    ///     "まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー"
+    /// ).unwrap();
     /// s.write_partial_annotation_text(&mut buf);
-    /// assert_eq!("火-星/名詞/カセー|に/助詞/ニ|行-き/動詞|ま-し|た/助動詞/タ", buf);
+    /// assert_eq!("ま-ぁ/副詞/マー|良-い/形容詞/ヨイ|だ-ろ-う/助動詞/ダロー", buf);
     /// ```
     pub fn write_partial_annotation_text(&self, buf: &mut String) {
         buf.clear();
@@ -1027,6 +1043,32 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// Update the tag information.
     /// If you want to predict tags, call this function after calling [`Predictor::predict()`] and
     /// word boundaries are fixed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    ///
+    /// use vaporetto::{Model, Predictor, Sentence};
+    ///
+    /// let f = File::open("../resources/model.bin").unwrap();
+    /// let model = Model::read(f).unwrap();
+    /// let predictor = Predictor::new(model, true).unwrap();
+    ///
+    /// let mut s = Sentence::from_raw("まぁ良いだろう").unwrap();
+    /// predictor.predict(&mut s);
+    /// let mut buf = String::new();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ 良い だろう", buf);
+    ///
+    /// s.fill_tags();
+    ///
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!(
+    ///     "まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー",
+    ///     buf,
+    /// );
+    /// ```
     #[cfg(feature = "tag-prediction")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     #[inline]

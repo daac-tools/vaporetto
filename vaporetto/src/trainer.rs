@@ -18,6 +18,7 @@ use crate::tag_trainer::TagTrainer;
 pub const QUANTIZE_BIT_DEPTH: u8 = 16;
 
 /// Solver type.
+#[cfg_attr(docsrs, doc(cfg(feature = "train")))]
 #[derive(Clone, Copy, Debug)]
 pub enum SolverType {
     /// L2-regularized logistic regression (primal).
