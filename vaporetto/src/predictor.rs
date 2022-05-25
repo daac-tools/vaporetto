@@ -355,7 +355,9 @@ impl Encode for PredictorData {
 
 /// Predictor created from the model.
 ///
-#[cfg_attr(feature = "std", doc = "
+#[cfg_attr(
+    feature = "std",
+    doc = "
 # Example 1: without tag prediction
 
 ```
@@ -378,8 +380,11 @@ assert_eq!(
     buf,
 );
 ```
-")]
-#[cfg_attr(all(feature = "std", feature = "tag-prediction"), doc = "
+"
+)]
+#[cfg_attr(
+    all(feature = "std", feature = "tag-prediction"),
+    doc = "
 # Example 2: with tag prediction
 
 Tag prediction requires **crate feature** `tag-prediction`.
@@ -403,7 +408,8 @@ assert_eq!(
     buf,
 );
 ```
-")]
+"
+)]
 pub struct Predictor(PredictorData);
 
 impl Predictor {

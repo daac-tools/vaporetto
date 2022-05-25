@@ -3,7 +3,9 @@
 //! Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 //!
 //!
-#![cfg_attr(all(feature = "std", feature = "tag-prediction"), doc = "
+#![cfg_attr(
+    all(feature = "std", feature = "tag-prediction"),
+    doc = "
 ## Examples
 
 ```
@@ -37,7 +39,8 @@ assert_eq!(
     buf,
 );
 ```
-")]
+"
+)]
 //!
 //! Tag prediction requires **crate feature** `tag-prediction`.
 //!
