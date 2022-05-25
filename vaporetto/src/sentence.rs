@@ -98,6 +98,18 @@ pub struct Sentence<'a, 'b> {
 }
 
 impl<'a, 'b> Default for Sentence<'a, 'b> {
+    /// Creates a new [`Sentence`] from a space.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vaporetto::Sentence;
+    ///
+    /// let s = Sentence::default();
+    ///
+    /// assert_eq!(" ", s.as_raw_text());
+    /// assert_eq!(0, s.n_tags());
+    /// ```
     fn default() -> Self {
         Self {
             text: Cow::Borrowed(" "),
