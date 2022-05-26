@@ -1060,14 +1060,27 @@ impl<'a, 'b> Sentence<'a, 'b> {
 
     /// Returns a mutable reference to the internal representation of tags.
     ///
+    /// In the representation, tags are stored in an array, and
+    /// the `j`-th tag of the `i`-th character is stored in the `i*k+j`-th element,
+    /// where `k` is the maximum number of tags (i.e., [`n_tags()`]).
+    ///
+    /// Tags can also be inserted at other positions, but such tags are ignored.
+    ///
     /// # Examples
     ///
     /// ```
     /// use vaporetto::Sentence;
     ///
+    /// let mut buf = String::new();
+    ///
     /// let mut s = Sentence::from_tokenized("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た").unwrap();
     /// s.tags_mut()[4].replace("助詞".into());
-    /// let mut buf = String::new();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("火星/名詞/カセー に/助詞 行き/動詞 まし/助動詞/マシ た", buf);
+    ///
+    /// // Sets a pronunciation of the first character (`火`), but this character is not the last
+    /// // of a word.
+    /// s.tags_mut()[1].replace("ヒ".into());
     /// s.write_tokenized_text(&mut buf);
     /// assert_eq!("火星/名詞/カセー に/助詞 行き/動詞 まし/助動詞/マシ た", buf);
     /// ```
