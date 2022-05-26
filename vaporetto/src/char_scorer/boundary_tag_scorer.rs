@@ -144,7 +144,7 @@ impl CharScorerBoundaryTag {
         #[cfg(feature = "charwise-pma")]
         let it = self.pma.find_overlapping_no_suffix_iter(&sentence.text);
         for m in it {
-            let end = unsafe { *sentence.str_to_char_pos().get_unchecked(m.end()) };
+            let end = unsafe { sentence.str_to_char_pos(m.end()) };
             if let Some(weight) = unsafe { self.weights.get_unchecked(m.value()).as_ref() } {
                 weight.add_score(
                     (end + sentence.score_padding - 1) as isize,

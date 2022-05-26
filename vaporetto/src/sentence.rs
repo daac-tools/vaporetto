@@ -1038,7 +1038,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// In the representation, tags are stored in an array, and
     /// the `j`-th tag of the `i`-th character is stored in the `i*k+j`-th element,
-    /// where `k` is the maximum number of tags (i.e., [`n_tags()`]).
+    /// where `k` is the maximum number of tags (i.e., [`Sentence::n_tags()`]).
     ///
     /// # Examples
     ///
@@ -1062,7 +1062,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// In the representation, tags are stored in an array, and
     /// the `j`-th tag of the `i`-th character is stored in the `i*k+j`-th element,
-    /// where `k` is the maximum number of tags (i.e., [`n_tags()`]).
+    /// where `k` is the maximum number of tags (i.e., [`Sentence::n_tags()`]).
     ///
     /// Tags can also be inserted at other positions, but such tags are ignored.
     ///
@@ -1157,9 +1157,9 @@ assert_eq!(
         self.predictor.replace(predictor);
     }
 
-    #[inline]
-    pub(crate) fn str_to_char_pos(&self) -> &[usize] {
-        &self.str_to_char_pos
+    #[inline(always)]
+    pub(crate) unsafe fn str_to_char_pos(&self, pos: usize) -> usize {
+        *self.str_to_char_pos.get_unchecked(pos)
     }
 
     #[inline]
@@ -1276,7 +1276,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1304,7 +1304,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1316,7 +1316,7 @@ mod tests {
         let s = Sentence::from_raw("あ").unwrap();
 
         assert_eq!("あ", s.as_raw_text());
-        assert_eq!([0, 0, 0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 0, 0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 3], s.char_to_str_pos());
         assert_eq!([Hiragana as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1329,7 +1329,7 @@ mod tests {
         s.update_raw("あ").unwrap();
 
         assert_eq!("あ", s.as_raw_text());
-        assert_eq!([0, 0, 0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 0, 0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 3], s.char_to_str_pos());
         assert_eq!([Hiragana as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1342,11 +1342,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -1386,11 +1386,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -1444,7 +1444,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1472,7 +1472,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1500,7 +1500,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1528,7 +1528,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1556,7 +1556,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1568,7 +1568,7 @@ mod tests {
         let s = Sentence::from_tokenized("あ").unwrap();
 
         assert_eq!("あ", s.as_raw_text());
-        assert_eq!([0, 0, 0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 0, 0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 3], s.char_to_str_pos());
         assert_eq!([Hiragana as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1581,7 +1581,7 @@ mod tests {
         s.update_tokenized("あ").unwrap();
 
         assert_eq!("あ", s.as_raw_text());
-        assert_eq!([0, 0, 0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 0, 0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 3], s.char_to_str_pos());
         assert_eq!([Hiragana as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -1594,11 +1594,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -1660,11 +1660,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -1726,11 +1726,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -1815,11 +1815,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -1905,11 +1905,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -2012,11 +2012,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -2120,11 +2120,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -2227,11 +2227,11 @@ mod tests {
 
         assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
                 0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
@@ -2332,11 +2332,11 @@ mod tests {
 
         assert_eq!("火星猫の生態(M et al.)", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6, 7, 8, 9, 10, 11, 12, 13,
                 14, 15, 16,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 3, 6, 9, 12, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28],
@@ -2394,11 +2394,11 @@ mod tests {
 
         assert_eq!("火星猫の生態(M et al.)", s.as_raw_text());
         assert_eq!(
-            [
+            &[
                 0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6, 7, 8, 9, 10, 11, 12, 13,
                 14, 15, 16,
             ],
-            s.str_to_char_pos()
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!(
             [0, 3, 6, 9, 12, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28],
@@ -2454,8 +2454,8 @@ mod tests {
 
         assert_eq!("改行に\\nを用いる", s.as_raw_text());
         assert_eq!(
-            [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9],
-            s.str_to_char_pos()
+            &[0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9],
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!([0, 3, 6, 9, 10, 11, 14, 17, 20, 23], s.char_to_str_pos());
         assert_eq!(
@@ -2495,8 +2495,8 @@ mod tests {
 
         assert_eq!("改行に\\nを用いる", s.as_raw_text());
         assert_eq!(
-            [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9],
-            s.str_to_char_pos()
+            &[0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9],
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!([0, 3, 6, 9, 10, 11, 14, 17, 20, 23], s.char_to_str_pos());
         assert_eq!(
@@ -2535,8 +2535,8 @@ mod tests {
 
         assert_eq!("品詞に/を用いる", s.as_raw_text());
         assert_eq!(
-            [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8],
-            s.str_to_char_pos()
+            &[0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8],
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!([0, 3, 6, 9, 10, 13, 16, 19, 22], s.char_to_str_pos());
         assert_eq!(
@@ -2574,8 +2574,8 @@ mod tests {
 
         assert_eq!("品詞に/を用いる", s.as_raw_text());
         assert_eq!(
-            [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8],
-            s.str_to_char_pos()
+            &[0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8],
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!([0, 3, 6, 9, 10, 13, 16, 19, 22], s.char_to_str_pos());
         assert_eq!(
@@ -2749,7 +2749,7 @@ mod tests {
         );
 
         assert_eq!(" ", s.as_raw_text());
-        assert_eq!([0, 1], s.str_to_char_pos());
+        assert_eq!(&[0, 1], s.str_to_char_pos.as_slice());
         assert_eq!([0, 1], s.char_to_str_pos());
         assert_eq!([Other as u8], s.char_types());
         assert!(s.boundaries().is_empty());
@@ -2825,8 +2825,8 @@ mod tests {
 
         assert_eq!("火星猫の生態", s.as_raw_text());
         assert_eq!(
-            [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
-            s.str_to_char_pos()
+            &[0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!([0, 3, 6, 9, 12, 15, 18], s.char_to_str_pos());
         assert_eq!(
@@ -2860,8 +2860,8 @@ mod tests {
 
         assert_eq!("火星猫の生態", s.as_raw_text());
         assert_eq!(
-            [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
-            s.str_to_char_pos()
+            &[0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 0, 0, 6],
+            s.str_to_char_pos.as_slice(),
         );
         assert_eq!([0, 3, 6, 9, 12, 15, 18], s.char_to_str_pos());
         assert_eq!(
