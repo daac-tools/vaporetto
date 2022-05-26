@@ -808,6 +808,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     pub fn write_tokenized_text(&self, buf: &mut String) {
         buf.clear();
+        // `buf` always consists of a valid UTF-8 sequence because
+        // `Token::surface` and `Token::tags` return values in `str`.
         unsafe {
             let buf = buf.as_mut_vec();
             for token in self.iter_tokens() {
