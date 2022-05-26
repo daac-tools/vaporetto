@@ -323,7 +323,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
                     }
                     prev_boundary = true;
                 }
-                // POS tag
+                // tag
                 (false, '/') => {
                     if text.is_empty() || prev_boundary {
                         return Err(VaporettoError::invalid_argument(
@@ -458,7 +458,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// A tokenized text must be annotated by the following rules:
     ///   - A whitespace (`' '`) is inserted to each token boundary.
-    ///   - If necessary, a POS tag following a slash (`'/'`) can be added to each token.
+    ///   - If necessary, multiple tags following each slash (`'/'`) can be added to each token.
     ///   - Each character following a back slash (`'\\'`) is escaped.
     ///
     /// # Errors
@@ -625,7 +625,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///   - If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
     ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
     ///
-    /// In addition, POS tags following a slash (`'/'`) can be inserted to each token.
+    /// In addition, multiple tags following each slash (`'/'`) can be inserted to each token.
     ///
     /// # Errors
     ///
@@ -687,7 +687,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///   - If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
     ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
     ///
-    /// In addition, POS tags following a slash (`'/'`) can be inserted to each token.
+    /// In addition, multiple tags following each slash (`'/'`) can be inserted to each token.
     ///
     /// # Errors
     ///
@@ -738,7 +738,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
-    /// let s = Sentence::from_raw("まぁ良いだろう").unwrap();
+    /// let s = Sentence::from_tokenized("まぁ/副詞 良い/形容詞 だろう/助動詞").unwrap();
     /// assert_eq!("まぁ良いだろう", s.as_raw_text());
     /// ```
     #[inline]
@@ -789,7 +789,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
         }
     }
 
-    /// Writes a tokenized text. Tokens around [`CharacterBoundary::Unknown`] will be skipped.
+    /// Writes a tokenized text. Tokens adjacent to [`CharacterBoundary::Unknown`] will be skipped.
     ///
     /// # Examples
     ///
@@ -798,13 +798,17 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// let mut buf = String::new();
     ///
-    /// let s = Sentence::from_partial_annotation("ま-ぁ|社-長|は|火-星|猫|だ").unwrap();
+    /// let s = Sentence::from_partial_annotation(
+    ///     "ま-ぁ/名詞|社-長/名詞|は/助詞|火-星/名詞|猫/名詞|だ/助動詞"
+    /// ).unwrap();
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("まぁ 社長 は 火星 猫 だ", buf);
+    /// assert_eq!("まぁ/名詞 社長/名詞 は/助詞 火星/名詞 猫/名詞 だ/助動詞", buf);
     ///
-    /// let s = Sentence::from_partial_annotation("ま-ぁ|社-長|は|火-星 猫|だ").unwrap();
+    /// let s = Sentence::from_partial_annotation(
+    ///     "ま-ぁ/名詞|社-長/名詞|は/助詞|火-星 猫|だ/助動詞"
+    /// ).unwrap();
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("まぁ 社長 は だ", buf);
+    /// assert_eq!("まぁ/名詞 社長/名詞 は/助詞 だ/助動詞", buf);
     /// ```
     pub fn write_tokenized_text(&self, buf: &mut String) {
         buf.clear();
