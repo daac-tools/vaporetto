@@ -1153,7 +1153,7 @@ impl<'a, 'b> Token<'a, 'b> {
         &self.sentence.tags[start..end]
     }
 
-    /// Returns the start position of this token.
+    /// Returns the start position of this token in characters.
     #[inline]
     pub const fn start(&self) -> usize {
         self.start
