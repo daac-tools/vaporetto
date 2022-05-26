@@ -98,7 +98,7 @@ pub struct Sentence<'a, 'b> {
 }
 
 impl<'a, 'b> Default for Sentence<'a, 'b> {
-    /// Creates a new [`Sentence`] from a space.
+    /// Creates a new [`Sentence`] consisting of a space.
     ///
     /// # Examples
     ///
