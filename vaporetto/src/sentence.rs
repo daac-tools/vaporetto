@@ -399,7 +399,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// A tokenized text must be annotated by the following rules:
     ///   - A whitespace (`' '`) is inserted to each token boundary.
-    ///   - If necessary, a POS tag following a slash (`'/'`) can be added to each token.
+    ///   - If necessary, multiple tags following each slash (`'/'`) can be added to each token.
     ///   - Each character following a back slash (`'\\'`) is escaped.
     ///
     /// # Errors
