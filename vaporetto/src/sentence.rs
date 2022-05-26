@@ -2073,6 +2073,221 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_from_tokenized_with_tags_empty_slashes() {
+        let s = Sentence::from_tokenized(
+            "Rust//ラスト で 良い/形容詞/イイ プログラミング 体験 を ！//ビックリ",
+        )
+        .unwrap();
+
+        assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
+        assert_eq!(
+            [
+                0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
+                0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
+            ],
+            s.str_to_char_pos()
+        );
+        assert_eq!(
+            [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
+            s.char_to_str_pos()
+        );
+        assert_eq!(
+            [
+                Roman as u8,
+                Roman as u8,
+                Roman as u8,
+                Roman as u8,
+                Hiragana as u8,
+                Kanji as u8,
+                Hiragana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Kanji as u8,
+                Kanji as u8,
+                Hiragana as u8,
+                Other as u8,
+            ],
+            s.char_types()
+        );
+        assert_eq!(
+            [
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+            ],
+            s.boundaries()
+        );
+        assert!(s.boundary_scores().is_empty());
+        assert_eq!(
+            &[
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("ラスト")),
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("形容詞")),
+                Some(Cow::Borrowed("イイ")),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("ビックリ")),
+            ],
+            s.tags.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_empty_slashes() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        s.update_tokenized("Rust//ラスト で 良い/形容詞/イイ プログラミング 体験 を ！//ビックリ")
+            .unwrap();
+
+        assert_eq!("Rustで良いプログラミング体験を！", s.as_raw_text());
+        assert_eq!(
+            [
+                0, 1, 2, 3, 4, 0, 0, 5, 0, 0, 6, 0, 0, 7, 0, 0, 8, 0, 0, 9, 0, 0, 10, 0, 0, 11, 0,
+                0, 12, 0, 0, 13, 0, 0, 14, 0, 0, 15, 0, 0, 16, 0, 0, 17, 0, 0, 18,
+            ],
+            s.str_to_char_pos()
+        );
+        assert_eq!(
+            [0, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,],
+            s.char_to_str_pos()
+        );
+        assert_eq!(
+            [
+                Roman as u8,
+                Roman as u8,
+                Roman as u8,
+                Roman as u8,
+                Hiragana as u8,
+                Kanji as u8,
+                Hiragana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Katakana as u8,
+                Kanji as u8,
+                Kanji as u8,
+                Hiragana as u8,
+                Other as u8,
+            ],
+            s.char_types()
+        );
+        assert_eq!(
+            [
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+            ],
+            s.boundaries()
+        );
+        assert!(s.boundary_scores().is_empty());
+        assert_eq!(
+            &[
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("ラスト")),
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("形容詞")),
+                Some(Cow::Borrowed("イイ")),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("ビックリ")),
+            ],
+            s.tags.as_slice()
+        );
+    }
+    
+    #[test]
     fn test_sentence_from_tokenized_with_escape_whitespace() {
         let s = Sentence::from_tokenized("火星 猫 の 生態 ( M \\  et\\ al. )").unwrap();
 
