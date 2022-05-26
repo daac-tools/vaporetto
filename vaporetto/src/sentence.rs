@@ -1006,6 +1006,10 @@ impl<'a, 'b> Sentence<'a, 'b> {
 
     /// Returns a reference to the internal representation of tags.
     ///
+    /// In the representation, tags are stored in an array, and
+    /// the `j`-th tag of the `i`-th character is stored in the `i*k+j`-th element,
+    /// where `k` is the maximum number of tags (i.e., [`n_tags()`]).
+    ///
     /// # Examples
     ///
     /// ```
