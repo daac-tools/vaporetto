@@ -746,7 +746,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
         &self.text
     }
 
-    /// Returns an iterator of tokens. Tokens around [`CharacterBoundary::Unknown`] will be
+    /// Returns an iterator of tokens. Tokens adjacent to [`CharacterBoundary::Unknown`] will be
     /// skipped.
     ///
     /// # Examples
