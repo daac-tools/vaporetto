@@ -111,9 +111,9 @@ impl<'a, 'b> Default for Sentence<'a, 'b> {
     /// assert_eq!(0, s.n_tags());
     /// ```
     fn default() -> Self {
-        Self {
-            text: Cow::Borrowed(" "),
-            char_types: vec![CharacterType::Other as u8],
+        let mut s = Self {
+            text: Cow::Borrowed(""),
+            char_types: vec![],
             boundaries: vec![],
             boundary_scores: vec![],
             score_padding: 0,
@@ -122,13 +122,16 @@ impl<'a, 'b> Default for Sentence<'a, 'b> {
             tags: vec![],
             n_tags: 0,
             predictor: None,
-            str_to_char_pos: vec![0, 1],
-            char_to_str_pos: vec![0, 1],
-        }
+            str_to_char_pos: vec![],
+            char_to_str_pos: vec![],
+        };
+        s.set_default();
+        s
     }
 }
 
 impl<'a, 'b> Sentence<'a, 'b> {
+    #[inline(always)]
     fn set_default(&mut self) {
         self.text = Cow::Borrowed(" ");
         self.char_types.clear();
@@ -626,6 +629,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
     ///
     /// In addition, multiple tags following each slash (`'/'`) can be inserted to each token.
+    /// Tags can also be inserted at non-word boundaries, but such tags are ignored.
     ///
     /// # Errors
     ///
@@ -637,15 +641,25 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
+    /// let mut buf = String::new();
+    ///
     /// let s = Sentence::from_partial_annotation(
-    ///     "ま-ぁ|良-い|だ ろ う"
+    ///     "ま-ぁ|良-い|だ-ろ-う"
     /// ).unwrap();
-    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ 良い だろう", buf);
     ///
     /// let s = Sentence::from_partial_annotation(
     ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火-星 猫|だ/助動詞/ダ"
     /// ).unwrap();
-    /// assert_eq!("まぁ社長は火星猫だ", s.as_raw_text());
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ だ/助動詞/ダ", buf);
+    ///
+    /// let s = Sentence::from_partial_annotation(
+    ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火/名詞/ヒ-星|猫|だ/助動詞/ダ"
+    /// ).unwrap();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星 猫 だ/助動詞/ダ", buf);
     /// ```
     pub fn from_partial_annotation(partial_annotation_text: &str) -> Result<Self> {
         let mut text = String::new();
@@ -688,6 +702,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
     ///
     /// In addition, multiple tags following each slash (`'/'`) can be inserted to each token.
+    /// Tags can also be inserted at non-word boundaries, but such tags are ignored.
     ///
     /// # Errors
     ///
@@ -699,15 +714,26 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     /// use vaporetto::Sentence;
     ///
+    /// let mut buf = String::new();
     /// let mut s = Sentence::default();
     ///
-    /// s.update_partial_annotation("ま-ぁ|良-い|だ ろ う").unwrap();
-    /// assert_eq!("まぁ良いだろう", s.as_raw_text());
+    /// s.update_partial_annotation(
+    ///     "ま-ぁ|良-い|だ-ろ-う"
+    /// ).unwrap();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ 良い だろう", buf);
     ///
     /// s.update_partial_annotation(
     ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火-星 猫|だ/助動詞/ダ"
     /// ).unwrap();
-    /// assert_eq!("まぁ社長は火星猫だ", s.as_raw_text());
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ だ/助動詞/ダ", buf);
+    ///
+    /// s.update_partial_annotation(
+    ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火/名詞/ヒ-星|猫|だ/助動詞/ダ"
+    /// ).unwrap();
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星 猫 だ/助動詞/ダ", buf);
     /// ```
     pub fn update_partial_annotation(&mut self, partial_annotation_text: &str) -> Result<()> {
         if let Err(e) = Self::parse_partial_annotation(
@@ -1163,7 +1189,7 @@ impl<'a, 'b> Token<'a, 'b> {
         self.start
     }
 
-    /// Returns the end position of this token.
+    /// Returns the end position of this token in characters.
     #[inline]
     pub const fn end(&self) -> usize {
         self.end
@@ -2286,7 +2312,7 @@ mod tests {
             s.tags.as_slice()
         );
     }
-    
+
     #[test]
     fn test_sentence_from_tokenized_with_escape_whitespace() {
         let s = Sentence::from_tokenized("火星 猫 の 生態 ( M \\  et\\ al. )").unwrap();
