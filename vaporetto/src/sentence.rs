@@ -1157,7 +1157,9 @@ assert_eq!(
         self.predictor.replace(predictor);
     }
 
-    /// Safety: `pos` must be a position corresponding to a boundary in the UTF-8 format.
+    /// # Safety
+    ///
+    /// `pos` must be a position corresponding to a boundary in the UTF-8 format.
     #[inline(always)]
     pub(crate) unsafe fn str_to_char_pos(&self, pos: usize) -> usize {
         *self.str_to_char_pos.get_unchecked(pos)
