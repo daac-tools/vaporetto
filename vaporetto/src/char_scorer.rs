@@ -43,6 +43,7 @@ where
         }
     }
 
+    #[must_use]
     pub fn merge(self) -> Vec<(String, W)> {
         let mut stack = vec![];
         for (ngram, data) in &self.map {
