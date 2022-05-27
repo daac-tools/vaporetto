@@ -114,6 +114,8 @@ impl TypeScorerBoundaryTag {
             .pma
             .find_overlapping_no_suffix_iter(&sentence.char_types)
         {
+            debug_assert!(m.end() != 0 && m.end() <= sentence.text.len());
+            debug_assert!(m.value() < self.weights.len());
             if let Some(weight) = unsafe { self.weights.get_unchecked(m.value()) } {
                 weight.add_score(
                     (m.end() + sentence.score_padding - 1) as isize,
