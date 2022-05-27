@@ -93,7 +93,6 @@ impl CharScorerBoundary {
     #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
     pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
-        sentence.char_pma_states.clear();
         #[cfg(not(feature = "charwise-pma"))]
         let it = self
             .pma

@@ -128,7 +128,8 @@ impl TypeScorerBoundaryTag {
 
     /// # Satety
     ///
-    /// `token_id` and `pos` must be valid values.
+    /// `token_id` must be smaller than `scorer.tag_weight.len()`.
+    /// `pos` must be smaller than `sentence.type_pma_states.len()`.
     #[inline(always)]
     pub unsafe fn add_tag_scores(
         &self,
