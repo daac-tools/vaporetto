@@ -189,12 +189,12 @@ impl<'a> Trainer<'a> {
     ///
     /// # Arguments
     ///
-    /// * `char_ngram_size` - The character n-gram length.
     /// * `char_window_size` - The character window size.
-    /// * `type_ngram_size` - The character type n-gram length.
+    /// * `char_ngram_size` - The character n-gram length.
     /// * `type_window_size` - The character type window size.
-    /// * `dictionary` - A word dictionary.
-    /// * `dict_max_word_size` - Dictionary words greater than this value will be grouped together.
+    /// * `type_ngram_size` - The character type n-gram length.
+    /// * `dict_words` - A word dictionary.
+    /// * `dict_word_max_len` - Dictionary words greater than this value will be grouped together.
     ///
     /// # Errors
     ///
