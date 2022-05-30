@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use bincode::{BorrowDecode, Encode};
 
-use crate::errors::Result;
+use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
@@ -105,11 +105,16 @@ impl TypeScorer {
         #[cfg(feature = "tag-prediction")]
         if tag_ngram_model.is_empty() {
             match window_size {
+                0 => Err(Vaporetto::invalid_model(
+                    "type_window_size must be a positive value",
+                )),
+
                 #[cfg(feature = "cache-type-score")]
-                0..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
+                1..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
                     ngram_model,
                     window_size,
                 )?)),
+
                 _ => Ok(Self::Boundary(TypeScorerBoundary::new(
                     ngram_model,
                     window_size,
