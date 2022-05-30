@@ -105,7 +105,7 @@ impl TypeScorer {
         #[cfg(feature = "tag-prediction")]
         if tag_ngram_model.is_empty() {
             match window_size {
-                0 => Err(Vaporetto::invalid_model(
+                0 => Err(VaporettoError::invalid_model(
                     "type_window_size must be a positive value",
                 )),
 

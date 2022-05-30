@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use bincode::{BorrowDecode, Encode};
 
 use crate::dict_model::DictModel;
-use crate::errors::Result;
+use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
@@ -93,7 +93,7 @@ impl CharScorer {
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<String>>,
     ) -> Result<Self> {
         if window_size == 0 {
-            return Err(Vaporetto::invalid_model(
+            return Err(VaporettoError::invalid_model(
                 "char_window_size must be a positive value",
             ));
         }
