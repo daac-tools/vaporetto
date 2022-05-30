@@ -101,39 +101,41 @@ impl TypeScorer {
         ngram_model: NgramModel<Vec<u8>>,
         window_size: u8,
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<Vec<u8>>>,
-    ) -> Result<Self> {
+    ) -> Result<Option<Self>> {
+        if ngram_model.0.is_empty() || window_size == 0 {
+            return Ok(None);
+        }
+
         #[cfg(feature = "tag-prediction")]
         if tag_ngram_model.is_empty() {
             match window_size {
                 #[cfg(feature = "cache-type-score")]
-                0..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
+                0..=CACHE_MAX_WINDOW_SIZE => Ok(Some(Self::BoundaryCache(
+                    TypeScorerBoundaryCache::new(ngram_model, window_size)?,
+                ))),
+                _ => Ok(Some(Self::Boundary(TypeScorerBoundary::new(
                     ngram_model,
                     window_size,
-                )?)),
-                _ => Ok(Self::Boundary(TypeScorerBoundary::new(
-                    ngram_model,
-                    window_size,
-                )?)),
+                )?))),
             }
         } else {
-            Ok(Self::BoundaryTag(TypeScorerBoundaryTag::new(
+            Ok(Some(Self::BoundaryTag(TypeScorerBoundaryTag::new(
                 ngram_model,
                 window_size,
                 tag_ngram_model,
-            )?))
+            )?)))
         }
 
         #[cfg(not(feature = "tag-prediction"))]
         match window_size {
             #[cfg(feature = "cache-type-score")]
-            0..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
+            0..=CACHE_MAX_WINDOW_SIZE => Ok(Some(Self::BoundaryCache(
+                TypeScorerBoundaryCache::new(ngram_model, window_size)?,
+            ))),
+            _ => Ok(Some(Self::Boundary(TypeScorerBoundary::new(
                 ngram_model,
                 window_size,
-            )?)),
-            _ => Ok(Self::Boundary(TypeScorerBoundary::new(
-                ngram_model,
-                window_size,
-            )?)),
+            )?))),
         }
     }
 

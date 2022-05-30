@@ -91,29 +91,33 @@ impl CharScorer {
         dict_model: DictModel,
         window_size: u8,
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<String>>,
-    ) -> Result<Self> {
+    ) -> Result<Option<Self>> {
+        if ngram_model.0.is_empty() || window_size == 0 {
+            return Ok(None);
+        }
+
         #[cfg(feature = "tag-prediction")]
         if tag_ngram_model.is_empty() {
-            Ok(Self::Boundary(CharScorerBoundary::new(
+            Ok(Some(Self::Boundary(CharScorerBoundary::new(
                 ngram_model,
                 dict_model,
                 window_size,
-            )?))
+            )?)))
         } else {
-            Ok(Self::BoundaryTag(CharScorerBoundaryTag::new(
+            Ok(Some(Self::BoundaryTag(CharScorerBoundaryTag::new(
                 ngram_model,
                 dict_model,
                 window_size,
                 tag_ngram_model,
-            )?))
+            )?)))
         }
 
         #[cfg(not(feature = "tag-prediction"))]
-        Ok(Self::Boundary(CharScorerBoundary::new(
+        Ok(Some(Self::Boundary(CharScorerBoundary::new(
             ngram_model,
             dict_model,
             window_size,
-        )?))
+        )?)))
     }
 
     #[inline]

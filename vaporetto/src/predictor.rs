@@ -302,8 +302,8 @@ impl TagPredictor {
 }
 
 pub struct PredictorData {
-    char_scorer: CharScorer,
-    type_scorer: TypeScorer,
+    char_scorer: Option<CharScorer>,
+    type_scorer: Option<TypeScorer>,
     bias: i32,
 
     #[cfg(feature = "tag-prediction")]
@@ -316,8 +316,19 @@ impl<'de> BorrowDecode<'de> for PredictorData {
     /// WARNING: This function is inherently unsafe. Do not publish this function outside this
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let char_scorer = BorrowDecode::borrow_decode(decoder)?;
-        let type_scorer = BorrowDecode::borrow_decode(decoder)?;
+        let config = bincode::config::standard();
+        let char_scorer_data: Option<Vec<u8>> = BorrowDecode::borrow_decode(decoder)?;
+        let char_scorer = if let Some(data) = char_scorer_data {
+            Some(bincode::decode_from_slice(&data, config)?.0)
+        } else {
+            None
+        };
+        let type_scorer_data: Option<Vec<u8>> = BorrowDecode::borrow_decode(decoder)?;
+        let type_scorer = if let Some(data) = type_scorer_data {
+            Some(bincode::decode_from_slice(&data, config)?.0)
+        } else {
+            None
+        };
         let bias = Decode::decode(decoder)?;
         #[cfg(feature = "tag-prediction")]
         let tag_predictor = {
@@ -340,8 +351,19 @@ impl<'de> BorrowDecode<'de> for PredictorData {
 
 impl Encode for PredictorData {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.char_scorer, encoder)?;
-        Encode::encode(&self.type_scorer, encoder)?;
+        let config = bincode::config::standard();
+        let char_scorer_data = if let Some(char_scorer) = self.char_scorer.as_ref() {
+            Some(bincode::encode_to_vec(char_scorer, config)?)
+        } else {
+            None
+        };
+        Encode::encode(&char_scorer_data, encoder)?;
+        let type_scorer_data = if let Some(type_scorer) = self.type_scorer.as_ref() {
+            Some(bincode::encode_to_vec(type_scorer, config)?)
+        } else {
+            None
+        };
+        Encode::encode(&type_scorer_data, encoder)?;
         Encode::encode(&self.bias, encoder)?;
         #[cfg(feature = "tag-prediction")]
         {
@@ -487,8 +509,12 @@ impl Predictor {
         sentence
             .boundary_scores
             .resize(sentence.score_padding * 2 + sentence.len() - 1, self.0.bias);
-        self.0.char_scorer.add_scores(sentence);
-        self.0.type_scorer.add_scores(sentence);
+        if let Some(scorer) = self.0.char_scorer.as_ref() {
+            scorer.add_scores(sentence);
+        }
+        if let Some(scorer) = self.0.type_scorer.as_ref() {
+            scorer.add_scores(sentence);
+        }
         for (b, s) in sentence
             .boundaries
             .iter_mut()
@@ -524,12 +550,12 @@ impl Predictor {
                         scores.resize(tag_predictor.bias().len(), 0);
                         tag_predictor.bias().add_scores(&mut scores);
                         unsafe {
-                            self.0
-                                .char_scorer
-                                .add_tag_scores(*token_id, i, sentence, &mut scores);
-                            self.0
-                                .type_scorer
-                                .add_tag_scores(*token_id, i, sentence, &mut scores);
+                            if let Some(scorer) = self.0.char_scorer.as_ref() {
+                                scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
+                            }
+                            if let Some(scorer) = self.0.type_scorer.as_ref() {
+                                scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
+                            }
                         }
                         tag_predictor.predict(
                             &scores,
@@ -547,18 +573,12 @@ impl Predictor {
                 scores.resize(tag_predictor.bias().len(), 0);
                 tag_predictor.bias().add_scores(&mut scores);
                 unsafe {
-                    self.0.char_scorer.add_tag_scores(
-                        *token_id,
-                        sentence.len() - 1,
-                        sentence,
-                        &mut scores,
-                    );
-                    self.0.type_scorer.add_tag_scores(
-                        *token_id,
-                        sentence.len() - 1,
-                        sentence,
-                        &mut scores,
-                    );
+                    if let Some(scorer) = self.0.char_scorer.as_ref() {
+                        scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
+                    }
+                    if let Some(scorer) = self.0.type_scorer.as_ref() {
+                        scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
+                    }
                 }
                 let i = sentence.len() - 1;
                 tag_predictor.predict(&scores, &mut sentence.tags[i * self.0.n_tags..]);
@@ -813,6 +833,29 @@ mod tests {
                 None,
             ],
             sentence.tags()
+        );
+    }
+
+    #[test]
+    fn test_serialization() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        let data = predictor.serialize_to_vec().unwrap();
+        let (predictor, _) = unsafe { Predictor::deserialize_from_slice_unchecked(&data).unwrap() };
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        assert_eq!(&[-22, 54, 58, 43, -54, 68, 48], sentence.boundary_scores(),);
+        assert_eq!(
+            &[
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary
+            ],
+            sentence.boundaries(),
         );
     }
 }
