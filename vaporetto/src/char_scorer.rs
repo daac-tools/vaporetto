@@ -92,12 +92,6 @@ impl CharScorer {
         window_size: u8,
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<String>>,
     ) -> Result<Self> {
-        if window_size == 0 {
-            return Err(Vaporetto::invalid_model(
-                "char_window_size must be a positive value",
-            ));
-        }
-
         #[cfg(feature = "tag-prediction")]
         if tag_ngram_model.is_empty() {
             Ok(Self::Boundary(CharScorerBoundary::new(
