@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use bincode::{BorrowDecode, Encode};
 
 use crate::dict_model::DictModel;
-use crate::errors::{Result, VaporettoError};
+use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
@@ -79,6 +79,8 @@ where
 /// crate.
 #[derive(BorrowDecode, Encode)]
 pub enum CharScorer {
+    Nop,
+
     Boundary(CharScorerBoundary),
 
     #[cfg(feature = "tag-prediction")]
@@ -93,9 +95,7 @@ impl CharScorer {
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<String>>,
     ) -> Result<Self> {
         if window_size == 0 {
-            return Err(VaporettoError::invalid_model(
-                "char_window_size must be a positive value",
-            ));
+            return Ok(Self::Nop);
         }
 
         #[cfg(feature = "tag-prediction")]
@@ -125,6 +125,8 @@ impl CharScorer {
     #[inline]
     pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
         match self {
+            Self::Nop => (),
+
             Self::Boundary(scorer) => scorer.add_scores(sentence),
 
             #[cfg(feature = "tag-prediction")]
@@ -146,8 +148,9 @@ impl CharScorer {
         scores: &mut [i32],
     ) {
         match self {
-            Self::Boundary(_) => panic!("unsupported"),
+            Self::Nop => scores.fill(0),
             Self::BoundaryTag(scorer) => scorer.add_tag_scores(token_id, pos, sentence, scores),
+            _ => panic!("unsupported"),
         }
     }
 }
