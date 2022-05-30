@@ -29,6 +29,10 @@ use boundary_scorer_cache::TypeScorerBoundaryCache;
 #[cfg(feature = "tag-prediction")]
 use boundary_tag_scorer::TypeScorerBoundaryTag;
 
+// If the cache-type-score feature is enabled and the window size of character type features is
+// less than or equal to this value, character type scores are cached.
+const CACHE_MAX_WINDOW_SIZE: u8 = 3;
+
 #[derive(Default)]
 struct TypeWeightMerger<W> {
     map: BTreeMap<Vec<u8>, RefCell<(W, bool)>>,
@@ -47,6 +51,7 @@ where
         }
     }
 
+    #[must_use]
     pub fn merge(self) -> Vec<(Vec<u8>, W)> {
         let mut stack = vec![];
         for (ngram, data) in &self.map {
@@ -101,7 +106,7 @@ impl TypeScorer {
         if tag_ngram_model.is_empty() {
             match window_size {
                 #[cfg(feature = "cache-type-score")]
-                0..=3 => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
+                0..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
                     ngram_model,
                     window_size,
                 )?)),
@@ -121,7 +126,7 @@ impl TypeScorer {
         #[cfg(not(feature = "tag-prediction"))]
         match window_size {
             #[cfg(feature = "cache-type-score")]
-            0..=3 => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
+            0..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
                 ngram_model,
                 window_size,
             )?)),
