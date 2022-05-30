@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use bincode::{BorrowDecode, Encode};
 
-use crate::errors::Result;
+use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
 
@@ -87,8 +87,6 @@ where
 /// crate.
 #[derive(BorrowDecode, Encode)]
 pub enum TypeScorer {
-    Nop,
-
     Boundary(TypeScorerBoundary),
 
     #[cfg(feature = "cache-type-score")]
@@ -104,15 +102,15 @@ impl TypeScorer {
         window_size: u8,
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<Vec<u8>>>,
     ) -> Result<Self> {
-        if window_size == 0 {
-            return Ok(Self::Nop);
-        }
-
         #[cfg(feature = "tag-prediction")]
         if tag_ngram_model.is_empty() {
             match window_size {
+                0 => Err(VaporettoError::invalid_model(
+                    "type_window_size must be a positive value",
+                )),
+
                 #[cfg(feature = "cache-type-score")]
-                0..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
+                1..=CACHE_MAX_WINDOW_SIZE => Ok(Self::BoundaryCache(TypeScorerBoundaryCache::new(
                     ngram_model,
                     window_size,
                 )?)),
@@ -137,7 +135,6 @@ impl TypeScorer {
                 ngram_model,
                 window_size,
             )?)),
-
             _ => Ok(Self::Boundary(TypeScorerBoundary::new(
                 ngram_model,
                 window_size,
@@ -148,8 +145,6 @@ impl TypeScorer {
     #[inline]
     pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
         match self {
-            Self::Nop => (),
-
             Self::Boundary(scorer) => scorer.add_scores(sentence),
 
             #[cfg(feature = "cache-type-score")]
@@ -174,7 +169,6 @@ impl TypeScorer {
         scores: &mut [i32],
     ) {
         match self {
-            Self::Nop => scores.fill(0),
             Self::BoundaryTag(scorer) => scorer.add_tag_scores(token_id, pos, sentence, scores),
             _ => panic!("unsupported"),
         }
