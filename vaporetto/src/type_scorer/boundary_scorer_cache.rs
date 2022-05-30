@@ -24,11 +24,6 @@ impl TypeScorerBoundaryCache {
             .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
         let mut weights = vec![];
         for d in model.0 {
-            if d.weights.len() <= 2 * usize::from(window_size) - d.ngram.len() {
-                return Err(VaporettoError::invalid_model(
-                    "invalid size of weight vector",
-                ));
-            }
             weights.push(d.weights);
         }
 
@@ -44,7 +39,9 @@ impl TypeScorerBoundaryCache {
             }
             let mut y = 0;
             for m in pma.find_overlapping_iter(&sequence) {
-                y += weights[m.value()][usize::from(sequence_size) - m.end()];
+                if let Some(w) = weights[m.value()].get(usize::from(sequence_size) - m.end()) {
+                    y += *w;
+                }
             }
             *score = y;
         }
