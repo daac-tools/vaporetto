@@ -885,6 +885,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tag-prediction")]
     #[test]
     #[should_panic]
     fn test_fill_tags_unsupported() {
@@ -895,6 +896,7 @@ mod tests {
         sentence.fill_tags();
     }
 
+    #[cfg(feature = "tag-prediction")]
     #[test]
     #[should_panic]
     fn test_fill_tags_unsupported_overwrite_prediction() {
