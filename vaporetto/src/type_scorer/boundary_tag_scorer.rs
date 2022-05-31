@@ -122,6 +122,7 @@ impl TypeScorerBoundaryTag {
                     &mut sentence.boundary_scores,
                 );
             }
+            debug_assert!(m.end() <= sentence.type_pma_states.len());
             unsafe { *sentence.type_pma_states.get_unchecked_mut(m.end() - 1) = m.value() as u32 };
         }
     }

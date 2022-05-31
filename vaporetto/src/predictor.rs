@@ -557,11 +557,21 @@ impl Predictor {
                         scores.clear();
                         scores.resize(tag_predictor.bias().len(), 0);
                         tag_predictor.bias().add_scores(&mut scores);
-                        unsafe {
-                            if let Some(scorer) = self.0.char_scorer.as_ref() {
+                        if let Some(scorer) = self.0.char_scorer.as_ref() {
+                            debug_assert!(i < sentence.char_pma_states.len());
+                            // token_id is always smaller than tag_weight.len() because
+                            // tag_predictor is created to contain such values in the new()
+                            // function.
+                            unsafe {
                                 scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
                             }
-                            if let Some(scorer) = self.0.type_scorer.as_ref() {
+                        }
+                        if let Some(scorer) = self.0.type_scorer.as_ref() {
+                            debug_assert!(i < sentence.type_pma_states.len());
+                            // token_id is always smaller than tag_weight.len() because
+                            // tag_predictor is created to contain such values in the new()
+                            // function.
+                            unsafe {
                                 scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
                             }
                         }
@@ -580,11 +590,19 @@ impl Predictor {
                 scores.clear();
                 scores.resize(tag_predictor.bias().len(), 0);
                 tag_predictor.bias().add_scores(&mut scores);
-                unsafe {
-                    if let Some(scorer) = self.0.char_scorer.as_ref() {
+                if let Some(scorer) = self.0.char_scorer.as_ref() {
+                    debug_assert!(sentence.len() <= sentence.char_pma_states.len());
+                    // token_id is always smaller than tag_weight.len() because tag_predictor is
+                    // created to contain such values in the new() function.
+                    unsafe {
                         scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
                     }
-                    if let Some(scorer) = self.0.type_scorer.as_ref() {
+                }
+                if let Some(scorer) = self.0.type_scorer.as_ref() {
+                    debug_assert!(sentence.len() <= sentence.type_pma_states.len());
+                    // token_id is always smaller than tag_weight.len() because tag_predictor is
+                    // created to contain such values in the new() function.
+                    unsafe {
                         scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
                     }
                 }
