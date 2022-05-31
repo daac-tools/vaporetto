@@ -89,6 +89,17 @@ impl Hasher for SplitMix64 {
     }
 }
 
+#[inline(always)]
+pub const fn trim_end_zeros(mut w: &[i32]) -> &[i32] {
+    while let Some((last, rest)) = w.split_last() {
+        if *last != 0 {
+            break;
+        }
+        w = rest;
+    }
+    w
+}
+
 #[derive(Clone, Copy, Default)]
 pub struct SplitMix64Builder;
 

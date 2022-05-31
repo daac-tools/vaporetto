@@ -25,6 +25,7 @@ use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{CharacterBoundary, Sentence};
 use crate::type_scorer::TypeScorer;
+use crate::utils;
 
 pub const WEIGHT_FIXED_LEN: usize = 8;
 
@@ -60,14 +61,7 @@ impl Encode for WeightVector {
                 #[cfg(feature = "portable-simd")]
                 let w = w.as_array();
 
-                let mut i = w.len();
-                for &w in w.iter().rev() {
-                    if w != 0 {
-                        break;
-                    }
-                    i -= 1;
-                }
-                Encode::encode(&w[..i].to_vec(), encoder)?;
+                Encode::encode(&utils::trim_end_zeros(w).to_vec(), encoder)?;
             }
         }
         Ok(())
