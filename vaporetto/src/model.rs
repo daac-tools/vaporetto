@@ -14,6 +14,28 @@ use crate::utils::VecWriter;
 /// Magic number.
 const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
 
+// For each token, a model is trained for every tag, but the scores of all tags are calculated in
+// parallel during prediction.
+// Thus, the score array is a concatenation of all classes of all tags.
+//
+// For example, the following token has 3 POS tags and 3 pronunciation tags, so the score array
+// contains 6 items. The predictor picks the tag with the largest score.
+//
+//   token:   "君"
+//   tags:    [["名詞", "代名詞", "接尾辞"], ["クン", "キミ", "ギミ"]]
+//   scores:  [    176,     3647,       39,      518,   9346,    126 ]
+//
+//   results: ["代名詞", "キミ"]
+//
+// If there is only one tag candidate, the model is not trained.
+// In the following example, the predictor determines the first tag without prediction, so the
+// score array only contains scores for the second tag.
+//
+//   token:   "犬"
+//   tags:    [["名詞"], ["イヌ", "ケン"]]
+//   scores:  [              475,   1563 ]
+//
+//   results: ["名詞", "ケン"]
 #[derive(Debug, Decode, Encode)]
 pub struct TagModel {
     pub(crate) token: String,
