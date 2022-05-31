@@ -176,7 +176,7 @@ impl TypeScorer {
 mod tests {
     use super::*;
 
-    use crate::ngram_model::NgramData;
+    use crate::ngram_model::{NgramData, TagWeight};
     use crate::predictor::PositionalWeight;
     use crate::CharacterType::*;
 
@@ -382,26 +382,59 @@ mod tests {
                 TagNgramModel(vec![
                     TagNgramData {
                         ngram: vec![Hiragana as u8, Kanji as u8],
-                        weights: vec![(0, vec![10, 11, 12]), (1, vec![13, 14, 15])],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![10, 11, 12],
+                            },
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![13, 14, 15],
+                            },
+                        ],
                     },
                     TagNgramData {
                         ngram: vec![Kanji as u8, Hiragana as u8],
-                        weights: vec![(1, vec![16, 17, 18]), (3, vec![19, 20, 21])],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![16, 17, 18],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![19, 20, 21],
+                            },
+                        ],
                     },
                     TagNgramData {
                         ngram: vec![Kanji as u8, Kanji as u8, Kanji as u8],
-                        weights: vec![(0, vec![22, 23, 24])],
+                        weights: vec![TagWeight {
+                            rel_position: 0,
+                            weights: vec![22, 23, 24],
+                        }],
                     },
                 ]),
                 TagNgramModel(vec![]),
                 TagNgramModel(vec![
                     TagNgramData {
                         ngram: vec![Kanji as u8, Hiragana as u8],
-                        weights: vec![(0, vec![25, 26]), (3, vec![27, 28])],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![25, 26],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![27, 28],
+                            },
+                        ],
                     },
                     TagNgramData {
                         ngram: vec![Hiragana as u8, Kanji as u8, Kanji as u8, Kanji as u8],
-                        weights: vec![(3, vec![29, 30])],
+                        weights: vec![TagWeight {
+                            rel_position: 3,
+                            weights: vec![29, 30],
+                        }],
                     },
                 ]),
             ],

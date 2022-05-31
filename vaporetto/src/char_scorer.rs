@@ -155,7 +155,7 @@ mod tests {
     use super::*;
 
     use crate::dict_model::WordWeightRecord;
-    use crate::ngram_model::NgramData;
+    use crate::ngram_model::{NgramData, TagWeight};
     use crate::predictor::PositionalWeight;
 
     use crate::predictor::WEIGHT_FIXED_LEN;
@@ -435,26 +435,59 @@ mod tests {
                 TagNgramModel(vec![
                     TagNgramData {
                         ngram: "の人".into(),
-                        weights: vec![(0, vec![15, 16, 17]), (1, vec![18, 19, 20])],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![15, 16, 17],
+                            },
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![18, 19, 20],
+                            },
+                        ],
                     },
                     TagNgramData {
                         ngram: "人は".into(),
-                        weights: vec![(1, vec![21, 22, 23]), (3, vec![24, 25, 26])],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![21, 22, 23],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![24, 25, 26],
+                            },
+                        ],
                     },
                     TagNgramData {
                         ngram: "火星人".into(),
-                        weights: vec![(0, vec![27, 28, 29])],
+                        weights: vec![TagWeight {
+                            rel_position: 0,
+                            weights: vec![27, 28, 29],
+                        }],
                     },
                 ]),
                 TagNgramModel(vec![]),
                 TagNgramModel(vec![
                     TagNgramData {
                         ngram: "人は".into(),
-                        weights: vec![(0, vec![27, 28]), (3, vec![29, 30])],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![27, 28],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![29, 30],
+                            },
+                        ],
                     },
                     TagNgramData {
                         ngram: "は火星人".into(),
-                        weights: vec![(3, vec![31, 32])],
+                        weights: vec![TagWeight {
+                            rel_position: 3,
+                            weights: vec![31, 32],
+                        }],
                     },
                 ]),
             ],

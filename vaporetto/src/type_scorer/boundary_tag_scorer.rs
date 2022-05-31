@@ -79,8 +79,8 @@ impl TypeScorerBoundaryTag {
             ];
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
             for d in tag_model.0 {
-                for (rel_position, weights) in d.weights {
-                    let weight = PositionalWeightWithTag::with_tag(i, rel_position, weights);
+                for w in d.weights {
+                    let weight = PositionalWeightWithTag::with_tag(i, w.rel_position, w.weights);
                     merger.add(d.ngram.clone(), weight);
                 }
             }

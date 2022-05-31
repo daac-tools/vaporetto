@@ -7,7 +7,7 @@ use liblinear::LibLinearModel;
 
 use crate::errors::{Result, VaporettoError};
 use crate::model::TagModel;
-use crate::ngram_model::{TagNgramData, TagNgramModel};
+use crate::ngram_model::{TagNgramData, TagNgramModel, TagWeight};
 use crate::sentence::Sentence;
 use crate::trainer::{NgramFeature, SolverType};
 
@@ -259,18 +259,24 @@ impl<'a> TagTrainer<'a> {
         }
 
         let mut char_ngram_model = BTreeMap::new();
-        for ((ngram, rel_position), weight) in char_ngram_weights {
+        for ((ngram, rel_position), weights) in char_ngram_weights {
             char_ngram_model
                 .entry(ngram.to_string())
                 .or_insert_with(Vec::new)
-                .push((rel_position, weight));
+                .push(TagWeight {
+                    rel_position,
+                    weights,
+                });
         }
         let mut type_ngram_model = BTreeMap::new();
-        for ((ngram, rel_position), weight) in type_ngram_weights {
+        for ((ngram, rel_position), weights) in type_ngram_weights {
             type_ngram_model
                 .entry(ngram.to_vec())
                 .or_insert_with(Vec::new)
-                .push((rel_position, weight));
+                .push(TagWeight {
+                    rel_position,
+                    weights,
+                });
         }
         Ok(TagModel {
             token: token.to_string(),

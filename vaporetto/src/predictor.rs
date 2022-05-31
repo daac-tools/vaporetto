@@ -633,7 +633,7 @@ mod tests {
 
     use crate::dict_model::{DictModel, WordWeightRecord};
     use crate::model::TagModel;
-    use crate::ngram_model::{NgramData, NgramModel, TagNgramData, TagNgramModel};
+    use crate::ngram_model::{NgramData, NgramModel, TagNgramData, TagNgramModel, TagWeight};
     use crate::CharacterBoundary::*;
     use crate::CharacterType::*;
 
@@ -766,11 +766,17 @@ mod tests {
                     ],
                     char_ngram_model: TagNgramModel(vec![TagNgramData {
                         ngram: "は地球人".into(),
-                        weights: vec![(0, vec![-32, 33, 34, -35])],
+                        weights: vec![TagWeight {
+                            rel_position: 0,
+                            weights: vec![-32, 33, 34, -35],
+                        }],
                     }]),
                     type_ngram_model: TagNgramModel(vec![TagNgramData {
                         ngram: vec![Hiragana as u8, Kanji as u8, Hiragana as u8],
-                        weights: vec![(1, vec![36, -37, -38, 39])],
+                        weights: vec![TagWeight {
+                            rel_position: 1,
+                            weights: vec![36, -37, -38, 39],
+                        }],
                     }]),
                     bias: vec![40, 41, 42, 43],
                 },
@@ -782,7 +788,10 @@ mod tests {
                     ],
                     char_ngram_model: TagNgramModel(vec![TagNgramData {
                         ngram: "は地球人".into(),
-                        weights: vec![(1, vec![-44, 45])],
+                        weights: vec![TagWeight {
+                            rel_position: 1,
+                            weights: vec![-44, 45],
+                        }],
                     }]),
                     type_ngram_model: TagNgramModel(vec![]),
                     bias: vec![46, 47],
