@@ -307,7 +307,7 @@ pub struct PredictorData {
     bias: i32,
 
     #[cfg(feature = "tag-prediction")]
-    tag_predictor: HashMap<String, (u32, TagPredictor)>,
+    tag_predictor: Option<HashMap<String, (u32, TagPredictor)>>,
     #[cfg(feature = "tag-prediction")]
     n_tags: usize,
 }
@@ -332,8 +332,9 @@ impl<'de> BorrowDecode<'de> for PredictorData {
         let bias = Decode::decode(decoder)?;
         #[cfg(feature = "tag-prediction")]
         let tag_predictor = {
-            let tag_predictor: Vec<(String, (u32, TagPredictor))> = Decode::decode(decoder)?;
-            tag_predictor.into_iter().collect()
+            let tag_predictor: Option<Vec<(String, (u32, TagPredictor))>> =
+                Decode::decode(decoder)?;
+            tag_predictor.map(|x| x.into_iter().collect())
         };
         #[cfg(feature = "tag-prediction")]
         let n_tags = Decode::decode(decoder)?;
@@ -367,7 +368,8 @@ impl Encode for PredictorData {
         Encode::encode(&self.bias, encoder)?;
         #[cfg(feature = "tag-prediction")]
         {
-            let tag_predictor: Vec<_> = self.tag_predictor.iter().collect();
+            let tag_predictor: Option<Vec<_>> =
+                self.tag_predictor.as_ref().map(|x| x.iter().collect());
             Encode::encode(&tag_predictor, encoder)?;
             Encode::encode(&self.n_tags, encoder)?;
         }
@@ -447,8 +449,6 @@ impl Predictor {
     /// Returns an error variant when the model is invalid.
     pub fn new(model: Model, predict_tags: bool) -> Result<Self> {
         #[cfg(feature = "tag-prediction")]
-        let mut tag_predictor = HashMap::new();
-        #[cfg(feature = "tag-prediction")]
         let mut tag_char_ngram_model = vec![];
         #[cfg(feature = "tag-prediction")]
         let mut tag_type_ngram_model = vec![];
@@ -460,7 +460,8 @@ impl Predictor {
             panic!("tag prediction is unsupported");
         }
         #[cfg(feature = "tag-prediction")]
-        if predict_tags {
+        let tag_predictor = predict_tags.then(|| {
+            let mut tag_predictor = HashMap::new();
             for (i, tag_model) in model.0.tag_models.into_iter().enumerate() {
                 n_tags = n_tags.max(tag_model.tags.len());
                 tag_predictor.insert(
@@ -473,7 +474,8 @@ impl Predictor {
                 tag_char_ngram_model.push(tag_model.char_ngram_model);
                 tag_type_ngram_model.push(tag_model.type_ngram_model);
             }
-        }
+            tag_predictor
+        });
 
         let char_scorer = CharScorer::new(
             model.0.char_ngram_model,
@@ -531,6 +533,12 @@ impl Predictor {
 
     #[cfg(feature = "tag-prediction")]
     pub(crate) fn predict_tags<'a, 'b>(&'b self, sentence: &mut Sentence<'a, 'b>) {
+        let tag_predictor = self
+            .0
+            .tag_predictor
+            .as_ref()
+            .expect("this predictor is created with predict_tags = false");
+
         if self.0.n_tags == 0 {
             return;
         }
@@ -545,7 +553,7 @@ impl Predictor {
             } else if b == CharacterBoundary::WordBoundary {
                 if let Some(&range_start) = range_start.as_ref() {
                     let token = sentence.text_substring(range_start, i + 1);
-                    if let Some((token_id, tag_predictor)) = self.0.tag_predictor.get(token) {
+                    if let Some((token_id, tag_predictor)) = tag_predictor.get(token) {
                         scores.clear();
                         scores.resize(tag_predictor.bias().len(), 0);
                         tag_predictor.bias().add_scores(&mut scores);
@@ -568,7 +576,7 @@ impl Predictor {
         }
         if let Some(&range_start) = range_start.as_ref() {
             let token = sentence.text_substring(range_start, sentence.len());
-            if let Some((token_id, tag_predictor)) = self.0.tag_predictor.get(token) {
+            if let Some((token_id, tag_predictor)) = tag_predictor.get(token) {
                 scores.clear();
                 scores.resize(tag_predictor.bias().len(), 0);
                 tag_predictor.bias().add_scores(&mut scores);
