@@ -866,4 +866,30 @@ mod tests {
             sentence.boundaries(),
         );
     }
+
+    #[test]
+    #[should_panic]
+    fn test_fill_tags_unsupported() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_fill_tags_unsupported_overwrite_prediction() {
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+
+        let model = create_test_model();
+        let predictor = Predictor::new(model, true).unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+    }
 }

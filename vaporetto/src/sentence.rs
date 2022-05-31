@@ -1093,6 +1093,10 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// If you want to predict tags, call this function after calling [`Predictor::predict()`] and
     /// word boundaries are fixed.
     ///
+    /// # Panics
+    ///
+    /// The predictor must be created with `predict_tags = true`.
+    ///
     #[cfg_attr(
         feature = "std",
         doc = "
