@@ -500,7 +500,7 @@ impl TryFrom<KyteaModel> for Model {
             bias,
             config.char_w,
             config.type_w,
-            vec![],
+            hashbrown::HashMap::new(),
         ))
     }
 }

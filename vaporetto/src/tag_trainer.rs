@@ -136,7 +136,6 @@ impl<'a> TagTrainer<'a> {
 
     fn train_tag(
         examples: &[TagExample<'a>],
-        token: &str,
         epsilon: f64,
         cost: f64,
         solver: SolverType,
@@ -279,7 +278,6 @@ impl<'a> TagTrainer<'a> {
                 });
         }
         Ok(TagModel {
-            token: token.to_string(),
             tags,
             char_ngram_model: TagNgramModel(
                 char_ngram_model
@@ -297,12 +295,20 @@ impl<'a> TagTrainer<'a> {
         })
     }
 
-    pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
-        let mut tag_models = vec![];
+    pub fn train(
+        self,
+        epsilon: f64,
+        cost: f64,
+        solver: SolverType,
+    ) -> Result<HashMap<String, TagModel>> {
+        let mut tag_models = HashMap::new();
         liblinear::toggle_liblinear_stdout_output(false);
         let n_tokens = self.examples.len();
         for (i, (token, examples)) in self.examples.into_iter().enumerate() {
-            tag_models.push(Self::train_tag(&examples, token, epsilon, cost, solver)?);
+            tag_models.insert(
+                token.into(),
+                Self::train_tag(&examples, epsilon, cost, solver)?,
+            );
             eprint!("Tags: {}/{}\r", i, n_tokens);
         }
         eprintln!("Tags: {}/{}", n_tokens, n_tokens);
