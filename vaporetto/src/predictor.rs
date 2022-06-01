@@ -458,7 +458,6 @@ impl Predictor {
             let mut tag_predictor = HashMap::new();
             for (i, (token, tag_model)) in model.0.tag_models.into_iter().enumerate() {
                 n_tags = n_tags.max(tag_model.tags.len());
-                //  does not contain duplicate tokens.
                 tag_predictor.insert(
                     token,
                     (
@@ -631,6 +630,8 @@ impl Predictor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use hashbrown::HashMap;
 
     use crate::dict_model::{DictModel, WordWeightRecord};
     use crate::model::TagModel;

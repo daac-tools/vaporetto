@@ -14,8 +14,8 @@ categories = ["text-processing", "no-std"]
 [dependencies]
 bincode = { version = "2.0.0-rc.1", default-features = false, features = ["alloc", "derive"] }  # MIT
 daachorse = { version = "0.4.1", default-features = false }  # MIT or Apache-2.0
+hashbrown = "0.12.1"  # MIT or Apache-2.0
 
-hashbrown = { version = "0.12.1", optional = true }  # MIT or Apache-2.0
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
@@ -26,11 +26,11 @@ alloc = []
 std = ["alloc", "bincode/std"]
 cache-type-score = ["alloc"]
 fix-weight-length = ["alloc"]
-tag-prediction = ["alloc", "bincode/atomic", "hashbrown"]
+tag-prediction = ["alloc", "bincode/atomic"]
 charwise-pma = ["alloc"]
 
 kytea = ["std"]
-train = ["std", "hashbrown", "liblinear"]
+train = ["std", "liblinear"]
 portable-simd = ["fix-weight-length"]
 
 [package.metadata.docs.rs]
