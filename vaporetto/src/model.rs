@@ -14,8 +14,8 @@ use crate::utils::VecWriter;
 /// Magic number.
 const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
 
-// For each token, a model is trained for every tag, but the scores of all tags are calculated in
-// parallel during prediction.
+// For each token, a model is trained for every tag independently, but the scores of all tags are
+// calculated in parallel during prediction.
 // Thus, the score array is a concatenation of all classes of all tags.
 //
 // For example, the following token has 3 POS tags and 3 pronunciation tags, so the score array
