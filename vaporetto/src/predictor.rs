@@ -456,10 +456,11 @@ impl Predictor {
         #[cfg(feature = "tag-prediction")]
         let tag_predictor = predict_tags.then(|| {
             let mut tag_predictor = HashMap::new();
-            for (i, tag_model) in model.0.tag_models.into_iter().enumerate() {
+            for (i, (token, tag_model)) in model.0.tag_models.into_iter().enumerate() {
                 n_tags = n_tags.max(tag_model.tags.len());
+                //  does not contain duplicate tokens.
                 tag_predictor.insert(
-                    tag_model.token,
+                    token,
                     (
                         u32::try_from(i).unwrap(),
                         TagPredictor::new(tag_model.tags, tag_model.bias),
@@ -757,46 +758,52 @@ mod tests {
             5,
             3,
             3,
-            vec![
-                TagModel {
-                    token: "人".into(),
-                    tags: vec![
-                        vec!["名詞".into(), "接尾辞".into()],
-                        vec!["ジン".into(), "ヒト".into()],
-                    ],
-                    char_ngram_model: TagNgramModel(vec![TagNgramData {
-                        ngram: "は地球人".into(),
-                        weights: vec![TagWeight {
-                            rel_position: 0,
-                            weights: vec![-32, 33, 34, -35],
-                        }],
-                    }]),
-                    type_ngram_model: TagNgramModel(vec![TagNgramData {
-                        ngram: vec![Hiragana as u8, Kanji as u8, Hiragana as u8],
-                        weights: vec![TagWeight {
-                            rel_position: 1,
-                            weights: vec![36, -37, -38, 39],
-                        }],
-                    }]),
-                    bias: vec![40, 41, 42, 43],
-                },
-                TagModel {
-                    token: "地球".into(),
-                    tags: vec![
-                        vec!["名詞".into()],
-                        vec!["マンホーム".into(), "チキュー".into()],
-                    ],
-                    char_ngram_model: TagNgramModel(vec![TagNgramData {
-                        ngram: "は地球人".into(),
-                        weights: vec![TagWeight {
-                            rel_position: 1,
-                            weights: vec![-44, 45],
-                        }],
-                    }]),
-                    type_ngram_model: TagNgramModel(vec![]),
-                    bias: vec![46, 47],
-                },
-            ],
+            {
+                let mut m = HashMap::new();
+                m.insert(
+                    "人".into(),
+                    TagModel {
+                        tags: vec![
+                            vec!["名詞".into(), "接尾辞".into()],
+                            vec!["ジン".into(), "ヒト".into()],
+                        ],
+                        char_ngram_model: TagNgramModel(vec![TagNgramData {
+                            ngram: "は地球人".into(),
+                            weights: vec![TagWeight {
+                                rel_position: 0,
+                                weights: vec![-32, 33, 34, -35],
+                            }],
+                        }]),
+                        type_ngram_model: TagNgramModel(vec![TagNgramData {
+                            ngram: vec![Hiragana as u8, Kanji as u8, Hiragana as u8],
+                            weights: vec![TagWeight {
+                                rel_position: 1,
+                                weights: vec![36, -37, -38, 39],
+                            }],
+                        }]),
+                        bias: vec![40, 41, 42, 43],
+                    },
+                );
+                m.insert(
+                    "地球".into(),
+                    TagModel {
+                        tags: vec![
+                            vec!["名詞".into()],
+                            vec!["マンホーム".into(), "チキュー".into()],
+                        ],
+                        char_ngram_model: TagNgramModel(vec![TagNgramData {
+                            ngram: "は地球人".into(),
+                            weights: vec![TagWeight {
+                                rel_position: 1,
+                                weights: vec![-44, 45],
+                            }],
+                        }]),
+                        type_ngram_model: TagNgramModel(vec![]),
+                        bias: vec![46, 47],
+                    },
+                );
+                m
+            },
         )
     }
 
