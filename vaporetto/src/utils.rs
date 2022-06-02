@@ -15,6 +15,18 @@ use bincode::{
 };
 use hashbrown::HashMap;
 
+#[cfg(feature = "fix-weight-length")]
+#[inline(always)]
+pub const fn trim_end_zeros(mut w: &[i32]) -> &[i32] {
+    while let Some((&last, rest)) = w.split_last() {
+        if last != 0 {
+            break;
+        }
+        w = rest;
+    }
+    w
+}
+
 pub struct VecWriter(pub Vec<u8>);
 
 impl Writer for VecWriter {
@@ -133,17 +145,6 @@ impl Hasher for SplitMix64 {
         self.x ^= i as u64;
         self.x += 0x9e3779b97f4a7c15;
     }
-}
-
-#[inline(always)]
-pub const fn trim_end_zeros(mut w: &[i32]) -> &[i32] {
-    while let Some((&last, rest)) = w.split_last() {
-        if last != 0 {
-            break;
-        }
-        w = rest;
-    }
-    w
 }
 
 #[derive(Clone, Copy, Default)]

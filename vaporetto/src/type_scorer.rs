@@ -31,6 +31,7 @@ use boundary_tag_scorer::TypeScorerBoundaryTag;
 
 // If the cache-type-score feature is enabled and the window size of character type features is
 // less than or equal to this value, character type scores are cached.
+#[cfg(feature = "cache-type-score")]
 const CACHE_MAX_WINDOW_SIZE: u8 = 3;
 
 #[derive(Default)]

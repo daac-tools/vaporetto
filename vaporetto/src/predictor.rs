@@ -25,7 +25,9 @@ use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{CharacterBoundary, Sentence};
 use crate::type_scorer::TypeScorer;
-use crate::utils::{self, SerializableHashMap};
+
+#[cfg(feature = "tag-prediction")]
+use crate::utils::SerializableHashMap;
 
 pub const WEIGHT_FIXED_LEN: usize = 8;
 
@@ -61,7 +63,7 @@ impl Encode for WeightVector {
                 #[cfg(feature = "portable-simd")]
                 let w = w.as_array();
 
-                Encode::encode(&utils::trim_end_zeros(w).to_vec(), encoder)?;
+                Encode::encode(&crate::utils::trim_end_zeros(w).to_vec(), encoder)?;
             }
         }
         Ok(())
