@@ -25,7 +25,7 @@ use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{CharacterBoundary, Sentence};
 use crate::type_scorer::TypeScorer;
-use crate::utils;
+use crate::utils::{self, SerializableHashMap};
 
 pub const WEIGHT_FIXED_LEN: usize = 8;
 
@@ -301,7 +301,7 @@ pub struct PredictorData {
     bias: i32,
 
     #[cfg(feature = "tag-prediction")]
-    tag_predictor: Option<HashMap<String, (u32, TagPredictor)>>,
+    tag_predictor: Option<SerializableHashMap<String, (u32, TagPredictor)>>,
     #[cfg(feature = "tag-prediction")]
     n_tags: usize,
 }
@@ -311,25 +311,21 @@ impl<'de> BorrowDecode<'de> for PredictorData {
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let config = bincode::config::standard();
-        let char_scorer_data: Option<Vec<u8>> = BorrowDecode::borrow_decode(decoder)?;
+        let char_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
         let char_scorer = if let Some(data) = char_scorer_data {
-            Some(bincode::decode_from_slice(&data, config)?.0)
+            Some(bincode::decode_from_slice(data, config)?.0)
         } else {
             None
         };
-        let type_scorer_data: Option<Vec<u8>> = BorrowDecode::borrow_decode(decoder)?;
+        let type_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
         let type_scorer = if let Some(data) = type_scorer_data {
-            Some(bincode::decode_from_slice(&data, config)?.0)
+            Some(bincode::decode_from_slice(data, config)?.0)
         } else {
             None
         };
         let bias = Decode::decode(decoder)?;
         #[cfg(feature = "tag-prediction")]
-        let tag_predictor = {
-            let tag_predictor: Option<Vec<(String, (u32, TagPredictor))>> =
-                Decode::decode(decoder)?;
-            tag_predictor.map(|x| x.into_iter().collect())
-        };
+        let tag_predictor = Decode::decode(decoder)?;
         #[cfg(feature = "tag-prediction")]
         let n_tags = Decode::decode(decoder)?;
         Ok(Self {
@@ -361,12 +357,9 @@ impl Encode for PredictorData {
         Encode::encode(&type_scorer_data, encoder)?;
         Encode::encode(&self.bias, encoder)?;
         #[cfg(feature = "tag-prediction")]
-        {
-            let tag_predictor: Option<Vec<_>> =
-                self.tag_predictor.as_ref().map(|x| x.iter().collect());
-            Encode::encode(&tag_predictor, encoder)?;
-            Encode::encode(&self.n_tags, encoder)?;
-        }
+        Encode::encode(&self.tag_predictor, encoder)?;
+        #[cfg(feature = "tag-prediction")]
+        Encode::encode(&self.n_tags, encoder)?;
         Ok(())
     }
 }
@@ -456,7 +449,7 @@ impl Predictor {
         #[cfg(feature = "tag-prediction")]
         let tag_predictor = predict_tags.then(|| {
             let mut tag_predictor = HashMap::new();
-            for (i, (token, tag_model)) in model.0.tag_models.into_iter().enumerate() {
+            for (i, (token, tag_model)) in model.0.tag_models.0.into_iter().enumerate() {
                 n_tags = n_tags.max(tag_model.tags.len());
                 tag_predictor.insert(
                     token,
@@ -468,7 +461,7 @@ impl Predictor {
                 tag_char_ngram_model.push(tag_model.char_ngram_model);
                 tag_type_ngram_model.push(tag_model.type_ngram_model);
             }
-            tag_predictor
+            SerializableHashMap(tag_predictor)
         });
 
         let char_scorer = CharScorer::new(
@@ -491,7 +484,6 @@ impl Predictor {
 
             #[cfg(feature = "tag-prediction")]
             tag_predictor,
-
             #[cfg(feature = "tag-prediction")]
             n_tags,
         }))

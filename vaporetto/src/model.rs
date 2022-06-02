@@ -4,18 +4,15 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::io::{Read, Write};
 
-use bincode::{
-    de::Decoder,
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    Decode, Encode,
-};
+use bincode::{Decode, Encode};
+
+#[cfg(any(feature = "train", feature = "kytea", test))]
 use hashbrown::HashMap;
 
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
-use crate::utils::VecWriter;
+use crate::utils::{SerializableHashMap, VecWriter};
 
 /// Magic number.
 const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
@@ -54,7 +51,7 @@ pub struct TagModel {
 #[derive(Debug)]
 pub struct Model(pub(crate) ModelData);
 
-#[derive(Debug)]
+#[derive(Debug, Decode, Encode)]
 pub struct ModelData {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
@@ -62,45 +59,9 @@ pub struct ModelData {
     pub(crate) bias: i32,
     pub(crate) char_window_size: u8,
     pub(crate) type_window_size: u8,
-    pub(crate) tag_models: HashMap<String, TagModel>,
+    pub(crate) tag_models: SerializableHashMap<String, TagModel>,
 }
 
-impl Decode for ModelData {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let char_ngram_model = Decode::decode(decoder)?;
-        let type_ngram_model = Decode::decode(decoder)?;
-        let dict_model = Decode::decode(decoder)?;
-        let bias = Decode::decode(decoder)?;
-        let char_window_size = Decode::decode(decoder)?;
-        let type_window_size = Decode::decode(decoder)?;
-        // bincode does not support serializing hashbrown::HashMap.
-        let tag_models_raw: Vec<(String, TagModel)> = Decode::decode(decoder)?;
-        let tag_models = tag_models_raw.into_iter().collect();
-        Ok(Self {
-            char_ngram_model,
-            type_ngram_model,
-            dict_model,
-            bias,
-            char_window_size,
-            type_window_size,
-            tag_models,
-        })
-    }
-}
-
-impl Encode for ModelData {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.char_ngram_model, encoder)?;
-        Encode::encode(&self.type_ngram_model, encoder)?;
-        Encode::encode(&self.dict_model, encoder)?;
-        Encode::encode(&self.bias, encoder)?;
-        Encode::encode(&self.char_window_size, encoder)?;
-        Encode::encode(&self.type_window_size, encoder)?;
-        let tag_models_raw: Vec<(&String, &TagModel)> = self.tag_models.iter().collect();
-        Encode::encode(&tag_models_raw, encoder)?;
-        Ok(())
-    }
-}
 impl Model {
     #[cfg(any(feature = "train", feature = "kytea", test))]
     pub(crate) const fn new(
@@ -119,7 +80,7 @@ impl Model {
             bias,
             char_window_size,
             type_window_size,
-            tag_models,
+            tag_models: SerializableHashMap(tag_models),
         })
     }
 
