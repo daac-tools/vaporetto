@@ -100,7 +100,7 @@ impl CharScorerBoundary {
         #[cfg(feature = "charwise-pma")]
         let it = self.pma.find_overlapping_no_suffix_iter(&sentence.text);
         for m in it {
-            debug_assert!(m.end() != 0 && m.end() <= sentence.text.len());
+            debug_assert!(m.end() != 0 && sentence.text.is_char_boundary(m.end()));
             let end = unsafe { sentence.str_to_char_pos(m.end()) };
             debug_assert!(m.value() < self.weights.len());
             let weight = unsafe { self.weights.get_unchecked(m.value()) };

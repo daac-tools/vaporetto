@@ -273,9 +273,9 @@ impl<'a> Trainer<'a> {
         }
         // adds dictionary features
         if let Some(pma) = self.dict_pma.as_ref() {
-            for m in pma.find_overlapping_iter(sentence.as_raw_text()) {
-                debug_assert!(sentence.as_raw_text().is_char_boundary(m.start()));
-                debug_assert!(sentence.as_raw_text().is_char_boundary(m.end()));
+            for m in pma.find_overlapping_iter(&sentence.text) {
+                debug_assert!(sentence.text.is_char_boundary(m.start()));
+                debug_assert!(sentence.text.is_char_boundary(m.end()));
                 let start = unsafe { sentence.str_to_char_pos(m.start()) };
                 let end = unsafe { sentence.str_to_char_pos(m.end()) };
                 let length = (end - start).min(usize::from(self.dict_word_max_len));
