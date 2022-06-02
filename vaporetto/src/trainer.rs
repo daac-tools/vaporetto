@@ -273,7 +273,7 @@ impl<'a> Trainer<'a> {
         }
         // adds dictionary features
         if let Some(pma) = self.dict_pma.as_ref() {
-            for m in pma.find_overlapping_iter(&sentence.text) {
+            for m in pma.find_overlapping_iter(sentence.text.as_ref()) {
                 debug_assert!(sentence.text.is_char_boundary(m.start()));
                 let start = unsafe { sentence.str_to_char_pos(m.start()) };
                 debug_assert!(sentence.text.is_char_boundary(m.end()));
