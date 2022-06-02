@@ -46,7 +46,8 @@ struct Args {
     #[clap(long, default_value = "3")]
     typen: u8,
 
-    /// Dictionary words greater than this value will be grouped together
+    /// Dictionary words longer than this value will be grouped together, where the length is in
+    /// characters
     #[clap(long, default_value = "4")]
     dictn: u8,
 
