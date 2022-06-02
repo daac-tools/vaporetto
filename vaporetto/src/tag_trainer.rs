@@ -161,8 +161,8 @@ impl<'a> TagTrainer<'a> {
         let mut bias = vec![0; n_class];
 
         // Uses BTreeMap to increase compression ratio.
-        let mut char_ngram_weights = HashMap::new();
-        let mut type_ngram_weights = HashMap::new();
+        let mut char_ngram_weights = BTreeMap::new();
+        let mut type_ngram_weights = BTreeMap::new();
 
         let mut class_offset = 0;
         for (i, tag_ids) in tag_ids.iter().enumerate() {
