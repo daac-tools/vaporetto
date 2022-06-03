@@ -6,13 +6,10 @@ use std::io::{Read, Write};
 
 use bincode::{Decode, Encode};
 
-#[cfg(any(feature = "train", feature = "kytea", test))]
-use hashbrown::HashMap;
-
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
-use crate::utils::{SerializableHashMap, VecWriter};
+use crate::utils::VecWriter;
 
 /// Magic number.
 const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
@@ -41,6 +38,7 @@ const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
 //   results: ["名詞", "ケン"]
 #[derive(Debug, Decode, Encode)]
 pub struct TagModel {
+    pub(crate) token: String,
     pub(crate) tags: Vec<Vec<String>>,
     pub(crate) char_ngram_model: TagNgramModel<String>,
     pub(crate) type_ngram_model: TagNgramModel<Vec<u8>>,
@@ -59,7 +57,8 @@ pub struct ModelData {
     pub(crate) bias: i32,
     pub(crate) char_window_size: u8,
     pub(crate) type_window_size: u8,
-    pub(crate) tag_models: SerializableHashMap<String, TagModel>,
+    // Instead of using Map, we use Vec to increase compression ratio and performance.
+    pub(crate) tag_models: Vec<TagModel>,
 }
 
 impl Model {
@@ -71,7 +70,7 @@ impl Model {
         bias: i32,
         char_window_size: u8,
         type_window_size: u8,
-        tag_models: HashMap<String, TagModel>,
+        tag_models: Vec<TagModel>,
     ) -> Self {
         Self(ModelData {
             char_ngram_model,
@@ -80,7 +79,7 @@ impl Model {
             bias,
             char_window_size,
             type_window_size,
-            tag_models: SerializableHashMap(tag_models),
+            tag_models,
         })
     }
 

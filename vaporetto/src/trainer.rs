@@ -364,7 +364,7 @@ impl<'a> Trainer<'a> {
             return Err(VaporettoError::invalid_model("all weights are zero"));
         }
 
-        // Uses BTreeMap to increase compression ratio.
+        // Uses BTreeMap to improve compression ratio.
         let mut char_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
         let mut type_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
         let mut dict_weights = vec![];

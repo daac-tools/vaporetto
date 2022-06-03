@@ -46,7 +46,8 @@ pub struct TagTrainer<'a> {
     char_ngram_size: u8,
     _type_window_size: u8,
     type_ngram_size: u8,
-    examples: HashMap<&'a str, Vec<TagExample<'a>>>,
+    // Uses BTreeMap to improve compression ratio.
+    examples: BTreeMap<&'a str, Vec<TagExample<'a>>>,
 }
 
 impl<'a> TagTrainer<'a> {
@@ -61,7 +62,7 @@ impl<'a> TagTrainer<'a> {
             char_ngram_size,
             _type_window_size: type_window_size,
             type_ngram_size,
-            examples: HashMap::new(),
+            examples: BTreeMap::new(),
         }
     }
 
@@ -135,6 +136,7 @@ impl<'a> TagTrainer<'a> {
     }
 
     fn train_tag(
+        token: String,
         examples: &[TagExample<'a>],
         epsilon: f64,
         cost: f64,
@@ -278,6 +280,7 @@ impl<'a> TagTrainer<'a> {
                 });
         }
         Ok(TagModel {
+            token,
             tags,
             char_ngram_model: TagNgramModel(
                 char_ngram_model
@@ -295,20 +298,18 @@ impl<'a> TagTrainer<'a> {
         })
     }
 
-    pub fn train(
-        self,
-        epsilon: f64,
-        cost: f64,
-        solver: SolverType,
-    ) -> Result<HashMap<String, TagModel>> {
-        let mut tag_models = HashMap::new();
+    pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
+        let mut tag_models = vec![];
         liblinear::toggle_liblinear_stdout_output(false);
         let n_tokens = self.examples.len();
         for (i, (token, examples)) in self.examples.into_iter().enumerate() {
-            tag_models.insert(
+            tag_models.push(Self::train_tag(
                 token.into(),
-                Self::train_tag(&examples, epsilon, cost, solver)?,
-            );
+                &examples,
+                epsilon,
+                cost,
+                solver,
+            )?);
             eprint!("Tags: {}/{}\r", i, n_tokens);
         }
         eprintln!("Tags: {}/{}", n_tokens, n_tokens);
