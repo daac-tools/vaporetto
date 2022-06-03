@@ -9,9 +9,11 @@ pub struct SplitLinebreaksFilter;
 impl SentenceFilter for SplitLinebreaksFilter {
     fn filter(&self, sentence: &mut Sentence) {
         unsafe {
+            debug_assert!(!sentence.as_raw_text().is_empty());
             let mut prev_c = sentence.as_raw_text().chars().next().unwrap_unchecked();
             let mut offset = prev_c.len_utf8();
             let mut i = 0;
+            debug_assert!(sentence.as_raw_text().is_char_boundary(offset));
             while let Some(c) = sentence
                 .as_raw_text()
                 .get_unchecked(offset..)
@@ -21,6 +23,7 @@ impl SentenceFilter for SplitLinebreaksFilter {
                 offset += c.len_utf8();
                 match (prev_c, c) {
                     ('\r' | '\n', _) | (_, '\r' | '\n') => {
+                        debug_assert!(i < sentence.boundaries().len());
                         *sentence.boundaries_mut().get_unchecked_mut(i) =
                             CharacterBoundary::WordBoundary;
                     }

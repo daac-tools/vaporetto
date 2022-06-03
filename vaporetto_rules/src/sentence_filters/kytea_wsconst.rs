@@ -28,10 +28,13 @@ impl SentenceFilter for KyteaWsConstFilter {
         let t_flag = self.char_type as u8;
         let len = sentence.char_types().len() - 1;
         for i in 0..len {
+            debug_assert!(i < sentence.char_types().len());
+            debug_assert!(i + 1 < sentence.char_types().len());
             unsafe {
                 if *sentence.char_types().get_unchecked(i) == t_flag
                     && *sentence.char_types().get_unchecked(i + 1) == t_flag
                 {
+                    debug_assert!(i < sentence.boundaries().len());
                     *sentence.boundaries_mut().get_unchecked_mut(i) =
                         CharacterBoundary::NotWordBoundary;
                 }

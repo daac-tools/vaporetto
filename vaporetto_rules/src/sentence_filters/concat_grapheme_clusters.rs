@@ -12,6 +12,7 @@ impl SentenceFilter for ConcatGraphemeClustersFilter {
         let mut start = 0;
         let mut offset = 0;
         unsafe {
+            debug_assert!(sentence.as_raw_text().is_char_boundary(offset));
             while let Some((len, n_chars)) = sentence
                 .as_raw_text()
                 .get_unchecked(offset..)
@@ -21,6 +22,8 @@ impl SentenceFilter for ConcatGraphemeClustersFilter {
             {
                 offset += len;
                 let end = start + n_chars;
+                debug_assert!(start <= sentence.boundaries().len());
+                debug_assert!(end <= sentence.boundaries().len() + 1);
                 sentence
                     .boundaries_mut()
                     .get_unchecked_mut(start..end - 1)
