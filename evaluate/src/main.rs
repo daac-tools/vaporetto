@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut s = Sentence::from_tokenized(&line)?;
         let ref_boundaries = s.boundaries().to_vec();
         let mut ref_tags = vec![];
-        for i in 0..ref_boundaries.len() + 1 {
+        for i in 0..=ref_boundaries.len() {
             ref_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
         }
         if !args.no_norm {
@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         s.fill_tags();
         let sys_boundaries = s.boundaries().to_vec();
         let mut sys_tags = vec![];
-        for i in 0..sys_boundaries.len() + 1 {
+        for i in 0..=sys_boundaries.len() {
             sys_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
         }
         results.push((ref_boundaries, ref_tags, sys_boundaries, sys_tags));
