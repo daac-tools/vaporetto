@@ -177,11 +177,8 @@ impl<'a> TagTrainer<'a> {
             let (feature_ids, xs, ys) = Self::gen_feature_vecs(examples, i, tag_ids);
 
             let mut builder = liblinear::Builder::new();
-            let training_input =
-                liblinear::util::TrainingInput::from_sparse_features(ys.clone(), xs.clone())
-                    .map_err(|e| {
-                        VaporettoError::invalid_model(format!("liblinear error: {:?}", e))
-                    })?;
+            let training_input = liblinear::util::TrainingInput::from_sparse_features(ys, xs)
+                .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {:?}", e)))?;
             builder.problem().input_data(training_input).bias(1.0);
             builder
                 .parameters()

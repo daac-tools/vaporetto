@@ -43,12 +43,8 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
             unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
         let tag_weight: Vec<Vec<Vec<(u32, WeightVector)>>> = Decode::decode(decoder)?;
         let tag_weight = tag_weight
-            .iter()
-            .map(|x| {
-                x.iter()
-                    .map(|x| x.iter().map(|(a, b)| (*a, b.clone())).collect())
-                    .collect()
-            })
+            .into_iter()
+            .map(|x| x.into_iter().map(|x| x.into_iter().collect()).collect())
             .collect();
         Ok(Self {
             pma,
@@ -104,7 +100,7 @@ impl CharScorerBoundaryTag {
             for d in tag_model.0 {
                 for w in d.weights {
                     let weight = PositionalWeightWithTag::with_tag(i, w.rel_position, w.weights);
-                    merger.add(d.ngram.clone(), weight);
+                    merger.add(&d.ngram, weight);
                 }
             }
         }
