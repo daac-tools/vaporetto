@@ -170,10 +170,10 @@ mod tests {
     #[test]
     fn test_weight_merger() {
         let mut merger = CharWeightMerger::default();
-        merger.add("東京都".into(), PositionalWeight::new(-3, vec![1, 2, 3, 4]));
-        merger.add("京都".into(), PositionalWeight::new(-3, vec![2, 4, 6, 8, 10]));
-        merger.add("京都".into(), PositionalWeight::new(-2, vec![3, 6, 9]));
-        merger.add("大阪".into(), PositionalWeight::new(-2, vec![4, 8, 12]));
+        merger.add("東京都", PositionalWeight::new(-3, vec![1, 2, 3, 4]));
+        merger.add("京都", PositionalWeight::new(-3, vec![2, 4, 6, 8, 10]));
+        merger.add("京都", PositionalWeight::new(-2, vec![3, 6, 9]));
+        merger.add("大阪", PositionalWeight::new(-2, vec![4, 8, 12]));
         assert_eq!(
             vec![
                 ("京都".into(), PositionalWeight::new(-3, vec![2, 7, 12, 17, 10])),
