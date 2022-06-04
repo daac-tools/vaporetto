@@ -43,13 +43,15 @@ impl<W> TypeWeightMerger<W>
 where
     for<'a> W: AddAssign<&'a W>,
 {
-    pub fn add(&mut self, ngram: &[u8], weight: W) {
-        if let Some(data) = self.map.get_mut(ngram) {
+    pub fn add<V>(&mut self, ngram: V, weight: W)
+    where
+        V: Into<Vec<u8>> + AsRef<[u8]>,
+    {
+        if let Some(data) = self.map.get_mut(ngram.as_ref()) {
             let (prev_weight, _) = &mut *data.borrow_mut();
             *prev_weight += &weight;
         } else {
-            self.map
-                .insert(ngram.to_vec(), RefCell::new((weight, false)));
+            self.map.insert(ngram.into(), RefCell::new((weight, false)));
         }
     }
 

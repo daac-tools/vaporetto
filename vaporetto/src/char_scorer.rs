@@ -34,8 +34,11 @@ impl<W> CharWeightMerger<W>
 where
     for<'a> W: AddAssign<&'a W>,
 {
-    pub fn add(&mut self, ngram: &str, weight: W) {
-        if let Some(data) = self.map.get_mut(ngram) {
+    pub fn add<S>(&mut self, ngram: S, weight: W)
+    where
+        S: Into<String> + AsRef<str>,
+    {
+        if let Some(data) = self.map.get_mut(ngram.as_ref()) {
             let (prev_weight, _) = &mut *data.borrow_mut();
             *prev_weight += &weight;
         } else {
