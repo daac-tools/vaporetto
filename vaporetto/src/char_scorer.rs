@@ -158,13 +158,13 @@ mod tests {
     use super::*;
 
     use crate::dict_model::WordWeightRecord;
-    use crate::ngram_model::{NgramData, TagWeight};
+    use crate::ngram_model::NgramData;
     use crate::predictor::PositionalWeight;
 
     use crate::predictor::WEIGHT_FIXED_LEN;
 
     #[cfg(feature = "tag-prediction")]
-    use crate::ngram_model::TagNgramData;
+    use crate::ngram_model::{TagNgramData, TagWeight};
 
     #[rustfmt::skip]
     #[test]
