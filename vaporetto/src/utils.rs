@@ -1,108 +1,30 @@
-use core::cell::RefCell;
+use core::hash::{BuildHasher, Hash, Hasher};
+use core::num::Wrapping;
+use core::ops::{Deref, DerefMut};
 
-use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 #[cfg(feature = "kytea")]
 use std::io::{self, Read};
 
-use bincode::enc::write::Writer;
-use bincode::error::EncodeError;
+use bincode::{
+    de::Decoder,
+    enc::{write::Writer, Encoder},
+    error::{DecodeError, EncodeError},
+    Decode, Encode,
+};
+use hashbrown::HashMap;
 
-pub trait AddWeight {
-    fn add_weight(&self, target: &mut [i32], offset: usize);
-
-    #[cfg(feature = "tag-prediction")]
-    fn add_weight_signed(&self, target: &mut [i32], offset: isize);
-}
-
-impl AddWeight for Vec<i32> {
-    fn add_weight(&self, ys: &mut [i32], offset: usize) {
-        if let Some(ys) = ys.get_mut(offset..) {
-            for (w, y) in self.iter().zip(ys) {
-                *y += w;
-            }
+#[cfg(feature = "fix-weight-length")]
+#[inline(always)]
+pub const fn trim_end_zeros(mut w: &[i32]) -> &[i32] {
+    while let Some((&last, rest)) = w.split_last() {
+        if last != 0 {
+            break;
         }
+        w = rest;
     }
-
-    #[cfg(feature = "tag-prediction")]
-    fn add_weight_signed(&self, ys: &mut [i32], offset: isize) {
-        if offset >= 0 {
-            if let Some(ys) = ys.get_mut(offset as usize..) {
-                for (w, y) in self.iter().zip(ys) {
-                    *y += w;
-                }
-            }
-        } else if let Some(ws) = self.get(-offset as usize..) {
-            for (w, y) in ws.iter().zip(ys.iter_mut()) {
-                *y += w;
-            }
-        }
-    }
-}
-
-pub trait MergableWeight {
-    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self;
-}
-
-pub struct WeightMerger<W> {
-    map: BTreeMap<String, RefCell<(W, bool)>>,
-    n_classes: usize,
-}
-
-impl<W> WeightMerger<W>
-where
-    W: MergableWeight,
-{
-    pub fn new(n_classes: usize) -> Self {
-        Self {
-            map: BTreeMap::new(),
-            n_classes,
-        }
-    }
-
-    pub fn add(&mut self, ngram: &str, weight: W) {
-        if let Some(data) = self.map.get_mut(ngram) {
-            let (prev_weight, _) = &mut *data.borrow_mut();
-            *prev_weight = W::from_two_weights(&weight, prev_weight, self.n_classes);
-        } else {
-            self.map
-                .insert(ngram.to_string(), RefCell::new((weight, false)));
-        }
-    }
-
-    pub fn merge(self) -> Vec<(String, W)> {
-        let mut stack = vec![];
-        for (ngram, data) in &self.map {
-            if data.borrow().1 {
-                continue;
-            }
-            stack.push(data);
-            for (j, _) in ngram.char_indices().skip(1) {
-                if let Some(data) = self.map.get(&ngram[j..]) {
-                    stack.push(data);
-                    if data.borrow().1 {
-                        break;
-                    }
-                }
-            }
-            let mut data_from = stack.pop().unwrap();
-            data_from.borrow_mut().1 = true;
-            while let Some(data_to) = stack.pop() {
-                let new_data = (
-                    W::from_two_weights(&data_from.borrow().0, &data_to.borrow().0, self.n_classes),
-                    true,
-                );
-                *data_to.borrow_mut() = new_data;
-                data_from = data_to;
-            }
-        }
-        self.map
-            .into_iter()
-            .map(|(ngram, weight)| (ngram, weight.into_inner().0))
-            .collect()
-    }
+    w
 }
 
 pub struct VecWriter(pub Vec<u8>);
@@ -114,16 +36,127 @@ impl Writer for VecWriter {
     }
 }
 
-#[cfg(feature = "tag-prediction")]
-pub fn xor_or_zip_with<T, F>(lhs: &Option<T>, rhs: &Option<T>, f: F) -> Option<T>
+#[derive(Debug)]
+pub struct SerializableHashMap<K, V>(pub HashMap<K, V>);
+
+impl<K, V> Deref for SerializableHashMap<K, V> {
+    type Target = HashMap<K, V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<K, V> DerefMut for SerializableHashMap<K, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<K, V> Decode for SerializableHashMap<K, V>
 where
-    T: Clone,
-    F: FnOnce(&T, &T) -> T,
+    K: Encode + Decode + Eq + Hash,
+    V: Encode + Decode,
 {
-    lhs.as_ref().map_or_else(
-        || rhs.clone(),
-        |x1| Some(rhs.as_ref().map_or_else(|| x1.clone(), |x2| f(x1, x2))),
-    )
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let raw: Vec<(K, V)> = Decode::decode(decoder)?;
+        Ok(Self(raw.into_iter().collect()))
+    }
+}
+
+impl<K, V> Encode for SerializableHashMap<K, V>
+where
+    K: Encode + Decode,
+    V: Encode + Decode,
+{
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let raw: Vec<(&K, &V)> = self.0.iter().collect();
+        Encode::encode(&raw, encoder)?;
+        Ok(())
+    }
+}
+
+// Copied from https://prng.di.unimi.it/splitmix64.c
+pub struct SplitMix64 {
+    x: Wrapping<u64>,
+}
+
+impl Hasher for SplitMix64 {
+    #[inline(always)]
+    fn finish(&self) -> u64 {
+        let mut z = self.x;
+        z = (z ^ (z >> 30)) * Wrapping(0xbf58476d1ce4e5b9);
+        z = (z ^ (z >> 27)) * Wrapping(0x94d049bb133111eb);
+        (z ^ (z >> 31)).0
+    }
+
+    #[inline(always)]
+    fn write(&mut self, bytes: &[u8]) {
+        for &i in bytes {
+            self.x ^= u64::from(i);
+            self.x += 0x9e3779b97f4a7c15;
+        }
+    }
+
+    #[inline(always)]
+    fn write_u8(&mut self, i: u8) {
+        self.x ^= u64::from(i);
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_u16(&mut self, i: u16) {
+        self.x ^= u64::from(i);
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_u32(&mut self, i: u32) {
+        self.x ^= u64::from(i);
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_u64(&mut self, i: u64) {
+        self.x ^= i;
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_i8(&mut self, i: i8) {
+        self.x ^= i as u64;
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_i16(&mut self, i: i16) {
+        self.x ^= i as u64;
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_i32(&mut self, i: i32) {
+        self.x ^= i as u64;
+        self.x += 0x9e3779b97f4a7c15;
+    }
+
+    #[inline(always)]
+    fn write_i64(&mut self, i: i64) {
+        self.x ^= i as u64;
+        self.x += 0x9e3779b97f4a7c15;
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct SplitMix64Builder;
+
+impl BuildHasher for SplitMix64Builder {
+    type Hasher = SplitMix64;
+
+    #[inline(always)]
+    fn build_hasher(&self) -> Self::Hasher {
+        SplitMix64 { x: Wrapping(0) }
+    }
 }
 
 #[cfg(feature = "kytea")]

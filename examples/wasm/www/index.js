@@ -13,7 +13,7 @@ vaporetto_bccwj_suw_small().then((Vaporetto) => {
 
     input_text.addEventListener("input", (e) => {
         const text = input_text.value;
-        const scores = vaporetto_suw.predict_with_score(text);
+        const scores = vaporetto_suw.predict(text);
         let i = -1;
         while (tokenized.firstChild) {
             tokenized.removeChild(tokenized.firstChild);

@@ -1,4 +1,4 @@
-use vaporetto::{BoundaryType, Sentence};
+use vaporetto::{CharacterBoundary, Sentence};
 
 use crate::SentenceFilter;
 
@@ -7,17 +7,32 @@ use crate::SentenceFilter;
 pub struct SplitLinebreaksFilter;
 
 impl SentenceFilter for SplitLinebreaksFilter {
-    fn filter(&self, mut sentence: Sentence) -> Sentence {
-        let (chars, _, boundaries) = sentence.chars_and_boundaries_mut();
-        for ((c1, c2), b) in chars.iter().zip(&chars[1..]).zip(boundaries) {
-            match (*c1, *c2) {
-                ('\r' | '\n', _) | (_, '\r' | '\n') => {
-                    *b = BoundaryType::WordBoundary;
+    fn filter(&self, sentence: &mut Sentence) {
+        unsafe {
+            debug_assert!(!sentence.as_raw_text().is_empty());
+            let mut prev_c = sentence.as_raw_text().chars().next().unwrap_unchecked();
+            let mut offset = prev_c.len_utf8();
+            let mut i = 0;
+            debug_assert!(sentence.as_raw_text().is_char_boundary(offset));
+            while let Some(c) = sentence
+                .as_raw_text()
+                .get_unchecked(offset..)
+                .chars()
+                .next()
+            {
+                offset += c.len_utf8();
+                match (prev_c, c) {
+                    ('\r' | '\n', _) | (_, '\r' | '\n') => {
+                        debug_assert!(i < sentence.boundaries().len());
+                        *sentence.boundaries_mut().get_unchecked_mut(i) =
+                            CharacterBoundary::WordBoundary;
+                    }
+                    _ => {}
                 }
-                _ => {}
+                prev_c = c;
+                i += 1;
             }
         }
-        sentence
     }
 }
 
@@ -25,27 +40,35 @@ impl SentenceFilter for SplitLinebreaksFilter {
 mod tests {
     use super::*;
 
+    use alloc::string::String;
+
     #[test]
     fn test_split_lf() {
-        let s = Sentence::from_tokenized("前の行\n次の行").unwrap();
+        let mut s = Sentence::from_tokenized("前の行\n次の行").unwrap();
         let filter = SplitLinebreaksFilter;
-        let s = filter.filter(s);
-        assert_eq!("前の行 \n 次の行", s.to_tokenized_string().unwrap());
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("前の行 \n 次の行", buf);
     }
 
     #[test]
     fn test_split_cr() {
-        let s = Sentence::from_tokenized("前の行\r次の行").unwrap();
+        let mut s = Sentence::from_tokenized("前の行\r次の行").unwrap();
         let filter = SplitLinebreaksFilter;
-        let s = filter.filter(s);
-        assert_eq!("前の行 \r 次の行", s.to_tokenized_string().unwrap());
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("前の行 \r 次の行", buf);
     }
 
     #[test]
     fn test_split_crlf() {
-        let s = Sentence::from_tokenized("前の行\r\n次の行").unwrap();
+        let mut s = Sentence::from_tokenized("前の行\r\n次の行").unwrap();
         let filter = SplitLinebreaksFilter;
-        let s = filter.filter(s);
-        assert_eq!("前の行 \r \n 次の行", s.to_tokenized_string().unwrap());
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("前の行 \r \n 次の行", buf);
     }
 }

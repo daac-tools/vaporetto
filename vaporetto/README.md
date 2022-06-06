@@ -6,21 +6,34 @@ Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
 
 ```rust
 use std::fs::File;
-use std::io::Read;
 
 use vaporetto::{Model, Predictor, Sentence};
 
-let mut f = File::open("model.bin").unwrap();
-let mut model_data = vec![];
-f.read_to_end(&mut model_data).unwrap();
-let (model, _) = Model::read_slice(&model_data).unwrap();
-let predictor = Predictor::new(model, false).unwrap();
+let f = File::open("../resources/model.bin").unwrap();
+let model = Model::read(f).unwrap();
+let predictor = Predictor::new(model, true).unwrap();
 
-let s = Sentence::from_raw("火星猫の生態").unwrap();
-let s = predictor.predict(s);
+let mut buf = String::new();
 
-println!("{:?}", s.to_tokenized_vec().unwrap());
-// ["火星", "猫", "の", "生態"]
+let mut s = Sentence::default();
+
+s.update_raw("まぁ社長は火星猫だ").unwrap();
+predictor.predict(&mut s);
+s.fill_tags();
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    "まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星/名詞/カセー 猫/名詞/ネコ だ/助動詞/ダ",
+    buf,
+);
+
+s.update_raw("まぁ良いだろう").unwrap();
+predictor.predict(&mut s);
+s.fill_tags();
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    "まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー",
+    buf,
+);
 ```
 
 ## Feature flags
@@ -31,7 +44,6 @@ The following features are disabled by default:
 * `train` - Enables the trainer.
 * `portable-simd` - Uses the [portable SIMD API](https://github.com/rust-lang/portable-simd) instead
   of our SIMD-conscious data layout. (Nightly Rust is required.)
-* `charwise-daachorse` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster prediction, although it can make to load a model file slower.
 
 The following features are enabled by default:
 
@@ -39,6 +51,7 @@ The following features are enabled by default:
 * `cache-type-score` - Enables caching type scores for faster processing. If disabled, type scores are calculated in a straightforward manner.
 * `fix-weight-length` - Uses fixed-size arrays for storing scores to facilitate optimization. If disabled, vectors are used instead.
 * `tag-prediction` - Enables tag prediction.
+* `charwise-pma` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster prediction, although it can make to load a model file slower.
 
 ## License
 

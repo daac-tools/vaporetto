@@ -8,7 +8,7 @@ extern crate alloc;
 use core::alloc::Layout;
 
 // alloc crate
-use alloc::vec::Vec;
+use alloc::string::String;
 
 // devices
 use alloc_cortex_m::CortexMHeap;
@@ -17,11 +17,8 @@ use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
 
 // other crates
-use vaporetto::{Predictor, Sentence, CharacterType};
-use vaporetto_rules::{
-    sentence_filters::KyteaWsConstFilter,
-    SentenceFilter,
-};
+use vaporetto::{CharacterType, Predictor, Sentence};
+use vaporetto_rules::{sentence_filters::KyteaWsConstFilter, SentenceFilter};
 
 // panic behaviour
 use panic_halt as _;
@@ -36,22 +33,23 @@ fn main() -> ! {
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
     let predictor_data = include_bytes!(concat!(env!("OUT_DIR"), "/predictor.bin"));
-    let (predictor, _) = unsafe { Predictor::deserialize_from_slice_unchecked(predictor_data) }.unwrap();
+    let (predictor, _) =
+        unsafe { Predictor::deserialize_from_slice_unchecked(predictor_data) }.unwrap();
 
-    let docs = &[
-        "🚤VaporettoはSTM32F303VCT6(FLASH:256KiB,RAM:40KiB)などの小さなデバイスでも動作します",
-    ];
+    let docs =
+        &["🚤VaporettoはSTM32F303VCT6(FLASH:256KiB,RAM:40KiB)などの小さなデバイスでも動作します"];
 
     let wsconst_d_filter = KyteaWsConstFilter::new(CharacterType::Digit);
 
     loop {
         for &text in docs {
             hprintln!("\x1b[32mINPUT:\x1b[m {:?}", text).unwrap();
-            let s = Sentence::from_raw(text).unwrap();
-            let s = predictor.predict(s);
-            let s = wsconst_d_filter.filter(s);
-            let v = s.to_tokenized_vec().unwrap().iter().map(|t| t.surface).collect::<Vec<_>>();
-            hprintln!("\x1b[31mOUTPUT:\x1b[m {:?}", v).unwrap();
+            let mut s = Sentence::from_raw(text).unwrap();
+            predictor.predict(&mut s);
+            wsconst_d_filter.filter(&mut s);
+            let mut buf = String::new();
+            s.write_tokenized_text(&mut buf);
+            hprintln!("\x1b[31mOUTPUT:\x1b[m {}", buf).unwrap();
         }
     }
 }

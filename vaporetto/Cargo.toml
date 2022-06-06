@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto: a pointwise prediction based tokenizer"
@@ -14,22 +14,24 @@ categories = ["text-processing", "no-std"]
 [dependencies]
 bincode = { version = "2.0.0-rc.1", default-features = false, features = ["alloc", "derive"] }  # MIT
 daachorse = { version = "0.4.1", default-features = false }  # MIT or Apache-2.0
+hashbrown = "0.12.1"  # MIT or Apache-2.0
 
 liblinear = { version = "1", optional = true }  # MIT
 
 [features]
-default = ["std", "cache-type-score", "fix-weight-length", "tag-prediction"]
+default = ["std", "cache-type-score", "fix-weight-length", "tag-prediction", "charwise-pma"]
 
 # default: on
-std = ["bincode/std"]
-cache-type-score = []
-fix-weight-length = []
-tag-prediction = ["bincode/atomic"]
+alloc = []
+std = ["alloc", "bincode/std"]
+cache-type-score = ["alloc"]
+fix-weight-length = ["alloc"]
+tag-prediction = ["alloc", "bincode/atomic"]
+charwise-pma = ["alloc"]
 
 kytea = ["std"]
 train = ["std", "liblinear"]
 portable-simd = ["fix-weight-length"]
-charwise-daachorse = []
 
 [package.metadata.docs.rs]
 all-features = true

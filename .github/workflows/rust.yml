@@ -34,7 +34,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap
+          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr
 
       - name: Run cargo test (workspace)
         uses: actions-rs/cargo@v1
@@ -46,7 +46,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --no-default-features
+          args: --release -p vaporetto --no-default-features --features alloc
 
       - name: Run cargo test (vaporetto / features kytea)
         uses: actions-rs/cargo@v1
@@ -82,7 +82,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --no-default-features --features charwise-daachorse
+          args: --release -p vaporetto --no-default-features --features charwise-pma
 
       - name: Run cargo test (vaporetto / features std)
         uses: actions-rs/cargo@v1
@@ -117,7 +117,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap
+          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr
 
       - name: Run cargo test (workspace)
         uses: actions-rs/cargo@v1
@@ -129,7 +129,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --no-default-features
+          args: --release -p vaporetto --no-default-features --features alloc
 
       - name: Run cargo test (vaporetto / all-features)
         uses: actions-rs/cargo@v1
@@ -171,7 +171,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release -p vaporetto --no-default-features --features charwise-daachorse
+          args: --release -p vaporetto --no-default-features --features charwise-pma
 
       - name: Run cargo test (vaporetto / features std)
         uses: actions-rs/cargo@v1

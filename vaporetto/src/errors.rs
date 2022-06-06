@@ -7,19 +7,33 @@ use alloc::string::String;
 #[cfg(feature = "std")]
 use std::error::Error;
 
+/// A specialized Result type for Vaporetto.
 pub type Result<T, E = VaporettoError> = core::result::Result<T, E>;
 
+/// The error type for Vaporetto.
 #[derive(Debug)]
 pub enum VaporettoError {
+    /// The error variant for [`InvalidModelError`].
     InvalidModel(InvalidModelError),
-    InvalidSentence(InvalidSentenceError),
+
+    /// The error variant for [`InvalidArgumentError`].
     InvalidArgument(InvalidArgumentError),
+
+    /// The error variant for [`FromUtf8Error`](alloc::string::FromUtf8Error).
     UTF8Error(alloc::string::FromUtf8Error),
+
+    /// The error variant for [`TryFromIntError`](core::num::TryFromIntError).
     CastError(core::num::TryFromIntError),
+
+    /// The error variant for [`DecodeError`](bincode::error::DecodeError).
     DecodeError(bincode::error::DecodeError),
+
+    /// The error variant for [`EncodeError`](bincode::error::EncodeError).
     EncodeError(bincode::error::EncodeError),
 
+    /// The error variant for [`std::io::Error`].
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     IOError(std::io::Error),
 }
 
@@ -29,13 +43,6 @@ impl VaporettoError {
         S: Into<String>,
     {
         Self::InvalidModel(InvalidModelError { msg: msg.into() })
-    }
-
-    pub(crate) fn invalid_sentence<S>(msg: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self::InvalidSentence(InvalidSentenceError { msg: msg.into() })
     }
 
     pub(crate) fn invalid_argument<S>(arg: &'static str, msg: S) -> Self
@@ -53,7 +60,6 @@ impl fmt::Display for VaporettoError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidModel(e) => e.fmt(f),
-            Self::InvalidSentence(e) => e.fmt(f),
             Self::InvalidArgument(e) => e.fmt(f),
             Self::UTF8Error(e) => e.fmt(f),
             Self::CastError(e) => e.fmt(f),
@@ -84,22 +90,6 @@ impl fmt::Display for InvalidModelError {
 
 #[cfg(feature = "std")]
 impl Error for InvalidModelError {}
-
-/// Error used when the sentence is invalid.
-#[derive(Debug)]
-pub struct InvalidSentenceError {
-    /// Error message.
-    pub(crate) msg: String,
-}
-
-impl fmt::Display for InvalidSentenceError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "InvalidSentenceError: {}", self.msg)
-    }
-}
-
-#[cfg(feature = "std")]
-impl Error for InvalidSentenceError {}
 
 /// Error used when the argument is invalid.
 #[derive(Debug)]

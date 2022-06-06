@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_tantivy"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto Tokenizer for Tantivy"
@@ -12,9 +12,9 @@ keywords = ["japanese", "tokenizer", "tantivy"]
 categories = ["text-processing"]
 
 [dependencies]
-vaporetto = { path = "../vaporetto", version = "0.4.0" }  # MIT or Apache-2.0
-vaporetto_rules = { path = "../vaporetto_rules", version = "0.4.0" }  # MIT or Apache-2.0
-tantivy = "0.17"  # MIT
+vaporetto = { path = "../vaporetto", version = "0.5.0" }  # MIT or Apache-2.0
+vaporetto_rules = { path = "../vaporetto_rules", version = "0.5.0" }  # MIT or Apache-2.0
+tantivy = "0.18"  # MIT
 
 [dev-dependencies]
 ruzstd = "0.2.4"  # MIT

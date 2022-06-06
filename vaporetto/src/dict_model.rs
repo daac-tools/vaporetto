@@ -13,7 +13,7 @@ pub struct DictWeight {
 }
 
 /// Record of weights for each word.
-#[derive(Clone, Decode, Encode)]
+#[derive(Clone, Debug, Decode, Encode)]
 pub struct WordWeightRecord {
     pub(crate) word: String,
     pub(crate) weights: Vec<i32>,
@@ -26,12 +26,13 @@ impl WordWeightRecord {
     /// # Arguments
     ///
     /// * `word` - A word.
-    /// * `weights` - A weight of boundaries.
+    /// * `weights` - Weights of each character boundary.
     /// * `comment` - A comment that does not affect the behaviour.
     ///
-    /// # Returns
+    /// # Errors
     ///
-    /// A new record.
+    /// If `weights.len() != word.chars().count() + 1`,
+    /// an error variant will be returned.
     pub fn new(word: String, weights: Vec<i32>, comment: String) -> Result<Self> {
         if weights.len() != word.chars().count() + 1 {
             return Err(VaporettoError::invalid_argument(
@@ -62,17 +63,15 @@ impl WordWeightRecord {
     }
 }
 
-#[derive(Decode, Encode)]
-pub struct DictModel {
-    pub(crate) dict: Vec<WordWeightRecord>,
-}
+#[derive(Debug, Decode, Encode)]
+pub struct DictModel(pub(crate) Vec<WordWeightRecord>);
 
 impl DictModel {
     pub fn new(dict: Vec<WordWeightRecord>) -> Self {
-        Self { dict }
+        Self(dict)
     }
 
     pub fn dictionary(&self) -> &[WordWeightRecord] {
-        &self.dict
+        &self.0
     }
 }

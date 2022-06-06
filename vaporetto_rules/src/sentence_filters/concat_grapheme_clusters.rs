@@ -1,5 +1,5 @@
 use unicode_segmentation::UnicodeSegmentation;
-use vaporetto::{BoundaryType, Sentence};
+use vaporetto::{CharacterBoundary, Sentence};
 
 use crate::SentenceFilter;
 
@@ -8,15 +8,29 @@ use crate::SentenceFilter;
 pub struct ConcatGraphemeClustersFilter;
 
 impl SentenceFilter for ConcatGraphemeClustersFilter {
-    fn filter(&self, mut sentence: Sentence) -> Sentence {
-        let mut tmp = sentence.boundaries().to_vec();
-        for (i, c) in sentence.to_raw_string().grapheme_indices(true) {
-            let start = sentence.get_char_pos(i).unwrap();
-            let end = sentence.get_char_pos(i + c.len()).unwrap() - 1;
-            tmp[start..end].fill(BoundaryType::NotWordBoundary);
+    fn filter(&self, sentence: &mut Sentence) {
+        let mut start = 0;
+        let mut offset = 0;
+        unsafe {
+            debug_assert!(sentence.as_raw_text().is_char_boundary(offset));
+            while let Some((len, n_chars)) = sentence
+                .as_raw_text()
+                .get_unchecked(offset..)
+                .graphemes(true)
+                .next()
+                .map(|x| (x.len(), x.chars().count()))
+            {
+                offset += len;
+                let end = start + n_chars;
+                debug_assert!(start <= sentence.boundaries().len());
+                debug_assert!(end <= sentence.boundaries().len() + 1);
+                sentence
+                    .boundaries_mut()
+                    .get_unchecked_mut(start..end - 1)
+                    .fill(CharacterBoundary::NotWordBoundary);
+                start = end;
+            }
         }
-        sentence.boundaries_mut().copy_from_slice(&tmp);
-        sentence
     }
 }
 
@@ -24,42 +38,46 @@ impl SentenceFilter for ConcatGraphemeClustersFilter {
 mod tests {
     use super::*;
 
+    use alloc::string::String;
+
     #[test]
     fn test_concat_grapheme_clusters_no_boundary() {
-        let s = Sentence::from_tokenized("\u{200d}").unwrap();
+        let mut s = Sentence::from_tokenized("\u{200d}").unwrap();
         let filter = ConcatGraphemeClustersFilter;
-        let s = filter.filter(s);
-        assert_eq!("\u{200d}", s.to_tokenized_string().unwrap());
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("\u{200d}", buf);
     }
 
     #[test]
     fn test_concat_grapheme_clusters_zwj() {
-        let s =
+        let mut s =
             Sentence::from_tokenized("\u{1f468} \u{200d} \u{1f469} \u{200d} \u{1f466}").unwrap();
         let filter = ConcatGraphemeClustersFilter;
-        let s = filter.filter(s);
-        assert_eq!(
-            "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f466}",
-            s.to_tokenized_string().unwrap()
-        );
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f466}", buf);
     }
 
     #[test]
     fn test_concat_grapheme_clusters_color() {
-        let s = Sentence::from_tokenized("\u{1f44f} \u{1f3fd}").unwrap();
+        let mut s = Sentence::from_tokenized("\u{1f44f} \u{1f3fd}").unwrap();
         let filter = ConcatGraphemeClustersFilter;
-        let s = filter.filter(s);
-        assert_eq!("\u{1f44f}\u{1f3fd}", s.to_tokenized_string().unwrap());
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("\u{1f44f}\u{1f3fd}", buf);
     }
 
     #[test]
     fn test_concat_grapheme_clusters_combined() {
-        let s = Sentence::from_tokenized("これ は 手 \u{1f44f} \u{1f3fd} で す").unwrap();
+        let mut s = Sentence::from_tokenized("これ は 手 \u{1f44f} \u{1f3fd} で す").unwrap();
         let filter = ConcatGraphemeClustersFilter;
-        let s = filter.filter(s);
-        assert_eq!(
-            "これ は 手 \u{1f44f}\u{1f3fd} で す",
-            s.to_tokenized_string().unwrap()
-        );
+        filter.filter(&mut s);
+        let mut buf = String::new();
+        s.write_tokenized_text(&mut buf);
+        assert_eq!("これ は 手 \u{1f44f}\u{1f3fd} で す", buf);
     }
 }

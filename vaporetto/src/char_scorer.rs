@@ -1,529 +1,526 @@
+mod boundary_scorer;
+
+#[cfg(feature = "tag-prediction")]
+mod boundary_tag_scorer;
+
+use core::cell::RefCell;
+use core::ops::AddAssign;
+
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-#[cfg(feature = "tag-prediction")]
-use core::iter;
-
-#[cfg(feature = "tag-prediction")]
-use alloc::sync::Arc;
-
-use bincode::{
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode,
-};
-
-#[cfg(feature = "charwise-daachorse")]
-use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
-#[cfg(not(feature = "charwise-daachorse"))]
-use daachorse::DoubleArrayAhoCorasick;
+use bincode::{BorrowDecode, Encode};
 
 use crate::dict_model::DictModel;
-use crate::errors::{Result, VaporettoError};
+use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
-use crate::utils::{AddWeight, MergableWeight, WeightMerger};
 
 #[cfg(feature = "tag-prediction")]
-use crate::sentence::{TagRangeScore, TagRangeScores, TagScores};
+use crate::ngram_model::TagNgramModel;
+
+use boundary_scorer::CharScorerBoundary;
+
 #[cfg(feature = "tag-prediction")]
-use crate::utils;
+use boundary_tag_scorer::CharScorerBoundaryTag;
 
-#[cfg(feature = "portable-simd")]
-use core::simd::i32x8;
-
-pub const SIMD_SIZE: usize = 8;
-#[cfg(feature = "portable-simd")]
-type I32Vec = i32x8;
-
-#[derive(Clone, Decode, Encode)]
-struct PositionalWeight<W> {
-    pub weight: W,
-    pub offset: i16,
+#[derive(Default)]
+struct CharWeightMerger<W> {
+    map: BTreeMap<String, RefCell<(W, bool)>>,
 }
 
-type NaivePositionalWeight = PositionalWeight<Vec<i32>>;
-
-impl NaivePositionalWeight {
-    fn new(offset: i16, weight: Vec<i32>) -> Self {
-        Self { offset, weight }
-    }
-}
-
-impl MergableWeight for NaivePositionalWeight {
-    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self {
-        debug_assert!(n_classes != 0);
-        let (weight1, weight2) = if weight1.offset > weight2.offset {
-            (weight2, weight1)
+impl<W> CharWeightMerger<W>
+where
+    for<'a> W: AddAssign<&'a W>,
+{
+    pub fn add<S>(&mut self, ngram: S, weight: W)
+    where
+        S: Into<String> + AsRef<str>,
+    {
+        if let Some(data) = self.map.get_mut(ngram.as_ref()) {
+            let (prev_weight, _) = &mut *data.borrow_mut();
+            *prev_weight += &weight;
         } else {
-            (weight1, weight2)
-        };
-        let shift = (weight2.offset - weight1.offset) as usize * n_classes;
-        let mut weight = vec![0; weight1.weight.len().max(shift + weight2.weight.len())];
-        weight[..weight1.weight.len()].copy_from_slice(&weight1.weight);
-        for (r, w2) in weight[shift..].iter_mut().zip(&weight2.weight) {
-            *r += w2;
-        }
-        Self {
-            offset: weight1.offset,
-            weight,
+            self.map.insert(ngram.into(), RefCell::new((weight, false)));
         }
     }
-}
 
-#[derive(Clone)]
-enum WeightVector {
-    Variable(Vec<i32>),
-
-    #[cfg(all(feature = "fix-weight-length", not(feature = "portable-simd")))]
-    Fixed([i32; SIMD_SIZE]),
-    #[cfg(all(feature = "fix-weight-length", feature = "portable-simd"))]
-    Fixed(I32Vec),
-}
-
-impl Decode for WeightVector {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let v: Vec<i32> = Decode::decode(decoder)?;
-        #[cfg(feature = "fix-weight-length")]
-        let result = if v.len() <= SIMD_SIZE {
-            let mut arr = [0; SIMD_SIZE];
-            arr[..v.len()].copy_from_slice(&v);
-
-            #[cfg(feature = "portable-simd")]
-            let arr = I32Vec::from_array(arr);
-
-            Self::Fixed(arr)
-        } else {
-            Self::Variable(v)
-        };
-
-        #[cfg(not(feature = "fix-weight-length"))]
-        let result = Self::Variable(v);
-
-        Ok(result)
-    }
-}
-
-impl Encode for WeightVector {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        match self {
-            Self::Variable(v) => {
-                Encode::encode(v, encoder)?;
+    #[must_use]
+    pub fn merge(self) -> Vec<(String, W)> {
+        let mut stack = vec![];
+        for (ngram, data) in &self.map {
+            if data.borrow().1 {
+                continue;
             }
-
-            #[cfg(feature = "fix-weight-length")]
-            Self::Fixed(v) => {
-                #[cfg(feature = "portable-simd")]
-                let v = &v.as_array();
-
-                let mut len = v.len();
-                for (i, w) in v.iter().enumerate().rev() {
-                    if *w != 0 {
+            stack.push(data);
+            for (j, _) in ngram.char_indices().skip(1) {
+                if let Some(data) = self.map.get(&ngram[j..]) {
+                    stack.push(data);
+                    if data.borrow().1 {
                         break;
                     }
-                    len = i;
-                }
-                Encode::encode(&v[..len].to_vec(), encoder)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl WeightVector {
-    pub fn new(weight: Vec<i32>) -> Self {
-        #[cfg(feature = "fix-weight-length")]
-        let v = if weight.len() <= SIMD_SIZE {
-            let mut arr = [0i32; SIMD_SIZE];
-            arr[..weight.len()].copy_from_slice(weight.as_slice());
-
-            #[cfg(feature = "portable-simd")]
-            let arr = I32Vec::from_array(arr);
-
-            Self::Fixed(arr)
-        } else {
-            Self::Variable(weight)
-        };
-
-        #[cfg(not(feature = "fix-weight-length"))]
-        let v = Self::Variable(weight);
-
-        v
-    }
-
-    fn add_weight(&self, ys: &mut [i32], offset: usize) {
-        match self {
-            WeightVector::Variable(weight) => {
-                weight.add_weight(ys, offset);
-            }
-
-            #[cfg(feature = "fix-weight-length")]
-            WeightVector::Fixed(weight) => {
-                let ys_slice = &mut ys[offset..offset + SIMD_SIZE];
-                #[cfg(feature = "portable-simd")]
-                {
-                    let mut target = I32Vec::from_slice(ys_slice);
-                    target += weight;
-                    ys_slice.copy_from_slice(target.as_array());
-                }
-                #[cfg(not(feature = "portable-simd"))]
-                for (y, w) in ys_slice.iter_mut().zip(weight) {
-                    *y += w;
                 }
             }
+            let mut data_from = stack.pop().unwrap();
+            data_from.borrow_mut().1 = true;
+            while let Some(data_to) = stack.pop() {
+                let data_to_ref = &mut data_to.borrow_mut();
+                data_to_ref.1 = true;
+                data_to_ref.0 += &data_from.borrow().0;
+                data_from = data_to;
+            }
         }
+        self.map
+            .into_iter()
+            .map(|(ngram, weight)| (ngram, weight.into_inner().0))
+            .collect()
     }
 }
 
-#[cfg(feature = "tag-prediction")]
-#[derive(Decode, Encode)]
-pub struct WeightSet<W> {
-    boundary: Option<PositionalWeight<W>>,
-    tag_left: Option<PositionalWeight<Vec<i32>>>,
-    tag_right: Option<PositionalWeight<Vec<i32>>>,
-    tag_self: Option<TagRangeScores>,
-}
+/// WARNING: Decoding is inherently unsafe. Do not publish this struct outside this
+/// crate.
+#[derive(BorrowDecode, Encode)]
+pub enum CharScorer {
+    Boundary(CharScorerBoundary),
 
-#[cfg(feature = "tag-prediction")]
-type NaiveWeightSet = WeightSet<Vec<i32>>;
-
-#[cfg(feature = "tag-prediction")]
-impl NaiveWeightSet {
-    fn boundary_weight(offset: i16, weight: Vec<i32>) -> Self {
-        Self {
-            boundary: Some(PositionalWeight::new(offset, weight)),
-            tag_left: None,
-            tag_right: None,
-            tag_self: None,
-        }
-    }
-
-    fn tag_left_weight(offset: i16, weight: Vec<i32>) -> Self {
-        Self {
-            boundary: None,
-            tag_left: Some(PositionalWeight::new(offset, weight)),
-            tag_right: None,
-            tag_self: None,
-        }
-    }
-
-    fn tag_right_weight(offset: i16, weight: Vec<i32>) -> Self {
-        Self {
-            boundary: None,
-            tag_left: None,
-            tag_right: Some(PositionalWeight::new(offset, weight)),
-            tag_self: None,
-        }
-    }
-
-    fn tag_self_weight(start_rel_position: i16, weight: Vec<i32>) -> Self {
-        Self {
-            boundary: None,
-            tag_left: None,
-            tag_right: None,
-            tag_self: Some(Arc::new(vec![TagRangeScore::new(
-                start_rel_position,
-                weight,
-            )])),
-        }
-    }
-}
-
-#[cfg(feature = "tag-prediction")]
-impl MergableWeight for NaiveWeightSet {
-    fn from_two_weights(weight1: &Self, weight2: &Self, n_classes: usize) -> Self {
-        Self {
-            boundary: utils::xor_or_zip_with(&weight1.boundary, &weight2.boundary, |w1, w2| {
-                PositionalWeight::from_two_weights(w1, w2, 1)
-            }),
-            tag_left: utils::xor_or_zip_with(&weight1.tag_left, &weight2.tag_left, |w1, w2| {
-                PositionalWeight::from_two_weights(w1, w2, n_classes)
-            }),
-            tag_right: utils::xor_or_zip_with(&weight1.tag_right, &weight2.tag_right, |w1, w2| {
-                PositionalWeight::from_two_weights(w1, w2, n_classes)
-            }),
-            tag_self: utils::xor_or_zip_with(&weight1.tag_self, &weight2.tag_self, |w1, w2| {
-                let mut w = w1.to_vec();
-                w.append(&mut w2.to_vec());
-                Arc::new(w)
-            }),
-        }
-    }
-}
-
-pub struct CharScorer {
-    #[cfg(feature = "charwise-daachorse")]
-    pma: CharwiseDoubleArrayAhoCorasick,
-    #[cfg(not(feature = "charwise-daachorse"))]
-    pma: DoubleArrayAhoCorasick,
-    weights: Vec<PositionalWeight<WeightVector>>,
+    #[cfg(feature = "tag-prediction")]
+    BoundaryTag(CharScorerBoundaryTag),
 }
 
 impl CharScorer {
-    pub fn new(model: NgramModel<String>, window_size: u8, dict: DictModel) -> Result<Self> {
-        let mut weight_merger = WeightMerger::new(1);
-
-        for d in model.data {
-            let weight = PositionalWeight::new(-i16::from(window_size) - 1, d.weights);
-            weight_merger.add(&d.ngram, weight);
-        }
-        for d in dict.dict {
-            let word_len = d.word.chars().count();
-            let word_len = i16::try_from(word_len).map_err(|_| {
-                VaporettoError::invalid_model(
-                    "words must be shorter than or equal to 32767 characters",
-                )
-            })?;
-            let weight = PositionalWeight::new(-word_len - 1, d.weights);
-            weight_merger.add(&d.word, weight);
-        }
-
-        let mut ngrams = vec![];
-        let mut weights = vec![];
-        for (ngram, data) in weight_merger.merge() {
-            ngrams.push(ngram);
-            let PositionalWeight { offset, weight } = data;
-            weights.push(PositionalWeight {
-                offset,
-                weight: WeightVector::new(weight),
-            });
-        }
-        #[cfg(feature = "charwise-daachorse")]
-        let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
-        #[cfg(not(feature = "charwise-daachorse"))]
-        let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
-        Ok(Self { pma, weights })
-    }
-
-    #[allow(clippy::cast_possible_wrap)]
-    pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
-        // If the following assertion fails, Vaporetto has a bug.
-        assert_eq!(sentence.str_to_char_pos.len(), sentence.text.len() + 1);
-
-        for m in self.pma.find_overlapping_no_suffix_iter(&sentence.text) {
-            // This was checked outside of the iteration.
-            let m_end = unsafe { *sentence.str_to_char_pos.get_unchecked(m.end()) };
-            // Both the weights and the PMA always have the same number of items.
-            // Therefore, the following code is safe.
-            let pos_weights = unsafe { self.weights.get_unchecked(m.value()) };
-
-            let offset = isize::from(padding) + m_end as isize + isize::from(pos_weights.offset);
-            pos_weights.weight.add_weight(ys, offset as usize);
-        }
-    }
-}
-
-impl<'de> BorrowDecode<'de> for CharScorer {
-    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
-    /// crate.
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
-        #[cfg(feature = "charwise-daachorse")]
-        let (pma, _) =
-            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
-        #[cfg(not(feature = "charwise-daachorse"))]
-        let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
-        Ok(Self {
-            pma,
-            weights: Decode::decode(decoder)?,
-        })
-    }
-}
-
-impl Encode for CharScorer {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize_to_vec();
-        Encode::encode(&pma_data, encoder)?;
-        Encode::encode(&self.weights, encoder)?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "tag-prediction")]
-pub struct CharScorerWithTags {
-    #[cfg(feature = "charwise-daachorse")]
-    pma: CharwiseDoubleArrayAhoCorasick,
-    #[cfg(not(feature = "charwise-daachorse"))]
-    pma: DoubleArrayAhoCorasick,
-    weights: Vec<WeightSet<WeightVector>>,
-    n_tags: usize,
-}
-
-#[cfg(feature = "tag-prediction")]
-impl CharScorerWithTags {
     pub fn new(
-        model: NgramModel<String>,
+        ngram_model: NgramModel<String>,
+        dict_model: DictModel,
         window_size: u8,
-        dict: DictModel,
-        n_tags: usize,
-        tag_left_model: NgramModel<String>,
-        tag_right_model: NgramModel<String>,
-        tag_self_model: NgramModel<String>,
-    ) -> Result<Self> {
-        let mut weight_merger = WeightMerger::new(n_tags);
-
-        for d in model.data {
-            let weight = WeightSet::boundary_weight(-i16::from(window_size), d.weights);
-            weight_merger.add(&d.ngram, weight);
-        }
-        for d in dict.dict {
-            let word_len = d.word.chars().count();
-            let word_len = i16::try_from(word_len).map_err(|_| {
-                VaporettoError::invalid_model(
-                    "words must be shorter than or equal to 32767 characters",
-                )
-            })?;
-            let weight = WeightSet::boundary_weight(-word_len, d.weights);
-            weight_merger.add(&d.word, weight);
-        }
-        for d in tag_left_model.data {
-            let ngram_len = i16::try_from(d.ngram.chars().count()).map_err(|_| {
-                VaporettoError::invalid_model(
-                    "character n-grams must be shorter than or equal to 32767 characters",
-                )
-            })?;
-            let weight = WeightSet::tag_left_weight(-ngram_len + 1, d.weights);
-            weight_merger.add(&d.ngram, weight);
-        }
-        for d in tag_right_model.data {
-            let weight = WeightSet::tag_right_weight(-i16::from(window_size) - 1, d.weights);
-            weight_merger.add(&d.ngram, weight);
-        }
-        for d in tag_self_model.data {
-            let ngram_len = i16::try_from(d.ngram.chars().count()).map_err(|_| {
-                VaporettoError::invalid_model(
-                    "character n-grams must be shorter than or equal to 32767 characters",
-                )
-            })?;
-            let weight = WeightSet::tag_self_weight(-ngram_len, d.weights);
-            weight_merger.add(&d.ngram, weight);
+        #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<String>>,
+    ) -> Result<Option<Self>> {
+        if ngram_model.0.is_empty() && dict_model.0.is_empty() || window_size == 0 {
+            return Ok(None);
         }
 
-        let mut ngrams = vec![];
-        let mut weights = vec![];
-        for (ngram, data) in weight_merger.merge() {
-            ngrams.push(ngram);
-            let WeightSet {
-                boundary,
-                tag_left,
-                tag_right,
-                tag_self,
-            } = data;
-            weights.push(WeightSet {
-                boundary: boundary.map(|PositionalWeight { offset, weight }| PositionalWeight {
-                    offset,
-                    weight: WeightVector::new(weight),
-                }),
-                tag_left,
-                tag_right,
-                tag_self,
-            });
+        #[cfg(feature = "tag-prediction")]
+        if tag_ngram_model.is_empty() {
+            Ok(Some(Self::Boundary(CharScorerBoundary::new(
+                ngram_model,
+                dict_model,
+                window_size,
+            )?)))
+        } else {
+            Ok(Some(Self::BoundaryTag(CharScorerBoundaryTag::new(
+                ngram_model,
+                dict_model,
+                window_size,
+                tag_ngram_model,
+            )?)))
         }
-        #[cfg(feature = "charwise-daachorse")]
-        let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
-        #[cfg(not(feature = "charwise-daachorse"))]
-        let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
-        Ok(Self {
-            pma,
-            weights,
-            n_tags,
-        })
+
+        #[cfg(not(feature = "tag-prediction"))]
+        Ok(Some(Self::Boundary(CharScorerBoundary::new(
+            ngram_model,
+            dict_model,
+            window_size,
+        )?)))
     }
 
-    #[allow(clippy::cast_possible_wrap)]
-    pub fn add_scores(
+    #[inline]
+    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+        match self {
+            Self::Boundary(scorer) => scorer.add_scores(sentence),
+
+            #[cfg(feature = "tag-prediction")]
+            Self::BoundaryTag(scorer) => scorer.add_scores(sentence),
+        }
+    }
+
+    /// # Satety
+    ///
+    /// `token_id` must be smaller than `scorer.tag_weight.len()`.
+    /// `pos` must be smaller than `sentence.char_pma_states.len()`.
+    #[cfg(feature = "tag-prediction")]
+    #[inline]
+    pub unsafe fn add_tag_scores(
         &self,
+        token_id: u32,
+        pos: usize,
         sentence: &Sentence,
-        padding: u8,
-        ys: &mut [i32],
-        tag_ys: &mut TagScores,
+        scores: &mut [i32],
     ) {
-        #[cfg(not(feature = "charwise-daachorse"))]
-        let no_suffix_iter = self.pma.find_overlapping_no_suffix_iter_from_iter(
-            iter::once(0)
-                .chain(sentence.text.as_bytes().iter().cloned())
-                .chain(iter::once(0)),
-        );
-        // Since `sentence.text` is a valid UTF-8 string ensured by type `String`,
-        // the following code is safe.
-        #[cfg(feature = "charwise-daachorse")]
-        let no_suffix_iter = unsafe {
-            self.pma.find_overlapping_no_suffix_iter_from_iter(
-                iter::once(0)
-                    .chain(sentence.text.as_bytes().iter().cloned())
-                    .chain(iter::once(0)),
-            )
-        };
-        for m in no_suffix_iter {
-            let m_end = sentence
-                .str_to_char_pos
-                .get(m.end() - 1)
-                .copied()
-                .unwrap_or(sentence.chars.len() + 1);
-
-            // Both the weights and the PMA always have the same number of items.
-            // Therefore, the following code is safe.
-            let weight_set = unsafe { self.weights.get_unchecked(m.value()) };
-
-            if let Some(pos_weights) = weight_set.boundary.as_ref() {
-                let offset =
-                    isize::from(padding) + m_end as isize + isize::from(pos_weights.offset) - 1;
-                pos_weights.weight.add_weight(ys, offset as usize);
-            }
-            if let Some(pos_weights) = weight_set.tag_left.as_ref() {
-                let offset =
-                    (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
-                pos_weights
-                    .weight
-                    .add_weight_signed(&mut tag_ys.left_scores, offset);
-            }
-            if let Some(pos_weights) = weight_set.tag_right.as_ref() {
-                let offset =
-                    (m_end as isize + isize::from(pos_weights.offset)) * self.n_tags as isize;
-                pos_weights
-                    .weight
-                    .add_weight_signed(&mut tag_ys.right_scores, offset);
-            }
-            if let Some(weight) = weight_set.tag_self.as_ref() {
-                tag_ys.self_scores[m_end - 1].replace(Arc::clone(weight));
-            }
+        match self {
+            Self::Boundary(_) => panic!("unsupported"),
+            Self::BoundaryTag(scorer) => scorer.add_tag_scores(token_id, pos, sentence, scores),
         }
     }
 }
 
-#[cfg(feature = "tag-prediction")]
-impl<'de> BorrowDecode<'de> for CharScorerWithTags {
-    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
-    /// crate.
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
-        #[cfg(feature = "charwise-daachorse")]
-        let (pma, _) =
-            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
-        #[cfg(not(feature = "charwise-daachorse"))]
-        let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
-        Ok(Self {
-            pma,
-            weights: Decode::decode(decoder)?,
-            n_tags: Decode::decode(decoder)?,
-        })
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[cfg(feature = "tag-prediction")]
-impl Encode for CharScorerWithTags {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize_to_vec();
-        Encode::encode(&pma_data, encoder)?;
-        Encode::encode(&self.weights, encoder)?;
-        Encode::encode(&self.n_tags, encoder)?;
-        Ok(())
+    use crate::dict_model::WordWeightRecord;
+    use crate::ngram_model::NgramData;
+    use crate::predictor::PositionalWeight;
+
+    use crate::predictor::WEIGHT_FIXED_LEN;
+
+    #[cfg(feature = "tag-prediction")]
+    use crate::ngram_model::{TagNgramData, TagWeight};
+
+    #[rustfmt::skip]
+    #[test]
+    fn test_weight_merger() {
+        let mut merger = CharWeightMerger::default();
+        merger.add("東京都", PositionalWeight::new(-3, vec![1, 2, 3, 4]));
+        merger.add("京都", PositionalWeight::new(-3, vec![2, 4, 6, 8, 10]));
+        merger.add("京都", PositionalWeight::new(-2, vec![3, 6, 9]));
+        merger.add("大阪", PositionalWeight::new(-2, vec![4, 8, 12]));
+        assert_eq!(
+            vec![
+                ("京都".into(), PositionalWeight::new(-3, vec![2, 7, 12, 17, 10])),
+                ("大阪".into(), PositionalWeight::new(-2, vec![4, 8, 12])),
+                ("東京都".into(), PositionalWeight::new(-3, vec![3, 9, 15, 21, 10])),
+            ],
+            merger.merge(),
+        );
+    }
+
+    #[test]
+    fn test_add_scores_1() {
+        // input:  我  ら  は  全  世  界  の  国  民
+        // n-grams:
+        //   我ら:    3   4   5
+        //   全世界:          6   7   8   9
+        //   国民:                       10  11  12
+        //   世界:           15  16  17  18  19
+        //   界:             20  21  22  23  24  25
+        // dict:
+        //   全世界:         26  27  28  29
+        //   世界:               30  31  32
+        //   世:                 33  34
+        let scorer = CharScorerBoundary::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: "我ら".into(),
+                    weights: vec![1, 2, 3, 4, 5],
+                },
+                NgramData {
+                    ngram: "全世界".into(),
+                    weights: vec![6, 7, 8, 9],
+                },
+                NgramData {
+                    ngram: "国民".into(),
+                    weights: vec![10, 11, 12, 13, 14],
+                },
+                NgramData {
+                    ngram: "世界".into(),
+                    weights: vec![15, 16, 17, 18, 19],
+                },
+                NgramData {
+                    ngram: "界".into(),
+                    weights: vec![20, 21, 22, 23, 24, 25],
+                },
+            ]),
+            DictModel(vec![
+                WordWeightRecord {
+                    word: "全世界".into(),
+                    weights: vec![26, 27, 28, 29],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世界".into(),
+                    weights: vec![30, 31, 32],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世".into(),
+                    weights: vec![33, 34],
+                    comment: "".into(),
+                },
+            ]),
+            3,
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("我らは全世界の国民").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 1);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(
+            &[4, 5, 73, 135, 141, 122, 55, 38],
+            sentence.boundary_scores(),
+        );
+    }
+
+    #[test]
+    fn test_add_scores_2() {
+        // input:  我  ら  は  全  世  界  の  国  民
+        // n-grams:
+        //   我ら:    2   3
+        //   全世界:              4   5
+        //   国民:                            6   7
+        //   世界:                9  10  11
+        //   界:                 12  13  14  15
+        // dict:
+        //   全世界:         16  17  18  19
+        //   世界:               20  21  22
+        //   世:                 23  24
+        let scorer = CharScorerBoundary::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: "我ら".into(),
+                    weights: vec![1, 2, 3],
+                },
+                NgramData {
+                    ngram: "全世界".into(),
+                    weights: vec![4, 5],
+                },
+                NgramData {
+                    ngram: "国民".into(),
+                    weights: vec![6, 7, 8],
+                },
+                NgramData {
+                    ngram: "世界".into(),
+                    weights: vec![9, 10, 11],
+                },
+                NgramData {
+                    ngram: "界".into(),
+                    weights: vec![12, 13, 14, 15],
+                },
+            ]),
+            DictModel(vec![
+                WordWeightRecord {
+                    word: "全世界".into(),
+                    weights: vec![16, 17, 18, 19],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世界".into(),
+                    weights: vec![20, 21, 22],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世".into(),
+                    weights: vec![23, 24],
+                    comment: "".into(),
+                },
+            ]),
+            2,
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("我らは全世界の国民").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 2);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(&[4, 5, 18, 87, 93, 68, 23, 9], sentence.boundary_scores(),);
+    }
+
+    #[test]
+    fn test_add_scores_3() {
+        // input:  我  ら  は  全  世  界  の  国  民
+        // n-grams:
+        //   我ら:    3   4   5
+        //   全世界:          6   7   8   9
+        //   国民:                       10  11  12
+        //   世界:           15  16  17  18  19
+        //   界:             20  21  22  23  24  25
+        // dict:
+        //   全世界:         26  27  28  29
+        //   世界:               30  31  32
+        //   世:                 33  34
+        //   世界の国民:         35  36  37  38  39
+        //   は全世界:   41  42  43  44  45
+        let scorer = CharScorerBoundary::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: "我ら".into(),
+                    weights: vec![1, 2, 3, 4, 5],
+                },
+                NgramData {
+                    ngram: "全世界".into(),
+                    weights: vec![6, 7, 8, 9],
+                },
+                NgramData {
+                    ngram: "国民".into(),
+                    weights: vec![10, 11, 12, 13, 14],
+                },
+                NgramData {
+                    ngram: "世界".into(),
+                    weights: vec![15, 16, 17, 18, 19],
+                },
+                NgramData {
+                    ngram: "界".into(),
+                    weights: vec![20, 21, 22, 23, 24, 25],
+                },
+            ]),
+            DictModel(vec![
+                WordWeightRecord {
+                    word: "全世界".into(),
+                    weights: vec![26, 27, 28, 29],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世界".into(),
+                    weights: vec![30, 31, 32],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世".into(),
+                    weights: vec![33, 34],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "世界の国民".into(),
+                    weights: vec![35, 36, 37, 38, 39, 40],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "は全世界".into(),
+                    weights: vec![41, 42, 43, 44, 45],
+                    comment: "".into(),
+                },
+            ]),
+            3,
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("我らは全世界の国民").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 3);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(
+            &[6, 48, 117, 215, 223, 206, 95, 79],
+            sentence.boundary_scores(),
+        );
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_add_scores_with_tags() {
+        // input:    こ  の  人  は  火  星  人  だ
+        // n-grams:
+        //   この人:    2   3   4
+        //   人だ:                      5   6   7
+        // dict:
+        //   人:           10  11          10  11
+        //   火星:                 12  13  14
+        let scorer = CharScorerBoundaryTag::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: "この人".into(),
+                    weights: vec![1, 2, 3, 4],
+                },
+                NgramData {
+                    ngram: "人だ".into(),
+                    weights: vec![5, 6, 7, 8, 9],
+                },
+            ]),
+            DictModel(vec![
+                WordWeightRecord {
+                    word: "人".into(),
+                    weights: vec![10, 11],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "火星".into(),
+                    weights: vec![12, 13, 14],
+                    comment: "".into(),
+                },
+            ]),
+            3,
+            vec![
+                TagNgramModel(vec![
+                    TagNgramData {
+                        ngram: "の人".into(),
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![15, 16, 17],
+                            },
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![18, 19, 20],
+                            },
+                        ],
+                    },
+                    TagNgramData {
+                        ngram: "人は".into(),
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![21, 22, 23],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![24, 25, 26],
+                            },
+                        ],
+                    },
+                    TagNgramData {
+                        ngram: "火星人".into(),
+                        weights: vec![TagWeight {
+                            rel_position: 0,
+                            weights: vec![27, 28, 29],
+                        }],
+                    },
+                ]),
+                TagNgramModel(vec![]),
+                TagNgramModel(vec![
+                    TagNgramData {
+                        ngram: "人は".into(),
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![27, 28],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![29, 30],
+                            },
+                        ],
+                    },
+                    TagNgramData {
+                        ngram: "は火星人".into(),
+                        weights: vec![TagWeight {
+                            rel_position: 3,
+                            weights: vec![31, 32],
+                        }],
+                    },
+                ]),
+            ],
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("この人は火星人だ").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 1);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(&[3, 14, 16, 13, 19, 31, 19], sentence.boundary_scores());
+
+        let mut tag_scores = [1; 8];
+        unsafe {
+            scorer.add_tag_scores(0, 2, &sentence, &mut tag_scores);
+        }
+        assert_eq!(&[37, 39, 41, 1, 1, 1, 1, 1], &tag_scores);
+
+        let mut tag_scores = [1; 8];
+        unsafe {
+            scorer.add_tag_scores(0, 6, &sentence, &mut tag_scores);
+        }
+        assert_eq!(&[28, 29, 30, 1, 1, 1, 1, 1], &tag_scores);
+
+        let mut tag_scores = [1; 8];
+        unsafe {
+            scorer.add_tag_scores(2, 3, &sentence, &mut tag_scores);
+        }
+        assert_eq!(&[59, 61, 1, 1, 1, 1, 1, 1], &tag_scores);
     }
 }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::Parser;
-use vaporetto::{BoundaryType, CharacterType, Model, Predictor, Sentence};
+use vaporetto::{CharacterBoundary, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
@@ -107,19 +107,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if line.is_empty() {
             continue;
         }
-        let mut s = Sentence::from_tokenized(line)?;
+        let mut s = Sentence::from_tokenized(&line)?;
         let ref_boundaries = s.boundaries().to_vec();
-        let ref_tags = s.tags().to_vec();
+        let mut ref_tags = vec![];
+        for i in 0..=ref_boundaries.len() {
+            ref_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
+        }
         if !args.no_norm {
-            let new_line = fullwidth_filter.filter(s.to_raw_string());
+            let new_line = fullwidth_filter.filter(s.as_raw_text());
             s = Sentence::from_raw(new_line)?
         };
-        s = predictor.predict(s);
-        s = post_filters.iter().fold(s, |s, filter| filter.filter(s));
-        s = predictor.fill_tags(s);
-        let hyp_boundaries = s.boundaries().to_vec();
-        let hyp_tags = s.tags().to_vec();
-        results.push((ref_boundaries, ref_tags, hyp_boundaries, hyp_tags));
+        predictor.predict(&mut s);
+        post_filters.iter().for_each(|filter| filter.filter(&mut s));
+        s.fill_tags();
+        let sys_boundaries = s.boundaries().to_vec();
+        let mut sys_tags = vec![];
+        for i in 0..=sys_boundaries.len() {
+            sys_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
+        }
+        results.push((ref_boundaries, ref_tags, sys_boundaries, sys_tags));
     }
 
     match args.metric {
@@ -131,12 +137,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for (rs_b, _, hs_b, _) in results {
                 for (r, h) in rs_b.into_iter().zip(hs_b) {
                     if r == h {
-                        if h == BoundaryType::WordBoundary {
+                        if h == CharacterBoundary::WordBoundary {
                             n_tp += 1;
                         } else {
                             n_tn += 1;
                         }
-                    } else if h == BoundaryType::WordBoundary {
+                    } else if h == CharacterBoundary::WordBoundary {
                         n_fp += 1;
                     } else {
                         n_fn += 1;
@@ -159,12 +165,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut n_sys = 0;
             let mut n_ref = 0;
             let mut n_cor = 0;
-            for (rs_b, rs_t, hs_b, hs_t) in results {
+            for (refs_b, refs_t, syss_b, syss_t) in results {
                 let mut matched = true;
-                for (((r_b, r_t), h_b), h_t) in rs_b.iter().zip(&rs_t).zip(&hs_b).zip(&hs_t) {
-                    if r_b == h_b {
-                        if *h_b == BoundaryType::WordBoundary {
-                            if matched && r_t == h_t {
+                for (((r_b, r_t), s_b), s_t) in refs_b.iter().zip(&refs_t).zip(&syss_b).zip(&syss_t)
+                {
+                    if r_b == s_b {
+                        if *s_b == CharacterBoundary::WordBoundary {
+                            if matched && r_t == s_t {
                                 n_cor += 1;
                             }
                             matched = true;
@@ -172,7 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             n_sys += 1;
                         }
                     } else {
-                        if *h_b == BoundaryType::WordBoundary {
+                        if *s_b == CharacterBoundary::WordBoundary {
                             n_sys += 1;
                         } else {
                             n_ref += 1;
@@ -180,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         matched = false;
                     }
                 }
-                if matched && rs_t.last().unwrap() == hs_t.last().unwrap() {
+                if matched && refs_t.last().unwrap() == syss_t.last().unwrap() {
                     n_cor += 1;
                 }
                 n_sys += 1;

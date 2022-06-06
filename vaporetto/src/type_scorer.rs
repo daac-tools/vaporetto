@@ -1,74 +1,70 @@
+mod boundary_scorer;
+
+#[cfg(feature = "tag-prediction")]
+mod boundary_tag_scorer;
+
+#[cfg(feature = "cache-type-score")]
+mod boundary_scorer_cache;
+
 use core::cell::RefCell;
+use core::ops::AddAssign;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use bincode::{de::BorrowDecoder, error::DecodeError, BorrowDecode, Decode, Encode};
-use daachorse::DoubleArrayAhoCorasick;
+use bincode::{BorrowDecode, Encode};
 
-use crate::errors::{Result, VaporettoError};
+use crate::errors::Result;
 use crate::ngram_model::NgramModel;
 use crate::sentence::Sentence;
-use crate::utils::AddWeight;
 
-/// WARNING: The decode feature is inherently unsafe. Do not publish this feature outside this
-/// crate.
-#[derive(BorrowDecode, Encode)]
-pub enum TypeScorer {
-    Pma(TypeScorerPma),
+#[cfg(feature = "tag-prediction")]
+use crate::ngram_model::TagNgramModel;
 
-    #[cfg(feature = "cache-type-score")]
-    Cache(TypeScorerCache),
+use boundary_scorer::TypeScorerBoundary;
+
+#[cfg(feature = "cache-type-score")]
+use boundary_scorer_cache::TypeScorerBoundaryCache;
+
+#[cfg(feature = "tag-prediction")]
+use boundary_tag_scorer::TypeScorerBoundaryTag;
+
+// If the cache-type-score feature is enabled and the window size of character type features is
+// less than or equal to this value, character type scores are cached.
+#[cfg(feature = "cache-type-score")]
+const CACHE_MAX_WINDOW_SIZE: u8 = 3;
+
+#[derive(Default)]
+struct TypeWeightMerger<W> {
+    map: BTreeMap<Vec<u8>, RefCell<(W, bool)>>,
 }
 
-impl TypeScorer {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
-        #[cfg(feature = "cache-type-score")]
-        let scorer = if window_size <= 3 {
-            Self::Cache(TypeScorerCache::new(model, window_size)?)
+impl<W> TypeWeightMerger<W>
+where
+    for<'a> W: AddAssign<&'a W>,
+{
+    pub fn add<V>(&mut self, ngram: V, weight: W)
+    where
+        V: Into<Vec<u8>> + AsRef<[u8]>,
+    {
+        if let Some(data) = self.map.get_mut(ngram.as_ref()) {
+            let (prev_weight, _) = &mut *data.borrow_mut();
+            *prev_weight += &weight;
         } else {
-            Self::Pma(TypeScorerPma::new(model, window_size)?)
-        };
-
-        #[cfg(not(feature = "cache-type-score"))]
-        let scorer = Self::Pma(TypeScorerPma::new(model, window_size)?);
-
-        Ok(scorer)
-    }
-
-    pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
-        match self {
-            TypeScorer::Pma(pma) => pma.add_scores(sentence, padding, ys),
-
-            #[cfg(feature = "cache-type-score")]
-            TypeScorer::Cache(cache) => cache.add_scores(sentence, &mut ys[padding.into()..]),
+            self.map.insert(ngram.into(), RefCell::new((weight, false)));
         }
     }
-}
 
-pub struct TypeScorerPma {
-    pma: DoubleArrayAhoCorasick,
-    weights: Vec<Vec<i32>>,
-    window_size: u8,
-}
-
-impl TypeScorerPma {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
-        // key: ngram, value: (weight, check)
-        let mut weights_map: BTreeMap<Vec<u8>, RefCell<(Vec<i32>, bool)>> = BTreeMap::new();
-
-        for d in model.data {
-            weights_map.insert(d.ngram, RefCell::new((d.weights, false)));
-        }
-
+    #[must_use]
+    pub fn merge(self) -> Vec<(Vec<u8>, W)> {
         let mut stack = vec![];
-        for (ngram, data) in &weights_map {
+        for (ngram, data) in &self.map {
             if data.borrow().1 {
                 continue;
             }
             stack.push(data);
             for j in 1..ngram.len() {
-                if let Some(data) = weights_map.get(&ngram[j..]) {
+                if let Some(data) = self.map.get(&ngram[j..]) {
                     stack.push(data);
                     if data.borrow().1 {
                         break;
@@ -78,172 +74,401 @@ impl TypeScorerPma {
             let mut data_from = stack.pop().unwrap();
             data_from.borrow_mut().1 = true;
             while let Some(data_to) = stack.pop() {
-                let mut new_weight = data_from.borrow().0.clone();
-                for (w1, w2) in new_weight.iter_mut().zip(&data_to.borrow().0) {
-                    *w1 += w2;
-                }
-                let new_data = (new_weight, true);
-                *data_to.borrow_mut() = new_data;
+                let data_to_ref = &mut data_to.borrow_mut();
+                data_to_ref.1 = true;
+                data_to_ref.0 += &data_from.borrow().0;
                 data_from = data_to;
             }
         }
-        let mut ngrams = vec![];
-        let mut weights = vec![];
-        for (ngram, data) in weights_map {
-            ngrams.push(ngram);
-            weights.push(data.into_inner().0);
-        }
-        let pma = DoubleArrayAhoCorasick::new(ngrams)
-            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
-        Ok(Self {
-            pma,
-            weights,
-            window_size,
-        })
-    }
-
-    pub fn add_scores(&self, sentence: &Sentence, padding: u8, ys: &mut [i32]) {
-        for m in self
-            .pma
-            .find_overlapping_no_suffix_iter(&sentence.char_type)
-        {
-            let offset = usize::from(padding) + m.end() - usize::from(self.window_size) - 1;
-            // Both the weights and the PMA always have the same number of items.
-            // Therefore, the following code is safe.
-            let weights = unsafe { self.weights.get_unchecked(m.value()) };
-            weights.add_weight(ys, offset);
-        }
+        self.map
+            .into_iter()
+            .map(|(ngram, weight)| (ngram, weight.into_inner().0))
+            .collect()
     }
 }
 
-impl<'de> BorrowDecode<'de> for TypeScorerPma {
-    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
-    /// crate.
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
-        let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
-        Ok(Self {
-            pma,
-            weights: Decode::decode(decoder)?,
-            window_size: Decode::decode(decoder)?,
-        })
-    }
+/// WARNING: Decoding is inherently unsafe. Do not publish this struct outside this
+/// crate.
+#[derive(BorrowDecode, Encode)]
+pub enum TypeScorer {
+    Boundary(TypeScorerBoundary),
+
+    #[cfg(feature = "cache-type-score")]
+    BoundaryCache(TypeScorerBoundaryCache),
+
+    #[cfg(feature = "tag-prediction")]
+    BoundaryTag(TypeScorerBoundaryTag),
 }
 
-impl Encode for TypeScorerPma {
-    fn encode<E: bincode::enc::Encoder>(
+impl TypeScorer {
+    pub fn new(
+        ngram_model: NgramModel<Vec<u8>>,
+        window_size: u8,
+        #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<Vec<u8>>>,
+    ) -> Result<Option<Self>> {
+        if ngram_model.0.is_empty() || window_size == 0 {
+            return Ok(None);
+        }
+
+        #[cfg(feature = "tag-prediction")]
+        if tag_ngram_model.is_empty() {
+            match window_size {
+                #[cfg(feature = "cache-type-score")]
+                0..=CACHE_MAX_WINDOW_SIZE => Ok(Some(Self::BoundaryCache(
+                    TypeScorerBoundaryCache::new(ngram_model, window_size)?,
+                ))),
+                _ => Ok(Some(Self::Boundary(TypeScorerBoundary::new(
+                    ngram_model,
+                    window_size,
+                )?))),
+            }
+        } else {
+            Ok(Some(Self::BoundaryTag(TypeScorerBoundaryTag::new(
+                ngram_model,
+                window_size,
+                tag_ngram_model,
+            )?)))
+        }
+
+        #[cfg(not(feature = "tag-prediction"))]
+        match window_size {
+            #[cfg(feature = "cache-type-score")]
+            0..=CACHE_MAX_WINDOW_SIZE => Ok(Some(Self::BoundaryCache(
+                TypeScorerBoundaryCache::new(ngram_model, window_size)?,
+            ))),
+            _ => Ok(Some(Self::Boundary(TypeScorerBoundary::new(
+                ngram_model,
+                window_size,
+            )?))),
+        }
+    }
+
+    #[inline]
+    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+        match self {
+            Self::Boundary(scorer) => scorer.add_scores(sentence),
+
+            #[cfg(feature = "cache-type-score")]
+            Self::BoundaryCache(scorer) => scorer.add_scores(sentence),
+
+            #[cfg(feature = "tag-prediction")]
+            Self::BoundaryTag(scorer) => scorer.add_scores(sentence),
+        }
+    }
+
+    /// # Satety
+    ///
+    /// `token_id` must be smaller than `scorer.tag_weight.len()`.
+    /// `pos` must be smaller than `sentence.type_pma_states.len()`.
+    #[cfg(feature = "tag-prediction")]
+    #[inline]
+    pub unsafe fn add_tag_scores(
         &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        let pma_data = self.pma.serialize_to_vec();
-        Encode::encode(&pma_data, encoder)?;
-        Encode::encode(&self.weights, encoder)?;
-        Encode::encode(&self.window_size, encoder)?;
-        Ok(())
+        token_id: u32,
+        pos: usize,
+        sentence: &Sentence,
+        scores: &mut [i32],
+    ) {
+        match self {
+            Self::BoundaryTag(scorer) => scorer.add_tag_scores(token_id, pos, sentence, scores),
+            _ => panic!("unsupported"),
+        }
     }
 }
 
-#[cfg(feature = "cache-type-score")]
-#[derive(Decode, Encode)]
-pub struct TypeScorerCache {
-    scores: Vec<i32>,
-    window_size: u8,
-    sequence_mask: usize,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::ngram_model::NgramData;
+    use crate::predictor::PositionalWeight;
+    use crate::CharacterType::*;
+
+    use crate::predictor::WEIGHT_FIXED_LEN;
+
+    #[cfg(feature = "tag-prediction")]
+    use crate::ngram_model::{TagNgramData, TagWeight};
+
+    #[rustfmt::skip]
+    #[test]
+    fn test_weight_merger() {
+        let mut merger = TypeWeightMerger::default();
+        merger.add(b"eab".to_vec(), PositionalWeight::new(-3, vec![1, 2, 3, 4]));
+        merger.add(b"ab".to_vec(), PositionalWeight::new(-3, vec![2, 4, 6, 8, 10]));
+        merger.add(b"ab".to_vec(), PositionalWeight::new(-3, vec![3, 6, 9]));
+        merger.add(b"cd".to_vec(), PositionalWeight::new(-2, vec![4, 8, 12]));
+        assert_eq!(
+            vec![
+                (b"ab".to_vec(), PositionalWeight::new(-3, vec![5, 10, 15, 8, 10])),
+                (b"cd".to_vec(), PositionalWeight::new(-2, vec![4, 8, 12])),
+                (b"eab".to_vec(), PositionalWeight::new(-3, vec![6, 12, 18, 12, 10])),
+            ],
+            merger.merge(),
+        );
+    }
+
+    #[test]
+    fn test_add_scores() {
+        // input:  我  ら  は  全  世  界  の  国  民
+        // n-grams:
+        //   KH:      4   5   6   7
+        //                    1   2   3   4   5   6
+        //   KKK:         8   9  10  11  12  13
+        //   KK:     14  15  16  17  18  19  20
+        //               14  15  16  17  18  19  20
+        //                           14  15  16  17
+        //   K:      25  26  27  28
+        //           22  23  24  25  26  27  28
+        //           21  22  23  24  25  26  27  28
+        //               21  22  23  24  25  26  27
+        //                       21  22  23  24  25
+        //                           21  22  23  24
+        let scorer = TypeScorerBoundary::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: vec![Kanji as u8, Hiragana as u8],
+                    weights: vec![1, 2, 3, 4, 5, 6, 7],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Kanji as u8, Kanji as u8],
+                    weights: vec![8, 9, 10, 11, 12, 13],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Kanji as u8],
+                    weights: vec![14, 15, 16, 17, 18, 19, 20],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8],
+                    weights: vec![21, 22, 23, 24, 25, 26, 27, 28],
+                },
+            ]),
+            4,
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("我らは全世界の国民").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 1);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(
+            &[87, 135, 144, 174, 182, 192, 202, 148],
+            sentence.boundary_scores(),
+        );
+    }
+
+    #[cfg(feature = "cache-type-score")]
+    #[test]
+    fn test_add_scores_cache_1() {
+        // input:  我  ら  は  全  世  界  の  国  民
+        // n-grams:
+        //   KH:      3   4   5
+        //                        1   2   3   4   5
+        //   KKK:             6   7   8   9
+        //   KK:         10  11  12  13  14
+        //                   10  11  12  13  14
+        //                               10  11  12
+        //   K:      18  19  20
+        //           15  16  17  18  19  20
+        //               15  16  17  18  19  20
+        //                   15  16  17  18  19  20
+        //                           15  16  17  18
+        //                               15  16  17
+        let scorer = TypeScorerBoundaryCache::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: vec![Kanji as u8, Hiragana as u8],
+                    weights: vec![1, 2, 3, 4, 5],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Kanji as u8, Kanji as u8],
+                    weights: vec![6, 7, 8, 9],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Kanji as u8],
+                    weights: vec![10, 11, 12, 13, 14],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8],
+                    weights: vec![15, 16, 17, 18, 19, 20],
+                },
+            ]),
+            3,
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("我らは全世界の国民").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 2);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(
+            &[38, 66, 102, 84, 106, 139, 103, 74],
+            sentence.boundary_scores(),
+        );
+    }
+
+    #[cfg(feature = "cache-type-score")]
+    #[test]
+    fn test_add_scores_cache_2() {
+        // input:  我  ら  は  全  世  界  の  国  民
+        // n-grams:
+        //   KH:      2   3
+        //                            1   2   3
+        //   KKK:                 4   5
+        //   KK:              6   7   8
+        //                        6   7   8
+        //                                    6   7
+        //   K:      11  12
+        //                9  10  11  12
+        //                    9  10  11  12
+        //                        9  10  11  12
+        //                                9  10  11
+        //                                    9  10
+        let scorer = TypeScorerBoundaryCache::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: vec![Kanji as u8, Hiragana as u8],
+                    weights: vec![1, 2, 3],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Kanji as u8, Kanji as u8],
+                    weights: vec![4, 5],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Kanji as u8],
+                    weights: vec![6, 7, 8],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8],
+                    weights: vec![9, 10, 11, 12],
+                },
+            ]),
+            2,
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("我らは全世界の国民").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 3);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(
+            &[16, 27, 28, 50, 57, 45, 43, 31],
+            sentence.boundary_scores(),
+        );
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_add_scores_with_tags() {
+        // input:    こ  の  人  は  火  星  人  だ
+        // n-grams:
+        //   HHK:       2   3   4
+        //   KH:        5   6   7   8   9
+        //                              5   6   7
+        let scorer = TypeScorerBoundaryTag::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: vec![Hiragana as u8, Hiragana as u8, Kanji as u8],
+                    weights: vec![1, 2, 3, 4],
+                },
+                NgramData {
+                    ngram: vec![Kanji as u8, Hiragana as u8],
+                    weights: vec![5, 6, 7, 8, 9],
+                },
+            ]),
+            3,
+            vec![
+                TagNgramModel(vec![
+                    TagNgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![10, 11, 12],
+                            },
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![13, 14, 15],
+                            },
+                        ],
+                    },
+                    TagNgramData {
+                        ngram: vec![Kanji as u8, Hiragana as u8],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 1,
+                                weights: vec![16, 17, 18],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![19, 20, 21],
+                            },
+                        ],
+                    },
+                    TagNgramData {
+                        ngram: vec![Kanji as u8, Kanji as u8, Kanji as u8],
+                        weights: vec![TagWeight {
+                            rel_position: 0,
+                            weights: vec![22, 23, 24],
+                        }],
+                    },
+                ]),
+                TagNgramModel(vec![]),
+                TagNgramModel(vec![
+                    TagNgramData {
+                        ngram: vec![Kanji as u8, Hiragana as u8],
+                        weights: vec![
+                            TagWeight {
+                                rel_position: 0,
+                                weights: vec![25, 26],
+                            },
+                            TagWeight {
+                                rel_position: 3,
+                                weights: vec![27, 28],
+                            },
+                        ],
+                    },
+                    TagNgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8, Kanji as u8, Kanji as u8],
+                        weights: vec![TagWeight {
+                            rel_position: 3,
+                            weights: vec![29, 30],
+                        }],
+                    },
+                ]),
+            ],
+        )
+        .unwrap();
+        let mut sentence = Sentence::from_raw("この人は火星人だ").unwrap();
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, 1);
+        scorer.add_scores(&mut sentence);
+        assert_eq!(&[8, 10, 12, 9, 15, 7, 8], sentence.boundary_scores());
+
+        let mut tag_scores = [1; 8];
+        unsafe {
+            scorer.add_tag_scores(0, 2, &sentence, &mut tag_scores);
+        }
+        assert_eq!(&[27, 29, 31, 1, 1, 1, 1, 1], &tag_scores);
+
+        let mut tag_scores = [1; 8];
+        unsafe {
+            scorer.add_tag_scores(0, 6, &sentence, &mut tag_scores);
+        }
+        assert_eq!(&[39, 41, 43, 1, 1, 1, 1, 1], &tag_scores);
+
+        let mut tag_scores = [1; 8];
+        unsafe {
+            scorer.add_tag_scores(2, 3, &sentence, &mut tag_scores);
+        }
+        assert_eq!(&[55, 57, 1, 1, 1, 1, 1, 1], &tag_scores);
+    }
 }
-
-#[cfg(feature = "cache-type-score")]
-impl TypeScorerCache {
-    pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
-        let pma = DoubleArrayAhoCorasick::new(model.data.iter().map(|d| &d.ngram))
-            .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
-        let mut weights = vec![];
-        for d in model.data {
-            if d.weights.len() <= 2 * usize::from(window_size) - d.ngram.len() {
-                return Err(VaporettoError::invalid_model(
-                    "invalid size of weight vector",
-                ));
-            }
-            weights.push(d.weights);
-        }
-
-        let sequence_size = u16::from(window_size) * 2;
-        let all_sequences = ALPHABET_SIZE.pow(sequence_size.into());
-
-        let mut sequence = vec![0u8; sequence_size.into()];
-        let mut scores = vec![0; all_sequences];
-
-        for (i, score) in scores.iter_mut().enumerate() {
-            if !Self::seqid_to_seq(i, &mut sequence) {
-                continue;
-            }
-            let mut y = 0;
-            for m in pma.find_overlapping_iter(&sequence) {
-                y += weights[m.value()][usize::from(sequence_size) - m.end()];
-            }
-            *score = y;
-        }
-
-        Ok(Self {
-            scores,
-            window_size,
-            sequence_mask: (1 << (ALPHABET_SHIFT * usize::from(sequence_size))) - 1,
-        })
-    }
-
-    pub fn add_scores(&self, sentence: &Sentence, ys: &mut [i32]) {
-        let mut seqid = 0;
-        for i in 0..self.window_size {
-            if let Some(ct) = sentence.char_type.get(usize::from(i)) {
-                seqid = self.increment_seqid(seqid, *ct);
-            } else {
-                seqid = self.increment_seqid_without_char(seqid);
-            };
-        }
-        for (i, y) in ys.iter_mut().enumerate() {
-            if let Some(ct) = sentence.char_type.get(i + usize::from(self.window_size)) {
-                seqid = self.increment_seqid(seqid, *ct);
-            } else {
-                seqid = self.increment_seqid_without_char(seqid);
-            };
-            *y += self.get_score(seqid);
-        }
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    fn seqid_to_seq(mut seqid: usize, sequence: &mut [u8]) -> bool {
-        for type_id in sequence.iter_mut().rev() {
-            *type_id = (seqid & ALPHABET_MASK) as u8;
-            if usize::from(*type_id) == ALPHABET_MASK {
-                return false; // invalid
-            }
-            seqid >>= ALPHABET_SHIFT;
-        }
-        assert_eq!(seqid, 0);
-        true
-    }
-
-    #[inline(always)]
-    fn get_score(&self, seqid: usize) -> i32 {
-        self.scores[seqid]
-    }
-
-    #[inline(always)]
-    fn increment_seqid(&self, seqid: usize, char_type: u8) -> usize {
-        let char_id = usize::from(char_type);
-        debug_assert!((1..=6).contains(&char_id));
-        ((seqid << ALPHABET_SHIFT) | char_id) & self.sequence_mask
-    }
-
-    #[inline(always)]
-    const fn increment_seqid_without_char(&self, seqid: usize) -> usize {
-        (seqid << ALPHABET_SHIFT) & self.sequence_mask
-    }
-}
-
-#[cfg(feature = "cache-type-score")]
-const ALPHABET_SIZE: usize = 8;
-#[cfg(feature = "cache-type-score")]
-const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
-#[cfg(feature = "cache-type-score")]
-const ALPHABET_SHIFT: usize = 3;

@@ -1,143 +1,614 @@
-use core::mem;
+use core::ops::AddAssign;
+
+#[cfg(all(feature = "fix-weight-length", feature = "portable-simd"))]
+use core::simd::Simd;
 
 use alloc::vec::Vec;
 
 #[cfg(feature = "tag-prediction")]
-use core::cmp::Ordering;
-
+use alloc::borrow::Cow;
 #[cfg(feature = "tag-prediction")]
 use alloc::string::String;
+
+use bincode::{
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+    BorrowDecode, Decode, Encode,
+};
+
 #[cfg(feature = "tag-prediction")]
-use alloc::sync::Arc;
+use hashbrown::HashMap;
 
-use bincode::{BorrowDecode, Encode};
-
-use crate::char_scorer::{self, CharScorer};
+use crate::char_scorer::CharScorer;
 use crate::errors::Result;
 use crate::model::Model;
-use crate::sentence::{BoundaryType, Sentence};
+use crate::sentence::{CharacterBoundary, Sentence};
 use crate::type_scorer::TypeScorer;
 
 #[cfg(feature = "tag-prediction")]
-use crate::char_scorer::CharScorerWithTags;
+use crate::utils::SerializableHashMap;
 
-#[derive(BorrowDecode, Encode)]
-enum CharScorerWrapper {
-    Boundary(CharScorer),
+pub const WEIGHT_FIXED_LEN: usize = 8;
 
-    #[cfg(feature = "tag-prediction")]
-    BoundaryAndTags(CharScorerWithTags),
+#[cfg(all(feature = "fix-weight-length", not(feature = "portable-simd")))]
+pub type I32Simd = [i32; WEIGHT_FIXED_LEN];
+#[cfg(all(feature = "fix-weight-length", feature = "portable-simd"))]
+pub type I32Simd = Simd<i32, WEIGHT_FIXED_LEN>;
+
+#[derive(Clone, Debug)]
+pub enum WeightVector {
+    Variable(Vec<i32>),
+
+    #[cfg(feature = "fix-weight-length")]
+    Fixed(I32Simd),
 }
 
-/// Predictor.
-pub struct Predictor {
-    data: PredictorData,
+impl Decode for WeightVector {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let weight: Vec<i32> = Decode::decode(decoder)?;
+        Ok(Self::from(weight))
+    }
 }
 
-/// WARNING: The decode feature is inherently unsafe. Do not publish this feature outside this
-/// crate.
-#[derive(BorrowDecode, Encode)]
-struct PredictorData {
+impl Encode for WeightVector {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        match self {
+            WeightVector::Variable(w) => {
+                Encode::encode(&w, encoder)?;
+            }
+
+            #[cfg(feature = "fix-weight-length")]
+            WeightVector::Fixed(w) => {
+                #[cfg(feature = "portable-simd")]
+                let w = w.as_array();
+
+                Encode::encode(&crate::utils::trim_end_zeros(w).to_vec(), encoder)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "tag-prediction")]
+impl WeightVector {
+    pub fn add_scores(&self, ys: &mut [i32]) {
+        match self {
+            WeightVector::Variable(w) => {
+                for (y, x) in ys.iter_mut().zip(w) {
+                    *y += *x;
+                }
+            }
+
+            #[cfg(feature = "fix-weight-length")]
+            WeightVector::Fixed(w) => {
+                #[cfg(not(feature = "portable-simd"))]
+                for (y, x) in ys[..WEIGHT_FIXED_LEN].iter_mut().zip(w) {
+                    *y += *x
+                }
+
+                #[cfg(feature = "portable-simd")]
+                {
+                    let ys = &mut ys[..WEIGHT_FIXED_LEN];
+                    let mut y = I32Simd::from_slice(ys);
+                    y += w;
+                    ys.copy_from_slice(y.as_array());
+                }
+            }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            WeightVector::Variable(w) => w.len(),
+
+            #[cfg(feature = "fix-weight-length")]
+            WeightVector::Fixed(_) => WEIGHT_FIXED_LEN,
+        }
+    }
+}
+
+impl From<Vec<i32>> for WeightVector {
+    fn from(src: Vec<i32>) -> Self {
+        match src.len() {
+            #[cfg(feature = "fix-weight-length")]
+            0..=WEIGHT_FIXED_LEN => {
+                let mut weight = [0; WEIGHT_FIXED_LEN];
+                weight[..src.len()].copy_from_slice(&src);
+
+                #[cfg(feature = "portable-simd")]
+                let weight = I32Simd::from(weight);
+
+                Self::Fixed(weight)
+            }
+
+            _ => Self::Variable(src),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Decode, Encode)]
+pub struct PositionalWeight<W> {
+    offset: i16,
+    weight: W,
+}
+
+impl PositionalWeight<Vec<i32>> {
+    pub fn new(offset: i16, weight: Vec<i32>) -> Self {
+        Self { offset, weight }
+    }
+}
+
+impl AddAssign<&Self> for PositionalWeight<Vec<i32>> {
+    fn add_assign(&mut self, other: &Self) {
+        let new_offset = self.offset.min(other.offset);
+        let shift = usize::try_from(self.offset - new_offset).unwrap();
+        let new_size = (shift + self.weight.len())
+            .max(usize::try_from(other.offset - new_offset).unwrap() + other.weight.len());
+        self.weight.resize(new_size, 0);
+        self.weight.rotate_right(shift);
+        for (y, x) in self.weight[usize::try_from(other.offset - new_offset).unwrap()..]
+            .iter_mut()
+            .zip(&other.weight)
+        {
+            *y += *x;
+        }
+        self.offset = new_offset;
+    }
+}
+
+impl From<PositionalWeight<Vec<i32>>> for PositionalWeight<WeightVector> {
+    fn from(src: PositionalWeight<Vec<i32>>) -> Self {
+        Self {
+            offset: src.offset,
+            weight: src.weight.into(),
+        }
+    }
+}
+
+impl PositionalWeight<WeightVector> {
+    #[inline(always)]
+    pub fn add_score(&self, end: isize, ys: &mut [i32]) {
+        let pos = end + isize::from(self.offset);
+        match &self.weight {
+            WeightVector::Variable(w) => {
+                if pos >= 0 {
+                    for (y, x) in ys[pos as usize..].iter_mut().zip(w) {
+                        *y += *x;
+                    }
+                } else if let Some(xs) = w.get((-pos) as usize..) {
+                    for (y, x) in ys.iter_mut().zip(xs) {
+                        *y += *x;
+                    }
+                }
+            }
+
+            #[cfg(feature = "fix-weight-length")]
+            WeightVector::Fixed(w) => {
+                #[cfg(not(feature = "portable-simd"))]
+                for (y, x) in ys[pos as usize..pos as usize + WEIGHT_FIXED_LEN]
+                    .iter_mut()
+                    .zip(w)
+                {
+                    *y += *x
+                }
+
+                #[cfg(feature = "portable-simd")]
+                {
+                    let ys = &mut ys[pos as usize..pos as usize + WEIGHT_FIXED_LEN];
+                    let mut y = I32Simd::from_slice(ys);
+                    y += w;
+                    ys.copy_from_slice(y.as_array());
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tag-prediction")]
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct PositionalWeightWithTag {
+    pub weight: Option<PositionalWeight<Vec<i32>>>,
+    pub tag_info: HashMap<(usize, u8), Vec<i32>>,
+}
+
+#[cfg(feature = "tag-prediction")]
+impl PositionalWeightWithTag {
+    pub fn with_boundary(offset: i16, weight: Vec<i32>) -> Self {
+        Self {
+            weight: Some(PositionalWeight::new(offset, weight)),
+            tag_info: HashMap::new(),
+        }
+    }
+
+    pub fn with_tag(token_id: usize, rel_position: u8, tag_weight: Vec<i32>) -> Self {
+        let mut tag_info = HashMap::new();
+        tag_info.insert((token_id, rel_position), tag_weight);
+        Self {
+            weight: None,
+            tag_info,
+        }
+    }
+}
+
+#[cfg(feature = "tag-prediction")]
+impl AddAssign<&Self> for PositionalWeightWithTag {
+    fn add_assign(&mut self, other: &Self) {
+        if let Some(y) = self.weight.as_mut() {
+            if let Some(x) = other.weight.as_ref() {
+                *y += x;
+            }
+        } else {
+            self.weight = other.weight.clone();
+        }
+        for (k, v) in &other.tag_info {
+            self.tag_info
+                .entry(*k)
+                .and_modify(|w| {
+                    for (y, x) in w.iter_mut().zip(v) {
+                        *y += *x;
+                    }
+                })
+                .or_insert_with(|| v.clone());
+        }
+    }
+}
+
+#[cfg(feature = "tag-prediction")]
+#[derive(Decode, Encode)]
+struct TagPredictor {
+    tags: Vec<Vec<String>>,
+    bias: WeightVector,
+}
+
+#[cfg(feature = "tag-prediction")]
+impl TagPredictor {
+    pub fn new(tags: Vec<Vec<String>>, bias: Vec<i32>) -> Self {
+        Self {
+            tags,
+            bias: bias.into(),
+        }
+    }
+
+    #[inline]
+    pub const fn bias(&self) -> &WeightVector {
+        &self.bias
+    }
+
+    #[inline]
+    pub fn predict<'a>(&'a self, scores: &[i32], tags: &mut [Option<Cow<'a, str>>]) {
+        let mut offset = 0;
+        for (tag_cands, tag) in self.tags.iter().zip(tags) {
+            if tag_cands.len() >= 2 {
+                let mut idx = 0;
+                let mut max_score = i32::MIN;
+                for (i, &s) in scores[offset..offset + tag_cands.len()].iter().enumerate() {
+                    if s > max_score {
+                        idx = i;
+                        max_score = s;
+                    }
+                }
+                tag.replace(Cow::Borrowed(&tag_cands[idx]));
+                offset += tag_cands.len();
+            } else {
+                *tag = tag_cands.first().map(|t| Cow::Borrowed(t.as_str()));
+            }
+        }
+    }
+}
+
+pub struct PredictorData {
+    char_scorer: Option<CharScorer>,
+    type_scorer: Option<TypeScorer>,
     bias: i32,
 
-    char_scorer: CharScorerWrapper,
-    type_scorer: TypeScorer,
-
-    padding: u8,
-
     #[cfg(feature = "tag-prediction")]
-    tag_names: Vec<Arc<String>>,
+    tag_predictor: Option<SerializableHashMap<String, (u32, TagPredictor)>>,
     #[cfg(feature = "tag-prediction")]
-    tag_bias: Vec<i32>,
+    n_tags: usize,
 }
 
+impl<'de> BorrowDecode<'de> for PredictorData {
+    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
+    /// crate.
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let config = bincode::config::standard();
+        let char_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
+        let char_scorer = if let Some(data) = char_scorer_data {
+            Some(bincode::decode_from_slice(data, config)?.0)
+        } else {
+            None
+        };
+        let type_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
+        let type_scorer = if let Some(data) = type_scorer_data {
+            Some(bincode::decode_from_slice(data, config)?.0)
+        } else {
+            None
+        };
+        let bias = Decode::decode(decoder)?;
+        #[cfg(feature = "tag-prediction")]
+        let tag_predictor = Decode::decode(decoder)?;
+        #[cfg(feature = "tag-prediction")]
+        let n_tags = Decode::decode(decoder)?;
+        Ok(Self {
+            char_scorer,
+            type_scorer,
+            bias,
+            #[cfg(feature = "tag-prediction")]
+            tag_predictor,
+            #[cfg(feature = "tag-prediction")]
+            n_tags,
+        })
+    }
+}
+
+impl Encode for PredictorData {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let config = bincode::config::standard();
+        let char_scorer_data = if let Some(char_scorer) = self.char_scorer.as_ref() {
+            Some(bincode::encode_to_vec(char_scorer, config)?)
+        } else {
+            None
+        };
+        Encode::encode(&char_scorer_data, encoder)?;
+        let type_scorer_data = if let Some(type_scorer) = self.type_scorer.as_ref() {
+            Some(bincode::encode_to_vec(type_scorer, config)?)
+        } else {
+            None
+        };
+        Encode::encode(&type_scorer_data, encoder)?;
+        Encode::encode(&self.bias, encoder)?;
+        #[cfg(feature = "tag-prediction")]
+        Encode::encode(&self.tag_predictor, encoder)?;
+        #[cfg(feature = "tag-prediction")]
+        Encode::encode(&self.n_tags, encoder)?;
+        Ok(())
+    }
+}
+
+/// Predictor created from the model.
+///
+#[cfg_attr(
+    feature = "std",
+    doc = "
+# Example 1: without tag prediction
+
+```
+use std::fs::File;
+
+use vaporetto::{Model, Predictor, Sentence};
+
+let f = File::open(\"../resources/model.bin\").unwrap();
+let model = Model::read(f).unwrap();
+let predictor = Predictor::new(model, false).unwrap();
+
+let mut s = Sentence::from_raw(\"まぁ社長は火星猫だ\").unwrap();
+predictor.predict(&mut s);
+// s.fill_tags(); will panic!
+
+let mut buf = String::new();
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    \"まぁ 社長 は 火星 猫 だ\",
+    buf,
+);
+```
+"
+)]
+#[cfg_attr(
+    all(feature = "std", feature = "tag-prediction"),
+    doc = "
+# Example 2: with tag prediction
+
+Tag prediction requires **crate feature** `tag-prediction`.
+```
+use std::fs::File;
+
+use vaporetto::{Model, Predictor, Sentence};
+
+let mut f = File::open(\"../resources/model.bin\").unwrap();
+let model = Model::read(f).unwrap();
+let predictor = Predictor::new(model, true).unwrap();
+
+let mut s = Sentence::from_raw(\"まぁ社長は火星猫だ\").unwrap();
+predictor.predict(&mut s);
+s.fill_tags();
+
+let mut buf = String::new();
+s.write_tokenized_text(&mut buf);
+assert_eq!(
+    \"まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星/名詞/カセー 猫/名詞/ネコ だ/助動詞/ダ\",
+    buf,
+);
+```
+"
+)]
+pub struct Predictor(PredictorData);
+
 impl Predictor {
-    /// Creates a new predictor.
+    /// Creates a new predictor from the model.
     ///
     /// # Arguments
     ///
     /// * `model` - A model data.
     /// * `predict_tags` - If you want to predict tags, set to true.
     ///
-    /// # Returns
+    /// # Errors
     ///
-    /// A new predictor.
-    pub fn new(
-        model: Model,
-        #[cfg(feature = "tag-prediction")] predict_tags: bool,
-        #[cfg(not(feature = "tag-prediction"))] _predict_tags: bool,
-    ) -> Result<Self> {
+    /// Returns an error variant when the model is invalid.
+    pub fn new(model: Model, predict_tags: bool) -> Result<Self> {
         #[cfg(feature = "tag-prediction")]
-        let mut tag_names = vec![];
+        let mut tag_char_ngram_model = vec![];
         #[cfg(feature = "tag-prediction")]
-        let mut tag_bias = vec![];
-
+        let mut tag_type_ngram_model = vec![];
         #[cfg(feature = "tag-prediction")]
-        let char_scorer = if predict_tags {
-            for cls in model.data.tag_model.class_info {
-                tag_names.push(Arc::new(cls.name));
-                tag_bias.push(cls.bias);
-            }
-            CharScorerWrapper::BoundaryAndTags(CharScorerWithTags::new(
-                model.data.char_ngram_model,
-                model.data.char_window_size,
-                model.data.dict_model,
-                tag_names.len(),
-                model.data.tag_model.left_char_model,
-                model.data.tag_model.right_char_model,
-                model.data.tag_model.self_char_model,
-            )?)
-        } else {
-            CharScorerWrapper::Boundary(CharScorer::new(
-                model.data.char_ngram_model,
-                model.data.char_window_size,
-                model.data.dict_model,
-            )?)
-        };
+        let mut n_tags = 0;
 
         #[cfg(not(feature = "tag-prediction"))]
-        let char_scorer = CharScorerWrapper::Boundary(CharScorer::new(
-            model.data.char_ngram_model,
-            model.data.char_window_size,
-            model.data.dict_model,
-        )?);
+        if predict_tags {
+            panic!("tag prediction is unsupported");
+        }
+        #[cfg(feature = "tag-prediction")]
+        let tag_predictor = predict_tags.then(|| {
+            let mut tag_predictor = HashMap::new();
+            for (i, tag_model) in model.0.tag_models.into_iter().enumerate() {
+                n_tags = n_tags.max(tag_model.tags.len());
+                // token does not duplicate in the model.
+                tag_predictor.insert(
+                    tag_model.token,
+                    (
+                        u32::try_from(i).unwrap(),
+                        TagPredictor::new(tag_model.tags, tag_model.bias),
+                    ),
+                );
+                tag_char_ngram_model.push(tag_model.char_ngram_model);
+                tag_type_ngram_model.push(tag_model.type_ngram_model);
+            }
+            SerializableHashMap(tag_predictor)
+        });
 
-        let type_scorer =
-            TypeScorer::new(model.data.type_ngram_model, model.data.type_window_size)?;
+        let char_scorer = CharScorer::new(
+            model.0.char_ngram_model,
+            model.0.dict_model,
+            model.0.char_window_size,
+            #[cfg(feature = "tag-prediction")]
+            tag_char_ngram_model,
+        )?;
+        let type_scorer = TypeScorer::new(
+            model.0.type_ngram_model,
+            model.0.type_window_size,
+            #[cfg(feature = "tag-prediction")]
+            tag_type_ngram_model,
+        )?;
+        Ok(Self(PredictorData {
+            char_scorer,
+            type_scorer,
+            bias: model.0.bias,
 
-        Ok(Self {
-            data: PredictorData {
-                bias: model.data.bias,
+            #[cfg(feature = "tag-prediction")]
+            tag_predictor,
+            #[cfg(feature = "tag-prediction")]
+            n_tags,
+        }))
+    }
 
-                char_scorer,
-                type_scorer,
+    /// Predicts word boundaries of the given sentence.
+    /// If necessary, this function also prepares for predicting tags.
+    pub fn predict<'a, 'b>(&'b self, sentence: &mut Sentence<'a, 'b>) {
+        sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+        sentence.boundary_scores.clear();
+        sentence
+            .boundary_scores
+            .resize(sentence.score_padding * 2 + sentence.len() - 1, self.0.bias);
+        if let Some(scorer) = self.0.char_scorer.as_ref() {
+            scorer.add_scores(sentence);
+        }
+        if let Some(scorer) = self.0.type_scorer.as_ref() {
+            scorer.add_scores(sentence);
+        }
+        for (b, s) in sentence
+            .boundaries
+            .iter_mut()
+            .zip(&sentence.boundary_scores[sentence.score_padding..])
+        {
+            if *s > 0 {
+                *b = CharacterBoundary::WordBoundary;
+            } else {
+                *b = CharacterBoundary::NotWordBoundary;
+            }
+        }
+        sentence.set_predictor(self);
+    }
 
-                padding: model.data.char_window_size.max(model.data.type_window_size),
+    #[cfg(feature = "tag-prediction")]
+    pub(crate) fn predict_tags<'a, 'b>(&'b self, sentence: &mut Sentence<'a, 'b>) {
+        let tag_predictor = self
+            .0
+            .tag_predictor
+            .as_ref()
+            .expect("this predictor is created with predict_tags = false");
 
-                #[cfg(feature = "tag-prediction")]
-                tag_names,
-                #[cfg(feature = "tag-prediction")]
-                tag_bias,
-            },
-        })
+        if self.0.n_tags == 0 {
+            return;
+        }
+        let mut scores = vec![];
+        let mut range_start = Some(0);
+        sentence.n_tags = self.0.n_tags;
+        sentence.tags.clear();
+        sentence.tags.resize(sentence.len() * self.0.n_tags, None);
+        for (i, &b) in sentence.boundaries.iter().enumerate() {
+            if b == CharacterBoundary::Unknown {
+                range_start.take();
+            } else if b == CharacterBoundary::WordBoundary {
+                if let Some(&range_start) = range_start.as_ref() {
+                    let token = sentence.text_substring(range_start, i + 1);
+                    if let Some((token_id, tag_predictor)) = tag_predictor.get(token) {
+                        scores.clear();
+                        scores.resize(tag_predictor.bias().len(), 0);
+                        tag_predictor.bias().add_scores(&mut scores);
+                        if let Some(scorer) = self.0.char_scorer.as_ref() {
+                            debug_assert!(i < sentence.char_pma_states.len());
+                            // token_id is always smaller than tag_weight.len() because
+                            // tag_predictor is created to contain such values in the new()
+                            // function.
+                            unsafe {
+                                scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
+                            }
+                        }
+                        if let Some(scorer) = self.0.type_scorer.as_ref() {
+                            debug_assert!(i < sentence.type_pma_states.len());
+                            // token_id is always smaller than tag_weight.len() because
+                            // tag_predictor is created to contain such values in the new()
+                            // function.
+                            unsafe {
+                                scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
+                            }
+                        }
+                        tag_predictor.predict(
+                            &scores,
+                            &mut sentence.tags[i * self.0.n_tags..(i + 1) * self.0.n_tags],
+                        );
+                    }
+                }
+                range_start.replace(i + 1);
+            }
+        }
+        if let Some(&range_start) = range_start.as_ref() {
+            let token = sentence.text_substring(range_start, sentence.len());
+            if let Some((token_id, tag_predictor)) = tag_predictor.get(token) {
+                scores.clear();
+                scores.resize(tag_predictor.bias().len(), 0);
+                tag_predictor.bias().add_scores(&mut scores);
+                if let Some(scorer) = self.0.char_scorer.as_ref() {
+                    debug_assert!(sentence.len() <= sentence.char_pma_states.len());
+                    // token_id is always smaller than tag_weight.len() because tag_predictor is
+                    // created to contain such values in the new() function.
+                    unsafe {
+                        scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
+                    }
+                }
+                if let Some(scorer) = self.0.type_scorer.as_ref() {
+                    debug_assert!(sentence.len() <= sentence.type_pma_states.len());
+                    // token_id is always smaller than tag_weight.len() because tag_predictor is
+                    // created to contain such values in the new() function.
+                    unsafe {
+                        scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
+                    }
+                }
+                let i = sentence.len() - 1;
+                tag_predictor.predict(&scores, &mut sentence.tags[i * self.0.n_tags..]);
+            }
+        }
     }
 
     /// Serializes the predictor into a Vec.
     pub fn serialize_to_vec(&self) -> Result<Vec<u8>> {
         let config = bincode::config::standard();
-        let result = bincode::encode_to_vec(&self.data, config)?;
+        let result = bincode::encode_to_vec(&self.0, config)?;
         Ok(result)
     }
 
-    /// Deserializes a predictor from a given slice.
-    ///
-    /// # Arguments
-    ///
-    /// * `data` - A source slice.
-    ///
-    /// # Returns
-    ///
-    /// A tuple of a predictor and a slice not used for the deserialization.
+    /// Deserializes a predictor from a given slice and returns a tuple of the predictor and the remaining slice.
     ///
     /// # Safety
     ///
@@ -147,188 +618,7 @@ impl Predictor {
         let config = bincode::config::standard();
         // Deserialization is unsafe because the automaton will not be verified.
         let (predictor_data, size) = bincode::decode_from_slice(data, config)?;
-        Ok((
-            Self {
-                data: predictor_data,
-            },
-            &data[size..],
-        ))
-    }
-
-    fn predict_impl(&self, mut sentence: Sentence) -> Sentence {
-        let ys_size =
-            sentence.boundaries.len() + usize::from(self.data.padding) + char_scorer::SIMD_SIZE - 1;
-        let mut ys = mem::take(&mut sentence.boundary_scores);
-        ys.clear();
-        ys.resize(ys_size, self.data.bias);
-        match &self.data.char_scorer {
-            CharScorerWrapper::Boundary(char_scorer) => {
-                char_scorer.add_scores(&sentence, self.data.padding, &mut ys);
-            }
-
-            #[cfg(feature = "tag-prediction")]
-            CharScorerWrapper::BoundaryAndTags(char_scorer) => {
-                let mut tag_ys = mem::take(&mut sentence.tag_scores);
-                tag_ys.init(sentence.chars.len(), self.data.tag_names.len());
-                char_scorer.add_scores(&sentence, self.data.padding, &mut ys, &mut tag_ys);
-                sentence.tag_scores = tag_ys;
-            }
-        }
-        self.data
-            .type_scorer
-            .add_scores(&sentence, self.data.padding, &mut ys);
-        for (&y, b) in ys[self.data.padding.into()..]
-            .iter()
-            .zip(sentence.boundaries.iter_mut())
-        {
-            *b = if y >= 0 {
-                BoundaryType::WordBoundary
-            } else {
-                BoundaryType::NotWordBoundary
-            };
-        }
-        sentence.boundary_scores = ys;
-        sentence
-    }
-
-    /// Predicts word boundaries.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict(&self, sentence: Sentence) -> Sentence {
-        let mut sentence = self.predict_impl(sentence);
-        sentence.boundary_scores.clear();
-        sentence
-    }
-
-    /// Predicts word boundaries. This function inserts scores.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with predicted boundary information.
-    pub fn predict_with_score(&self, sentence: Sentence) -> Sentence {
-        let mut sentence = self.predict_impl(sentence);
-        sentence
-            .boundary_scores
-            .rotate_left(self.data.padding.into());
-        sentence.boundary_scores.truncate(sentence.boundaries.len());
-        sentence
-    }
-
-    #[cfg(feature = "tag-prediction")]
-    fn best_tag(&self, scores: &[i32]) -> Arc<String> {
-        Arc::clone(
-            scores
-                .iter()
-                .zip(&self.data.tag_names)
-                .max_by_key(|(&x, _)| x)
-                .unwrap()
-                .1,
-        )
-    }
-
-    /// Fills tags using calculated scores.
-    ///
-    /// Tags are predicted using token boundaries, so you have to apply boundary post-processors
-    /// before filling tags.
-    ///
-    /// # Arguments
-    ///
-    /// * `sentence` - A sentence.
-    ///
-    /// # Returns
-    ///
-    /// A sentence with tag information. When the predictor is instantiated with
-    /// `predict_tag = false`, the sentence is returned without any modification.
-    #[cfg(feature = "tag-prediction")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
-    pub fn fill_tags(&self, mut sentence: Sentence) -> Sentence {
-        if self.data.tag_names.is_empty() {
-            return sentence;
-        }
-        if sentence.tags.is_empty() {
-            sentence.tags.resize(sentence.chars().len(), None);
-        }
-        let n_tags = self.data.tag_names.len();
-        let mut tag_score = self.data.tag_bias.clone();
-        let mut left_scores_iter = sentence.tag_scores.left_scores.chunks(n_tags);
-        for (t, l) in tag_score.iter_mut().zip(left_scores_iter.next().unwrap()) {
-            *t += l;
-        }
-        let mut right_scores_iter = sentence.tag_scores.right_scores.chunks(n_tags);
-        let mut last_boundary_idx = 0;
-        for (i, ((((b, left_scores), right_scores), self_scores), tag)) in sentence
-            .boundaries
-            .iter()
-            .zip(left_scores_iter)
-            .zip(&mut right_scores_iter)
-            .zip(&sentence.tag_scores.self_scores)
-            .zip(&mut sentence.tags)
-            .enumerate()
-        {
-            if *b == BoundaryType::WordBoundary {
-                for (t, r) in tag_score.iter_mut().zip(right_scores) {
-                    *t += *r;
-                }
-                if let Some(self_weights) = self_scores.as_ref() {
-                    let diff = -i16::try_from(i + 1 - last_boundary_idx).unwrap_or(0);
-                    for self_weight in self_weights.iter() {
-                        match self_weight.start_rel_position.cmp(&diff) {
-                            Ordering::Greater => continue,
-                            Ordering::Equal => {
-                                for (t, s) in tag_score.iter_mut().zip(&self_weight.weight) {
-                                    *t += *s;
-                                }
-                            }
-                            Ordering::Less => (),
-                        }
-                        break;
-                    }
-                }
-                tag.replace(self.best_tag(&tag_score));
-                for (t, (l, b)) in tag_score
-                    .iter_mut()
-                    .zip(left_scores.iter().zip(&self.data.tag_bias))
-                {
-                    *t = *l + *b;
-                }
-                last_boundary_idx = i + 1;
-            }
-        }
-        for (t, r) in tag_score.iter_mut().zip(right_scores_iter.next().unwrap()) {
-            *t += r;
-        }
-        if let Some(self_weights) = sentence.tag_scores.self_scores.last().unwrap().as_ref() {
-            let diff = -i16::try_from(sentence.chars.len() - last_boundary_idx).unwrap_or(0);
-            for self_weight in self_weights.iter() {
-                match self_weight.start_rel_position.cmp(&diff) {
-                    Ordering::Greater => continue,
-                    Ordering::Equal => {
-                        for (t, s) in tag_score.iter_mut().zip(&self_weight.weight) {
-                            *t += *s;
-                        }
-                    }
-                    Ordering::Less => (),
-                }
-                break;
-            }
-        }
-        sentence
-            .tags
-            .last_mut()
-            .unwrap()
-            .replace(self.best_tag(&tag_score));
-
-        sentence
+        Ok((Self(predictor_data), &data[size..]))
     }
 }
 
@@ -336,801 +626,288 @@ impl Predictor {
 mod tests {
     use super::*;
 
-    use alloc::string::ToString;
-
     use crate::dict_model::{DictModel, WordWeightRecord};
-    use crate::ngram_model::{NgramData, NgramModel};
-    use crate::sentence::CharacterType::*;
-    use crate::tag_model::TagModel;
+    use crate::model::TagModel;
+    use crate::ngram_model::{NgramData, NgramModel, TagNgramData, TagNgramModel, TagWeight};
+    use crate::CharacterBoundary::*;
+    use crate::CharacterType::*;
 
-    #[cfg(feature = "tag-prediction")]
-    use crate::sentence::Token;
-    #[cfg(feature = "tag-prediction")]
-    use crate::tag_model::TagClassInfo;
-
-    /// Input:  我  ら  は  全  世  界  の  国  民
-    /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
-    /// words:
-    ///   我ら:    3   4   5
-    ///   全世界:          6   7   8   9
-    ///   国民:                       10  11  12
-    ///   世界:           15  16  17  18  19
-    ///   界:             20  21  22  23  24  25
-    /// types:
-    ///   H:      27  28  29
-    ///           26  27  28  29
-    ///                           26  27  28  29
-    ///   K:      32  33
-    ///               30  31  32  33
-    ///                   30  31  32  33
-    ///                       30  31  32  33
-    ///                               30  31  32
-    ///                                   30  31
-    ///   KH:     35  36
-    ///                           34  35  36
-    ///   HK:         37  38  39
-    ///                               37  38  39
-    /// dict:
-    ///   全世界:         43  44  44  45
-    ///   世界:               43  44  45
-    ///   世:                 40  42
-    fn generate_model_1() -> Model {
-        Model::new(
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: "我ら".to_string(),
-                        weights: vec![1, 2, 3, 4, 5],
-                    },
-                    NgramData {
-                        ngram: "全世界".to_string(),
-                        weights: vec![6, 7, 8, 9],
-                    },
-                    NgramData {
-                        ngram: "国民".to_string(),
-                        weights: vec![10, 11, 12, 13, 14],
-                    },
-                    NgramData {
-                        ngram: "世界".to_string(),
-                        weights: vec![15, 16, 17, 18, 19],
-                    },
-                    NgramData {
-                        ngram: "界".to_string(),
-                        weights: vec![20, 21, 22, 23, 24, 25],
-                    },
-                ],
-            },
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: vec![Hiragana as u8],
-                        weights: vec![26, 27, 28, 29],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8],
-                        weights: vec![30, 31, 32, 33],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8, Hiragana as u8],
-                        weights: vec![34, 35, 36],
-                    },
-                    NgramData {
-                        ngram: vec![Hiragana as u8, Kanji as u8],
-                        weights: vec![37, 38, 39],
-                    },
-                ],
-            },
-            DictModel {
-                dict: vec![
-                    WordWeightRecord {
-                        word: "全世界".to_string(),
-                        weights: vec![43, 44, 44, 45],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世界".to_string(),
-                        weights: vec![43, 44, 45],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世".to_string(),
-                        weights: vec![40, 42],
-                        comment: "".to_string(),
-                    },
-                ],
-            },
-            -200,
-            3,
-            2,
-            TagModel::default(),
-        )
+    #[test]
+    fn test_positional_weight_add_assign_1() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(4, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-2, y.offset);
+        assert_eq!(vec![1, 2, 3, 4, 0, 0, 2, 4, 8], y.weight);
     }
 
-    /// Input:  我  ら  は  全  世  界  の  国  民
-    /// bias:   -285  ..  ..  ..  ..  ..  ..  ..
-    /// words:
-    ///   我ら:    2   3
-    ///   全世界:              4   5
-    ///   国民:                            6   7
-    ///   世界:                9  10  11
-    ///   界:                 12  13  14  15
-    /// types:
-    ///   H:      18  19  20  21
-    ///           17  18  19  20  21
-    ///                       16  17  18  19  20
-    ///   K:      25  26  27
-    ///           22  23  24  25  26  27
-    ///               22  23  24  25  26  27
-    ///                   22  23  24  25  26  27
-    ///                           22  23  24  25
-    ///                               22  23  24
-    ///   KH:     30  31  32
-    ///                       28  29  30  31  32
-    ///   HK:     33  34  35  36  37
-    ///                           33  34  35  36
-    /// dict:
-    ///   全世界:         44  45  45  46
-    ///   世界:               41  42  43
-    ///   世:                 38  40
-    fn generate_model_2() -> Model {
-        Model::new(
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: "我ら".to_string(),
-                        weights: vec![1, 2, 3],
-                    },
-                    NgramData {
-                        ngram: "全世界".to_string(),
-                        weights: vec![4, 5],
-                    },
-                    NgramData {
-                        ngram: "国民".to_string(),
-                        weights: vec![6, 7, 8],
-                    },
-                    NgramData {
-                        ngram: "世界".to_string(),
-                        weights: vec![9, 10, 11],
-                    },
-                    NgramData {
-                        ngram: "界".to_string(),
-                        weights: vec![12, 13, 14, 15],
-                    },
-                ],
-            },
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: vec![Hiragana as u8],
-                        weights: vec![16, 17, 18, 19, 20, 21],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8],
-                        weights: vec![22, 23, 24, 25, 26, 27],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8, Hiragana as u8],
-                        weights: vec![28, 29, 30, 31, 32],
-                    },
-                    NgramData {
-                        ngram: vec![Hiragana as u8, Kanji as u8],
-                        weights: vec![33, 34, 35, 36, 37],
-                    },
-                ],
-            },
-            DictModel {
-                dict: vec![
-                    WordWeightRecord {
-                        word: "全世界".to_string(),
-                        weights: vec![44, 45, 45, 46],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世界".to_string(),
-                        weights: vec![41, 42, 43],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世".to_string(),
-                        weights: vec![38, 40],
-                        comment: "".to_string(),
-                    },
-                ],
-            },
-            -285,
-            2,
-            3,
-            TagModel::default(),
-        )
+    #[test]
+    fn test_positional_weight_add_assign_2() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(2, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-2, y.offset);
+        assert_eq!(vec![1, 2, 3, 4, 2, 4, 8], y.weight);
     }
 
-    /// Input:  我  ら  は  全  世  界  の  国  民
-    /// bias:   -285  ..  ..  ..  ..  ..  ..  ..
-    /// words:
-    ///   我ら:    2   3
-    ///   全世界:              4   5
-    ///   国民:                            6   7
-    ///   世界:                9  10  11
-    ///   界:                 12  13  14  15
-    /// types:
-    ///   H:      18  19  20  21
-    ///           17  18  19  20  21
-    ///                       16  17  18  19  20
-    ///   K:      25  26  27
-    ///           22  23  24  25  26  27
-    ///               22  23  24  25  26  27
-    ///                   22  23  24  25  26  27
-    ///                           22  23  24  25
-    ///                               22  23  24
-    ///   KH:     30  31  32
-    ///                       28  29  30  31  32
-    ///   HK:     33  34  35  36  37
-    ///                           33  34  35  36
-    /// dict:
-    ///   国民:                           38  39
-    ///   世界:               41  42  43
-    ///   世:                 44  46
-    fn generate_model_3() -> Model {
-        Model::new(
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: "我ら".to_string(),
-                        weights: vec![1, 2, 3],
-                    },
-                    NgramData {
-                        ngram: "全世界".to_string(),
-                        weights: vec![4, 5],
-                    },
-                    NgramData {
-                        ngram: "国民".to_string(),
-                        weights: vec![6, 7, 8],
-                    },
-                    NgramData {
-                        ngram: "世界".to_string(),
-                        weights: vec![9, 10, 11],
-                    },
-                    NgramData {
-                        ngram: "界".to_string(),
-                        weights: vec![12, 13, 14, 15],
-                    },
-                ],
-            },
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: vec![Hiragana as u8],
-                        weights: vec![16, 17, 18, 19, 20, 21],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8],
-                        weights: vec![22, 23, 24, 25, 26, 27],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8, Hiragana as u8],
-                        weights: vec![28, 29, 30, 31, 32],
-                    },
-                    NgramData {
-                        ngram: vec![Hiragana as u8, Kanji as u8],
-                        weights: vec![33, 34, 35, 36, 37],
-                    },
-                ],
-            },
-            DictModel {
-                dict: vec![
-                    WordWeightRecord {
-                        word: "国民".to_string(),
-                        weights: vec![38, 39, 40],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世界".to_string(),
-                        weights: vec![41, 42, 43],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世".to_string(),
-                        weights: vec![44, 46],
-                        comment: "".to_string(),
-                    },
-                ],
-            },
-            -285,
-            2,
-            3,
-            TagModel::default(),
-        )
+    #[test]
+    fn test_positional_weight_add_assign_3() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(0, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-2, y.offset);
+        assert_eq!(vec![1, 2, 5, 8, 8], y.weight);
     }
 
-    /// Input:  我  ら  は  全  世  界  の  国  民
-    /// bias:   -200  ..  ..  ..  ..  ..  ..  ..
-    /// chars:
-    ///   我ら:    3   4   5
-    ///   全世界:          6   7   8   9
-    ///   国民:                       10  11  12
-    ///   世界:           15  16  17  18  19
-    ///   界:             20  21  22  23  24  25
-    /// types:
-    ///   H:      27  28  29
-    ///           26  27  28  29
-    ///                           26  27  28  29
-    ///   K:      32  33
-    ///               30  31  32  33
-    ///                   30  31  32  33
-    ///                       30  31  32  33
-    ///                               30  31  32
-    ///                                   30  31
-    ///   KH:     35  36
-    ///                           34  35  36
-    ///   HK:         37  38  39
-    ///                               37  38  39
-    /// dict:
-    ///   全世界:         43  44  44  45
-    ///   世界:               43  44  45
-    ///   世:                 40  42
-    ///   世界の国民:         43  44  44  44  44
-    ///   は全世界:   43  44  44  44  45
-    ///
-    ///
-    ///   は全世界:   43  44  44  44  45
-    ///                   15  16  17  18  19
-    ///                   20  21  22  23  24  25
-    ///                    6   7   8   9
-    fn generate_model_4() -> Model {
-        Model::new(
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: "我ら".to_string(),
-                        weights: vec![1, 2, 3, 4, 5],
-                    },
-                    NgramData {
-                        ngram: "全世界".to_string(),
-                        weights: vec![6, 7, 8, 9],
-                    },
-                    NgramData {
-                        ngram: "国民".to_string(),
-                        weights: vec![10, 11, 12, 13, 14],
-                    },
-                    NgramData {
-                        ngram: "世界".to_string(),
-                        weights: vec![15, 16, 17, 18, 19],
-                    },
-                    NgramData {
-                        ngram: "界".to_string(),
-                        weights: vec![20, 21, 22, 23, 24, 25],
-                    },
-                ],
-            },
-            NgramModel {
-                data: vec![
-                    NgramData {
-                        ngram: vec![Hiragana as u8],
-                        weights: vec![26, 27, 28, 29],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8],
-                        weights: vec![30, 31, 32, 33],
-                    },
-                    NgramData {
-                        ngram: vec![Kanji as u8, Hiragana as u8],
-                        weights: vec![34, 35, 36],
-                    },
-                    NgramData {
-                        ngram: vec![Hiragana as u8, Kanji as u8],
-                        weights: vec![37, 38, 39],
-                    },
-                ],
-            },
-            DictModel {
-                dict: vec![
-                    WordWeightRecord {
-                        word: "全世界".to_string(),
-                        weights: vec![43, 44, 44, 45],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世界".to_string(),
-                        weights: vec![43, 44, 45],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世".to_string(),
-                        weights: vec![40, 42],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "世界の国民".to_string(),
-                        weights: vec![43, 44, 44, 44, 44, 45],
-                        comment: "".to_string(),
-                    },
-                    WordWeightRecord {
-                        word: "は全世界".to_string(),
-                        weights: vec![43, 44, 44, 44, 45],
-                        comment: "".to_string(),
-                    },
-                ],
-            },
-            -200,
-            3,
-            2,
-            TagModel::default(),
-        )
+    #[test]
+    fn test_positional_weight_add_assign_4() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(-1, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-2, y.offset);
+        assert_eq!(vec![1, 4, 7, 12], y.weight);
     }
 
-    /// Input:  人  と  人  を  つ  な  ぐ  人
-    /// left:
-    ///   \0人: 1   4
-    ///         2   5
-    ///         3   6
-    ///     人:     7  10   7  10
-    ///             8  11   8  11
-    ///             9  12   9  12
-    /// つなぐ:                    13  16  19
-    ///                            14  17  20
-    ///                            15  18  21
-    ///   人\0:                            22
-    ///                                    23
-    ///                                    24
-    ///
-    ///    sum: 1  11  10   7  10  13  16  41
-    ///         2  13  11   8  11  14  17  43
-    ///         3  15  12   9  12  15  18  45
-    ///
-    /// right:
-    /// \0人と:  28
-    ///          29
-    ///          30
-    ///   人を:      31  34  37
-    ///              32  35  38
-    ///              33  36  39
-    ///     を:      40  43
-    ///              41  44
-    ///              42  45
-    ///   人\0:                          46  49
-    ///                                  47  50
-    ///                                  48  51
-    ///
-    ///     sum: 28  71  77  37   0   0  46  49
-    ///          29  73  79  38   0   0  47  50
-    ///          30  75  81  39   0   0  48  51
-    #[cfg(feature = "tag-prediction")]
-    fn generate_model_5() -> Model {
+    #[test]
+    fn test_positional_weight_add_assign_5() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(-2, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-2, y.offset);
+        assert_eq!(vec![3, 6, 11, 4], y.weight);
+    }
+
+    #[test]
+    fn test_positional_weight_add_assign_6() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(-4, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-4, y.offset);
+        assert_eq!(vec![2, 4, 9, 2, 3, 4], y.weight);
+    }
+
+    #[test]
+    fn test_positional_weight_add_assign_7() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(-5, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-5, y.offset);
+        assert_eq!(vec![2, 4, 8, 1, 2, 3, 4], y.weight);
+    }
+
+    #[test]
+    fn test_positional_weight_add_assign_8() {
+        let mut y = PositionalWeight::new(-2, vec![1, 2, 3, 4]);
+        let x = PositionalWeight::new(-7, vec![2, 4, 8]);
+        y += &x;
+        assert_eq!(-7, y.offset);
+        assert_eq!(vec![2, 4, 8, 0, 0, 1, 2, 3, 4], y.weight);
+    }
+
+    fn create_test_model() -> Model {
+        // input:    こ  の  人  は  地  球  人  だ
+        // n-grams:
+        //   この人:   -2   3   4
+        //   人だ:                     -5   6   7
+        // n-grams:
+        //   HHK:     -11  12  13
+        //   KH:      -14  15  16  17 -18
+        //                            -14  15  16
+        // dict:
+        //   人:           19  20          19  20
+        //   地球:                 21 -22  23
         Model::new(
-            NgramModel {
-                data: vec![NgramData {
-                    ngram: "xxxx".to_string(),
-                    weights: vec![0],
-                }],
-            },
-            NgramModel {
-                data: vec![NgramData {
-                    ngram: vec![Roman as u8, Roman as u8, Roman as u8, Roman as u8],
-                    weights: vec![0],
-                }],
-            },
-            DictModel { dict: vec![] },
-            0,
-            2,
-            2,
-            TagModel {
-                class_info: vec![
-                    TagClassInfo {
-                        name: "名詞".to_string(),
-                        bias: 5,
-                    },
-                    TagClassInfo {
-                        name: "動詞".to_string(),
-                        bias: 3,
-                    },
-                    TagClassInfo {
-                        name: "助詞".to_string(),
-                        bias: 1,
-                    },
-                ],
-                left_char_model: NgramModel {
-                    data: vec![
-                        NgramData {
-                            ngram: "\0人".to_string(),
-                            weights: vec![1, 2, 3, 4, 5, 6],
-                        },
-                        NgramData {
-                            ngram: "人".to_string(),
-                            weights: vec![7, 8, 9, 10, 11, 12],
-                        },
-                        NgramData {
-                            ngram: "つなぐ".to_string(),
-                            weights: vec![13, 14, 15, 16, 17, 18, 19, 20, 21],
-                        },
-                        NgramData {
-                            ngram: "ぐ人\0".to_string(),
-                            weights: vec![22, 23, 24],
-                        },
-                    ],
+            NgramModel(vec![
+                NgramData {
+                    ngram: "この人".into(),
+                    weights: vec![1, -2, 3, 4],
                 },
-                right_char_model: NgramModel {
-                    data: vec![
-                        NgramData {
-                            ngram: "\0人と".to_string(),
-                            weights: vec![25, 26, 27, 28, 29, 30],
-                        },
-                        NgramData {
-                            ngram: "人を".to_string(),
-                            weights: vec![31, 32, 33, 34, 35, 36, 37, 38, 39],
-                        },
-                        NgramData {
-                            ngram: "を".to_string(),
-                            weights: vec![40, 41, 42, 43, 44, 45],
-                        },
-                        NgramData {
-                            ngram: "人\0".to_string(),
-                            weights: vec![46, 47, 48, 49, 50, 51],
-                        },
-                    ],
+                NgramData {
+                    ngram: "人だ".into(),
+                    weights: vec![-5, 6, 7, 8, 9],
                 },
-                self_char_model: NgramModel {
-                    data: vec![
-                        NgramData {
-                            ngram: "人".to_string(),
-                            weights: vec![2, -1, -1],
-                        },
-                        NgramData {
-                            ngram: "と".to_string(),
-                            weights: vec![0, 0, 0],
-                        },
-                        NgramData {
-                            ngram: "つなぐ".to_string(),
-                            weights: vec![0, 1, 0],
-                        },
-                        NgramData {
-                            ngram: "を".to_string(),
-                            weights: vec![0, 0, 0],
-                        },
-                    ],
+            ]),
+            NgramModel(vec![
+                NgramData {
+                    ngram: vec![Hiragana as u8, Hiragana as u8, Kanji as u8],
+                    weights: vec![10, -11, 12, 13],
                 },
-            },
-        )
-    }
-
-    #[test]
-    fn test_predict_1() {
-        let model = generate_model_1();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict(s);
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_2() {
-        let model = generate_model_2();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict(s);
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_3() {
-        let model = generate_model_3();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict(s);
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_4() {
-        let model = generate_model_4();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict(s);
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_with_score_1() {
-        let model = generate_model_1();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_with_score(s);
-        assert_eq!(&[-77, -5, 45, 132, 133, 144, 50, -32], s.boundary_scores(),);
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_with_score_2() {
-        let model = generate_model_2();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_with_score(s);
-        assert_eq!(
-            &[-138, -109, -39, 57, 104, 34, -79, -114],
-            s.boundary_scores(),
-        );
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_with_score_3() {
-        let model = generate_model_3();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_with_score(s);
-        assert_eq!(
-            &[-138, -109, -83, 18, 65, -12, -41, -75],
-            s.boundary_scores(),
-        );
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-                BoundaryType::NotWordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[test]
-    fn test_predict_with_score_4() {
-        let model = generate_model_4();
-        let p = Predictor::new(model, false).unwrap();
-        let s = Sentence::from_raw("我らは全世界の国民").unwrap();
-        let s = p.predict_with_score(s);
-        assert_eq!(&[-77, 38, 89, 219, 221, 233, 94, 12], s.boundary_scores(),);
-        assert_eq!(
-            &[
-                BoundaryType::NotWordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-                BoundaryType::WordBoundary,
-            ],
-            s.boundaries(),
-        );
-    }
-
-    #[cfg(feature = "tag-prediction")]
-    #[test]
-    fn test_predict_with_score_5() {
-        let model = generate_model_5();
-        let p = Predictor::new(model, true).unwrap();
-        let s = Sentence::from_raw("人と人をつなぐ人").unwrap();
-        let mut s = p.predict(s);
-        assert_eq!(
-            &[
-                1, 2, 3, 11, 13, 15, 10, 11, 12, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 41,
-                43, 45
-            ],
-            s.tag_scores.left_scores.as_slice()
-        );
-        assert_eq!(
-            &[
-                28, 29, 30, 71, 73, 75, 77, 79, 81, 37, 38, 39, 0, 0, 0, 0, 0, 0, 46, 47, 48, 49,
-                50, 51
-            ],
-            s.tag_scores.right_scores.as_slice()
-        );
-
-        s.boundaries_mut().copy_from_slice(&[
-            BoundaryType::WordBoundary,
-            BoundaryType::WordBoundary,
-            BoundaryType::WordBoundary,
-            BoundaryType::WordBoundary,
-            BoundaryType::NotWordBoundary,
-            BoundaryType::NotWordBoundary,
-            BoundaryType::WordBoundary,
-        ]);
-        let s = p.fill_tags(s);
-
-        assert_eq!(
+                NgramData {
+                    ngram: vec![Kanji as u8, Hiragana as u8],
+                    weights: vec![-14, 15, 16, 17, -18],
+                },
+            ]),
+            DictModel(vec![
+                WordWeightRecord {
+                    word: "人".into(),
+                    weights: vec![19, 20],
+                    comment: "".into(),
+                },
+                WordWeightRecord {
+                    word: "地球".into(),
+                    weights: vec![21, -22, 23],
+                    comment: "".into(),
+                },
+            ]),
+            5,
+            3,
+            3,
             vec![
-                Token {
-                    surface: "人",
-                    tag: Some("名詞")
+                TagModel {
+                    token: "人".into(),
+                    tags: vec![
+                        vec!["名詞".into(), "接尾辞".into()],
+                        vec!["ジン".into(), "ヒト".into()],
+                    ],
+                    char_ngram_model: TagNgramModel(vec![TagNgramData {
+                        ngram: "は地球人".into(),
+                        weights: vec![TagWeight {
+                            rel_position: 0,
+                            weights: vec![-32, 33, 34, -35],
+                        }],
+                    }]),
+                    type_ngram_model: TagNgramModel(vec![TagNgramData {
+                        ngram: vec![Hiragana as u8, Kanji as u8, Hiragana as u8],
+                        weights: vec![TagWeight {
+                            rel_position: 1,
+                            weights: vec![36, -37, -38, 39],
+                        }],
+                    }]),
+                    bias: vec![40, 41, 42, 43],
                 },
-                Token {
-                    surface: "と",
-                    tag: Some("助詞")
+                TagModel {
+                    token: "地球".into(),
+                    tags: vec![
+                        vec!["名詞".into()],
+                        vec!["マンホーム".into(), "チキュー".into()],
+                    ],
+                    char_ngram_model: TagNgramModel(vec![TagNgramData {
+                        ngram: "は地球人".into(),
+                        weights: vec![TagWeight {
+                            rel_position: 1,
+                            weights: vec![-44, 45],
+                        }],
+                    }]),
+                    type_ngram_model: TagNgramModel(vec![]),
+                    bias: vec![46, 47],
                 },
-                Token {
-                    surface: "人",
-                    tag: Some("名詞")
-                },
-                Token {
-                    surface: "を",
-                    tag: Some("助詞")
-                },
-                Token {
-                    surface: "つなぐ",
-                    tag: Some("動詞")
-                },
-                Token {
-                    surface: "人",
-                    tag: Some("名詞")
-                }
             ],
-            s.to_tokenized_vec().unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_predict_boundaries() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        assert_eq!(&[-22, 54, 58, 43, -54, 68, 48], sentence.boundary_scores(),);
+        assert_eq!(
+            &[
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary
+            ],
+            sentence.boundaries(),
         );
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_predict_tags() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, true).unwrap();
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+        assert_eq!(&[-22, 54, 58, 43, -54, 68, 48], sentence.boundary_scores(),);
+        assert_eq!(
+            &[
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+            ],
+            sentence.boundaries(),
+        );
+        assert_eq!(
+            &[
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("名詞")),
+                Some(Cow::Borrowed("ヒト")),
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("名詞")),
+                Some(Cow::Borrowed("チキュー")),
+                Some(Cow::Borrowed("接尾辞")),
+                Some(Cow::Borrowed("ジン")),
+                None,
+                None,
+            ],
+            sentence.tags()
+        );
+    }
+
+    #[test]
+    fn test_serialization() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        let data = predictor.serialize_to_vec().unwrap();
+        let (predictor, _) = unsafe { Predictor::deserialize_from_slice_unchecked(&data).unwrap() };
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        assert_eq!(&[-22, 54, 58, 43, -54, 68, 48], sentence.boundary_scores(),);
+        assert_eq!(
+            &[
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary
+            ],
+            sentence.boundaries(),
+        );
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    #[should_panic]
+    fn test_fill_tags_unsupported() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    #[should_panic]
+    fn test_fill_tags_unsupported_overwrite_prediction() {
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+
+        let model = create_test_model();
+        let predictor = Predictor::new(model, true).unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
     }
 }

@@ -46,7 +46,8 @@ struct Args {
     #[clap(long, default_value = "3")]
     typen: u8,
 
-    /// Dictionary words greater than this value will be grouped together
+    /// Dictionary words longer than this value will be grouped together, where the length is in
+    /// characters
     #[clap(long, default_value = "4")]
     dictn: u8,
 
@@ -84,13 +85,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprint!("# of sentences: {}\r", i);
                 stderr().flush()?;
             }
-            let s = Sentence::from_tokenized(line?)?;
+            let s = Sentence::from_tokenized(&line?)?;
             let s = if args.no_norm {
                 s
             } else {
-                let new_line = fullwidth_filter.filter(s.to_raw_string());
+                let new_line = fullwidth_filter.filter(s.as_raw_text());
                 let mut new_s = Sentence::from_raw(new_line)?;
                 new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s.reset_tags(s.n_tags());
                 new_s.tags_mut().clone_from_slice(s.tags());
                 new_s
             };
@@ -107,13 +109,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprint!("# of sentences: {}\r", i);
                 stderr().flush()?;
             }
-            let s = Sentence::from_partial_annotation(line?)?;
+            let s = Sentence::from_partial_annotation(&line?)?;
             let s = if args.no_norm {
                 s
             } else {
-                let new_line = fullwidth_filter.filter(s.to_raw_string());
+                let new_line = fullwidth_filter.filter(s.as_raw_text());
                 let mut new_s = Sentence::from_raw(new_line)?;
                 new_s.boundaries_mut().copy_from_slice(s.boundaries());
+                new_s.reset_tags(s.n_tags());
                 new_s.tags_mut().clone_from_slice(s.tags());
                 new_s
             };
@@ -146,24 +149,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Extracting into features...");
     let mut trainer = Trainer::new(
-        args.charn, args.charw, args.typen, args.typew, dictionary, args.dictn,
+        args.charw, args.charn, args.typew, args.typen, dictionary, args.dictn,
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
-            eprint!(
-                "# of features: {}, # of tag features: {}\r",
-                trainer.n_features(),
-                trainer.n_tag_features()
-            );
+            eprint!("# of features: {}\r", trainer.n_features(),);
             stderr().flush()?;
         }
-        trainer.push_sentence(s)?;
+        trainer.add_example(s);
     }
-    eprintln!(
-        "# of features: {}, # of tag features: {}",
-        trainer.n_features(),
-        trainer.n_tag_features()
-    );
+    eprintln!("# of features: {}", trainer.n_features(),);
 
     eprintln!("Start training...");
     let model = trainer.train(args.eps, args.cost, args.solver)?;
