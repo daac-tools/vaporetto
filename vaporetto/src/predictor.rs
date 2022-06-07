@@ -54,12 +54,12 @@ impl Decode for WeightVector {
 impl Encode for WeightVector {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         match self {
-            WeightVector::Variable(w) => {
+            Self::Variable(w) => {
                 Encode::encode(&w, encoder)?;
             }
 
             #[cfg(feature = "fix-weight-length")]
-            WeightVector::Fixed(w) => {
+            Self::Fixed(w) => {
                 #[cfg(feature = "portable-simd")]
                 let w = w.as_array();
 
@@ -74,14 +74,14 @@ impl Encode for WeightVector {
 impl WeightVector {
     pub fn add_scores(&self, ys: &mut [i32]) {
         match self {
-            WeightVector::Variable(w) => {
+            Self::Variable(w) => {
                 for (y, x) in ys.iter_mut().zip(w) {
                     *y += *x;
                 }
             }
 
             #[cfg(feature = "fix-weight-length")]
-            WeightVector::Fixed(w) => {
+            Self::Fixed(w) => {
                 #[cfg(not(feature = "portable-simd"))]
                 for (y, x) in ys[..WEIGHT_FIXED_LEN].iter_mut().zip(w) {
                     *y += *x
@@ -100,10 +100,10 @@ impl WeightVector {
 
     pub fn len(&self) -> usize {
         match self {
-            WeightVector::Variable(w) => w.len(),
+            Self::Variable(w) => w.len(),
 
             #[cfg(feature = "fix-weight-length")]
-            WeightVector::Fixed(_) => WEIGHT_FIXED_LEN,
+            Self::Fixed(_) => WEIGHT_FIXED_LEN,
         }
     }
 }
