@@ -7,8 +7,6 @@ Vaporetto は、高速で軽量な点予測に基づくトークナイザです�
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
 ![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
 
-[技術解説](https://tech.legalforce.co.jp/entry/2021/09/28/180844)
-
 [English document](README.md)
 
 ## 使用例
@@ -212,3 +210,12 @@ Vaporetto は KyTea に比べて 8.7 倍速く動作します。
 詳細は[ここ](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison)を参照してください。
 
 ![](./figures/comparison.svg)
+
+## 文献情報
+
+Vaporettoにおける単語分割の仕組みについては、以下の論文またはブログ記事を参照してください。
+
+ * 赤部晃一，神田峻介，小田悠介，森信介．
+   [Vaporetto: 点予測法に基づく高速な日本語トークナイザ](https://www.anlp.jp/proceedings/annual_meeting/2022/pdf_dir/D2-5.pdf)．
+   言語処理学会第28回年次大会(NLP2022)．浜松．2022年3月．
+ * [速度の高みを目指す：高速な単語分割器 Vaporetto の技術解説](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (技術ブログ)

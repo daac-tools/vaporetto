@@ -7,8 +7,6 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
 ![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
 
-[Technical details](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (Japanese)
-
 [日本語のドキュメント](README-ja.md)
 
 ## Example Usage
@@ -238,20 +236,9 @@ dual licensed as above, without any additional terms or conditions.
 
 ## References
 
-* Graham Neubig, Yosuke Nakata, and Shinsuke Mori. 2011. Pointwise prediction for
-  robust, adaptable Japanese morphological analysis. In Proceedings of the 49th
-  Annual Meeting of the Association for Computational Linguistics: Human Language
-  Technologies: short papers - Volume 2 (HLT ‘11). Association for Computational
-  Linguistics, USA, 529–533. https://aclanthology.org/P11-2093
+Technical details of Vaporetto can be found in the following paper or the blog post:
 
-* 森 信介, 中田 陽介, Neubig Graham, 河原 達也, 点予測による形態素解析, 自然言語処理, 2011, 18 巻,
-  4 号, p. 367-381, 公開日 2011/12/28, Online ISSN 2185-8314, Print ISSN 1340-7619,
-  https://doi.org/10.5715/jnlp.18.367
-
-* Alfred V. Aho and Margaret J. Corasick. 1975. Efficient string matching: an aid to
-  bibliographic search. Commun. ACM 18, 6 (June 1975), 333–340.
-  DOI:https://doi.org/10.1145/360825.360855
-
-* Jun-ichi Aoe. 1989. An Efficient Digital Search Algorithm by Using a Double-Array
-  Structure. IEEE Trans. Softw. Eng. 15, 9 (September 1989), 1066–1077.
-  DOI:https://doi.org/10.1109/32.31365
+ * Koichi Akabe, Shunsuke Kanda, Yusuke Oda, and Shinsuke Mori.
+   [Vaporetto: an Efficient Japanese Tokenizer Based on Pointwise Prediction](https://www.anlp.jp/proceedings/annual_meeting/2022/pdf_dir/D2-5.pdf).
+   NLP2022 (in Japanese). Hamamatsu. Mar 2022.
+ * [Blog post](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (in Japanese)
