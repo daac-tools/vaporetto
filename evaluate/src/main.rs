@@ -11,7 +11,7 @@ use vaporetto_rules::{
     SentenceFilter, StringFilter,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum WsConst {
     GraphemeCluster,
     CharType(CharacterType),
@@ -33,21 +33,10 @@ impl FromStr for WsConst {
     }
 }
 
-#[derive(Debug)]
+#[derive(clap::ValueEnum, Clone, Debug)]
 enum EvaluationMetric {
-    CharBoundaryAccuracy,
-    WordAccuracy,
-}
-
-impl FromStr for EvaluationMetric {
-    type Err = &'static str;
-    fn from_str(metric: &str) -> Result<Self, Self::Err> {
-        match metric {
-            "char" => Ok(Self::CharBoundaryAccuracy),
-            "word" => Ok(Self::WordAccuracy),
-            _ => Err("Could not parse a metric value"),
-        }
-    }
+    Char,
+    Word,
 }
 
 #[derive(Parser, Debug)]
@@ -57,26 +46,26 @@ impl FromStr for EvaluationMetric {
 )]
 struct Args {
     /// The model file to use when analyzing text
-    #[clap(long)]
+    #[clap(long, action)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[clap(long)]
+    #[clap(long, action)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[clap(long)]
+    #[clap(long, action)]
     wsconst: Vec<WsConst>,
 
     /// Do not normalize input strings before prediction.
-    #[clap(long)]
+    #[clap(long, action)]
     no_norm: bool,
 
     /// Evaluation metric: {char, word}.
     /// char: evaluates each charactor boundary.
     /// word: evaluates each word using Nagata's method.
-    #[clap(long, default_value = "char")]
+    #[clap(long, value_parser, default_value = "char")]
     metric: EvaluationMetric,
 }
 
@@ -129,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     match args.metric {
-        EvaluationMetric::CharBoundaryAccuracy => {
+        EvaluationMetric::Char => {
             let mut n_tp = 0;
             let mut n_tn = 0;
             let mut n_fp = 0;
@@ -157,7 +146,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("F1: {}", f1);
             println!("TP: {}, TN: {}, FP: {}, FN: {}", n_tp, n_tn, n_fp, n_fn);
         }
-        EvaluationMetric::WordAccuracy => {
+        EvaluationMetric::Word => {
             // Reference:
             // Masaaki Nagata. 1994. A stochastic Japanese morphological analyzer using a forward-DP
             // backward-A* n-best search algorithm. In COLING 1994 Volume 1: The 15th International
