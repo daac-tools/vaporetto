@@ -117,7 +117,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr
+          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr -A clippy::significant-drop-in-scrutinee
 
       - name: Run cargo test (workspace)
         uses: actions-rs/cargo@v1
