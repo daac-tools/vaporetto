@@ -12,7 +12,7 @@ use vaporetto_rules::{
     SentenceFilter, StringFilter,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum WsConst {
     GraphemeCluster,
     CharType(CharacterType),
@@ -38,28 +38,28 @@ impl FromStr for WsConst {
 #[clap(name = "predict", about = "A program to perform word segmentation.")]
 struct Args {
     /// The model file to use when analyzing text
-    #[clap(long)]
+    #[clap(long, action)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[clap(long)]
+    #[clap(long, action)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[clap(long)]
+    #[clap(long, action)]
     wsconst: Vec<WsConst>,
 
     /// Prints scores.
-    #[clap(long)]
+    #[clap(long, action)]
     scores: bool,
 
     /// Do not normalize input strings before prediction.
-    #[clap(long)]
+    #[clap(long, action)]
     no_norm: bool,
 
     /// Buffers this tokenizer's output.
-    #[clap(long)]
+    #[clap(long, action)]
     buffered_out: bool,
 }
 
