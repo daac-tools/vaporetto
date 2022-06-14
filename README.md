@@ -9,6 +9,8 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 
 [日本語のドキュメント](README-ja.md)
 
+[Wasm Demo](https://daac-tools.github.io/vaporetto-demo/) (takes a little time to load the model.)
+
 ## Example Usage
 
 ### Try Word Segmentation
