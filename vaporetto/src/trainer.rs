@@ -367,10 +367,7 @@ impl<'a> Trainer<'a> {
         // Uses BTreeMap to improve compression ratio.
         let mut char_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
         let mut type_ngram_weights: BTreeMap<_, Vec<_>> = BTreeMap::new();
-        let mut dict_weights = vec![];
-        for i in 0..usize::from(self.dict_word_max_len) {
-            dict_weights.push(vec![0; i + 2]);
-        }
+        let mut dict_weights = vec![(0, 0, 0); usize::from(self.dict_word_max_len)];
 
         let bias = unsafe { (bias / quantize_multiplier).to_int_unchecked::<i32>() };
 
@@ -420,9 +417,9 @@ impl<'a> Trainer<'a> {
                 BoundaryFeature::DictionaryWord(DictionaryWordFeature { length, position }) => {
                     let weights = &mut dict_weights[length - 1];
                     match position {
-                        DictionaryWordPosition::Left => *weights.first_mut().unwrap() = weight,
-                        DictionaryWordPosition::Inside => weights[1..length - 1].fill(weight),
-                        DictionaryWordPosition::Right => *weights.last_mut().unwrap() = weight,
+                        DictionaryWordPosition::Left => weights.0 = weight,
+                        DictionaryWordPosition::Inside => weights.1 = weight,
+                        DictionaryWordPosition::Right => weights.2 = weight,
                     }
                 }
             }
@@ -449,9 +446,13 @@ impl<'a> Trainer<'a> {
                     .map(|word| {
                         let word_len = word.chars().count();
                         let idx = word_len.min(dict_weights.len()) - 1;
+                        let mut weights = vec![0; word_len + 1];
+                        *weights.first_mut().unwrap() = dict_weights[idx].0;
+                        weights[1..word_len].fill(dict_weights[idx].1);
+                        *weights.last_mut().unwrap() = dict_weights[idx].2;
                         WordWeightRecord {
                             word,
-                            weights: dict_weights[idx].clone(),
+                            weights,
                             comment: "".to_string(),
                         }
                     })
