@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Vaporetto Wasm</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+input {
+    font-family: monospace;
+    font-size: 12pt;
+    width: 100%;
+    margin: 10px 0 10px 0;
+}
+
+table {
+    border: 1px solid #333;
+}
+
+td {
+    border: 1px solid #333;
+}
+
+thead, tfoot {
+    background-color: #333;
+    color: #ffffff;
+}
+
+header {
+    font-size: 16pt;
+}
+
+body {
+    width: calc(100% - 20);
+    margin: 10px;
+    font-family: monospace;
+}
+
+#loading {
+    animation: blink 3s infinite both;
+    margin: 10px;
+}
+
+@keyframes blink {
+    0%, 50%, 100% {
+        opacity: 1;
+    }
+    25%, 75% {
+        opacity: 0;
+    }
+}
+    </style>
+    <link data-trunk rel="rust" href="Cargo.toml" data-bin="app" data-type="main" />
+    <link data-trunk rel="rust" href="Cargo.toml" data-bin="worker" data-type="worker" />
+  </head>
+</html>

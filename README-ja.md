@@ -9,7 +9,7 @@ Vaporetto は、高速で軽量な点予測に基づくトークナイザです�
 
 [English document](README.md)
 
-[Wasm のデモ](https://daac-tools.github.io/vaporetto-demo/) (モデルの読み込みに少し時間がかかります。)
+[Wasm のデモ](https://daac-tools.github.io/vaporetto/) (モデルの読み込みに少し時間がかかります。)
 
 ## 使用例
 
