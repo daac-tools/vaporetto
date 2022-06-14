@@ -13,11 +13,11 @@ use vaporetto::{KyteaModel, Model};
 )]
 struct Args {
     /// KyTea model file
-    #[clap(long)]
+    #[clap(long, action)]
     model_in: PathBuf,
 
     /// Vaporetto model file
-    #[clap(long)]
+    #[clap(long, action)]
     model_out: PathBuf,
 }
 
