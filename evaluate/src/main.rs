@@ -65,7 +65,7 @@ struct Args {
     /// Evaluation metric: {char, word}.
     /// char: evaluates each charactor boundary.
     /// word: evaluates each word using Nagata's method.
-    #[clap(long, value_parser, default_value = "char")]
+    #[clap(long, action, default_value = "char")]
     metric: EvaluationMetric,
 }
 
