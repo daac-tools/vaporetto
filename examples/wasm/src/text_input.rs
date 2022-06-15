@@ -1,3 +1,9 @@
+//! Copied from an example of Yew.
+//! https://github.com/yewstack/yew/blob/475cf20a86b237694d31fc06a99e9013540bb915/examples/password_strength/src/text_input.rs
+//! 
+//! Author: Philip Peterson <pc.peterso@gmail.com>
+//! Licensed under either of MIT or Apache-2.0.
+
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{Event, HtmlInputElement, InputEvent};
 use yew::prelude::*;
