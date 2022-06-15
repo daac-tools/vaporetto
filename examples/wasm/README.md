@@ -17,7 +17,7 @@ cargo install trunk
 # Downloads and extracts the model file
 wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz
 tar xf ./bccwj-suw+unidic+tag-huge.tar.xz
-mv ./bccwj-suw+unidic+tag/bccwj-suw+unidic+tag-huge.model.zst ./src/
+mv ./bccwj-suw+unidic+tag-huge/bccwj-suw+unidic+tag-huge.model.zst ./src/
 
 # Builds and launches the server
 # Note: We recommend using --release flag to reduce loading time.
