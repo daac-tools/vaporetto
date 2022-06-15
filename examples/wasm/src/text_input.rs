@@ -1,7 +1,6 @@
 use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{Event, HtmlInputElement, InputEvent};
-use yew::prelude::*;
-use yew::{html, Component, Context, Html, NodeRef};
+use yew::{html, Callback, Component, Context, Html, NodeRef, Properties};
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
@@ -34,7 +33,13 @@ impl Component for TextInput {
         });
 
         html! {
-            <input ref={self.node_ref.clone()} type="text" placeholder="Enter Japanese here" {value} {oninput} />
+            <input
+                ref={self.node_ref.clone()}
+                type="text"
+                placeholder="Enter Japanese here"
+                {value}
+                {oninput}
+            />
         }
     }
 

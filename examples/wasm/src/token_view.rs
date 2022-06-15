@@ -1,4 +1,4 @@
-use yew::prelude::*;
+use yew::{function_component, html, Properties};
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
@@ -20,7 +20,6 @@ pub fn token_view(props: &Props) -> Html {
                             <td>{"Tag "}{i.to_string()}</td>
                         })
                     }
-
                 </tr>
             </thead>
             <tbody>

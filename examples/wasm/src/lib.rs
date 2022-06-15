@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 use gloo_worker::{Bridge, Bridged, HandlerId, Public, WorkerLink};
 use serde::{Deserialize, Serialize};
+use yew::{html, Component, Context, Html};
 
 use once_cell::sync::Lazy;
 use vaporetto::{CharacterType, Model, Predictor, Sentence};
@@ -15,7 +16,6 @@ use vaporetto_rules::{
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
-use yew::prelude::*;
 
 use crate::text_input::TextInput;
 use crate::token_view::TokenView;
@@ -69,7 +69,6 @@ impl gloo_worker::Worker for Worker {
     fn update(&mut self, _msg: Self::Message) {}
 
     fn handle_input(&mut self, msg: Self::Input, id: HandlerId) {
-        println!("test");
         let pre_filter = KyteaFullwidthFilter;
 
         let sentence_orig = &mut self.sentence1.borrow_mut();
@@ -179,35 +178,38 @@ impl Component for App {
         let WorkerOutput { tokens, n_tags } = self.worker_out.clone();
         html! {
             <>
-            <header>{"🛥 Vaporetto Wasm Demo"}</header>
-            <main>
-                <div class="entry">
+                <header>
+                    <h1>{"🛥 Vaporetto Wasm Demo"}</h1>
+                    <p class="header-link"><a href="https://github.com/daac-tools/vaporetto">{"[Project Page]"}</a></p>
+                </header>
+                <main>
+                    <div class="entry">
+                        {
+                            if tokens.is_empty() {
+                                html!{
+                                    <input type="text" disabled=true />
+                                }
+                            } else {
+                                html!{
+                                    <TextInput {input_cb} value={self.text.clone()} />
+                                }
+                            }
+                        }
+                    </div>
                     {
                         if tokens.is_empty() {
                             html!{
-                                <input type="text" disabled=true />
+                                <div id="loading">{"Loading..."}</div>
                             }
                         } else {
                             html!{
-                                <TextInput {input_cb} value={self.text.clone()} />
+                                <div class="results">
+                                    <TokenView {tokens} {n_tags} />
+                                </div>
                             }
                         }
                     }
-                </div>
-                {
-                    if tokens.is_empty() {
-                        html!{
-                            <div id="loading">{"Loading..."}</div>
-                        }
-                    } else {
-                        html!{
-                            <div class="results">
-                                <TokenView {tokens} {n_tags} />
-                            </div>
-                        }
-                    }
-                }
-            </main>
+                </main>
             </>
         }
     }
