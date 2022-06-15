@@ -179,7 +179,7 @@ impl Component for App {
         html! {
             <>
                 <header>
-                    <h1>{"🛥 Vaporetto Wasm Demo"}</h1>
+                    <h1>{"Vaporetto Wasm Demo"}</h1>
                     <p class="header-link"><a href="https://github.com/daac-tools/vaporetto">{"[Project Page]"}</a></p>
                 </header>
                 <main>
