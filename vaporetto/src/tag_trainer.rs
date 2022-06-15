@@ -119,7 +119,7 @@ impl<'a> TagTrainer<'a> {
         let mut xs = vec![];
         let mut ys = vec![];
         for example in examples {
-            if let Some(tag) = example.tags[idx].as_ref() {
+            if let Some(tag) = example.tags.get(idx).and_then(|tag| tag.as_ref()) {
                 ys.push(tag_ids[tag.as_ref()] as f64)
             } else {
                 continue;
@@ -141,6 +141,7 @@ impl<'a> TagTrainer<'a> {
         epsilon: f64,
         cost: f64,
         solver: SolverType,
+        tag_gids: &mut HashMap<String, u32>,
     ) -> Result<TagModel> {
         let n_tags = examples.iter().fold(0, |acc, x| acc.max(x.tags.len()));
         let mut tag_ids = vec![HashMap::new(); n_tags];
@@ -151,7 +152,14 @@ impl<'a> TagTrainer<'a> {
                     if !tag_ids.contains_key(tag.as_ref()) {
                         let new_id = tag_ids.len();
                         tag_ids.insert(tag.as_ref(), new_id);
-                        tags.push(tag.to_string());
+                        let tag_gid = if let Some(tag_gid) = tag_gids.get(tag.as_ref()) {
+                            *tag_gid
+                        } else {
+                            let new_gid = u32::try_from(tag_gids.len()).unwrap();
+                            tag_gids.insert(tag.to_string(), new_gid);
+                            new_gid
+                        };
+                        tags.push(tag_gid);
                     }
                 }
             }
@@ -295,10 +303,16 @@ impl<'a> TagTrainer<'a> {
         })
     }
 
-    pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
+    pub fn train(
+        self,
+        epsilon: f64,
+        cost: f64,
+        solver: SolverType,
+    ) -> Result<(Vec<TagModel>, Vec<String>)> {
         let mut tag_models = vec![];
         liblinear::toggle_liblinear_stdout_output(false);
         let n_tokens = self.examples.len();
+        let mut tag_gids = HashMap::new();
         for (i, (token, examples)) in self.examples.into_iter().enumerate() {
             tag_models.push(Self::train_tag(
                 token.into(),
@@ -306,11 +320,15 @@ impl<'a> TagTrainer<'a> {
                 epsilon,
                 cost,
                 solver,
+                &mut tag_gids,
             )?);
             eprint!("Tags: {}/{}\r", i, n_tokens);
         }
+        let mut tag_gids: Vec<_> = tag_gids.into_iter().collect();
+        tag_gids.sort_unstable_by_key(|(_, id)| *id);
+        let tag_strings = tag_gids.into_iter().map(|(tag, _)| tag).collect();
         eprintln!("Tags: {}/{}", n_tokens, n_tokens);
         liblinear::toggle_liblinear_stdout_output(true);
-        Ok(tag_models)
+        Ok((tag_models, tag_strings))
     }
 }

@@ -425,7 +425,7 @@ impl<'a> Trainer<'a> {
             }
         }
 
-        let tag_models = self.tag_trainer.train(epsilon, cost, solver)?;
+        let (tag_models, tag_strings) = self.tag_trainer.train(epsilon, cost, solver)?;
 
         Ok(Model::new(
             NgramModel(
@@ -462,6 +462,7 @@ impl<'a> Trainer<'a> {
             self.char_window_size,
             self.type_window_size,
             tag_models,
+            tag_strings,
         ))
     }
 

@@ -501,6 +501,7 @@ impl TryFrom<KyteaModel> for Model {
             config.char_w,
             config.type_w,
             vec![],
+            vec![],
         ))
     }
 }

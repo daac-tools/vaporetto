@@ -257,13 +257,13 @@ impl AddAssign<&Self> for PositionalWeightWithTag {
 #[cfg(feature = "tag-prediction")]
 #[derive(Decode, Encode)]
 struct TagPredictor {
-    tags: Vec<Vec<String>>,
+    tags: Vec<Vec<u32>>,
     bias: WeightVector,
 }
 
 #[cfg(feature = "tag-prediction")]
 impl TagPredictor {
-    pub fn new(tags: Vec<Vec<String>>, bias: Vec<i32>) -> Self {
+    pub fn new(tags: Vec<Vec<u32>>, bias: Vec<i32>) -> Self {
         Self {
             tags,
             bias: bias.into(),
@@ -276,7 +276,12 @@ impl TagPredictor {
     }
 
     #[inline]
-    pub fn predict<'a>(&'a self, scores: &[i32], tags: &mut [Option<Cow<'a, str>>]) {
+    pub fn predict<'a>(
+        &'a self,
+        scores: &[i32],
+        tags: &mut [Option<Cow<'a, str>>],
+        tag_strings: &'a [String],
+    ) {
         let mut offset = 0;
         for (tag_cands, tag) in self.tags.iter().zip(tags) {
             if tag_cands.len() >= 2 {
@@ -288,10 +293,14 @@ impl TagPredictor {
                         max_score = s;
                     }
                 }
-                tag.replace(Cow::Borrowed(&tag_cands[idx]));
+                tag.replace(Cow::Borrowed(
+                    tag_strings[usize::try_from(tag_cands[idx]).unwrap()].as_str(),
+                ));
                 offset += tag_cands.len();
             } else {
-                *tag = tag_cands.first().map(|t| Cow::Borrowed(t.as_str()));
+                *tag = tag_cands
+                    .first()
+                    .map(|t| Cow::Borrowed(tag_strings[usize::try_from(*t).unwrap()].as_str()));
             }
         }
     }
@@ -306,6 +315,8 @@ pub struct PredictorData {
     tag_predictor: Option<SerializableHashMap<String, (u32, TagPredictor)>>,
     #[cfg(feature = "tag-prediction")]
     n_tags: usize,
+    #[cfg(feature = "tag-prediction")]
+    tag_strings: Vec<String>,
 }
 
 impl<'de> BorrowDecode<'de> for PredictorData {
@@ -330,6 +341,8 @@ impl<'de> BorrowDecode<'de> for PredictorData {
         let tag_predictor = Decode::decode(decoder)?;
         #[cfg(feature = "tag-prediction")]
         let n_tags = Decode::decode(decoder)?;
+        #[cfg(feature = "tag-prediction")]
+        let tag_strings = Decode::decode(decoder)?;
         Ok(Self {
             char_scorer,
             type_scorer,
@@ -338,6 +351,8 @@ impl<'de> BorrowDecode<'de> for PredictorData {
             tag_predictor,
             #[cfg(feature = "tag-prediction")]
             n_tags,
+            #[cfg(feature = "tag-prediction")]
+            tag_strings,
         })
     }
 }
@@ -362,6 +377,8 @@ impl Encode for PredictorData {
         Encode::encode(&self.tag_predictor, encoder)?;
         #[cfg(feature = "tag-prediction")]
         Encode::encode(&self.n_tags, encoder)?;
+        #[cfg(feature = "tag-prediction")]
+        Encode::encode(&self.tag_strings, encoder)?;
         Ok(())
     }
 }
@@ -489,6 +506,8 @@ impl Predictor {
             tag_predictor,
             #[cfg(feature = "tag-prediction")]
             n_tags,
+            #[cfg(feature = "tag-prediction")]
+            tag_strings: model.0.tag_strings,
         }))
     }
 
@@ -567,6 +586,7 @@ impl Predictor {
                         tag_predictor.predict(
                             &scores,
                             &mut sentence.tags[i * self.0.n_tags..(i + 1) * self.0.n_tags],
+                            &self.0.tag_strings,
                         );
                     }
                 }
@@ -596,7 +616,11 @@ impl Predictor {
                     }
                 }
                 let i = sentence.len() - 1;
-                tag_predictor.predict(&scores, &mut sentence.tags[i * self.0.n_tags..]);
+                tag_predictor.predict(
+                    &scores,
+                    &mut sentence.tags[i * self.0.n_tags..],
+                    &self.0.tag_strings,
+                );
             }
         }
     }
