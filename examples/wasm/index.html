@@ -2,27 +2,31 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Vaporetto Wasm</title>
+    <title>🛥 Vaporetto Wasm Demo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
 input {
     font-family: monospace;
     font-size: 12pt;
-    width: 100%;
+    width: calc(100% - 2px);
     margin: 10px 0 10px 0;
+    padding: 0;
+    border: 1px solid #333;
 }
 
 table {
-    border: 1px solid #333;
+    border: 1px solid #000;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
 }
 
 td {
-    border: 1px solid #333;
+    border: 1px solid #000;
 }
 
 thead, tfoot {
-    background-color: #333;
-    color: #ffffff;
+    background-color: #000;
+    color: #fff;
 }
 
 header {
@@ -30,22 +34,22 @@ header {
 }
 
 body {
-    width: calc(100% - 20);
+    width: calc(100% - 20px);
     margin: 10px;
     font-family: monospace;
 }
 
 #loading {
-    animation: blink 3s infinite both;
+    animation: blink 1.5s infinite;
     margin: 10px;
 }
 
 @keyframes blink {
-    0%, 50%, 100% {
-        opacity: 1;
+    0%, 100% {
+        opacity: 1.0;
     }
-    25%, 75% {
-        opacity: 0;
+    50% {
+        opacity: 0.0;
     }
 }
     </style>

@@ -11,34 +11,32 @@ pub fn token_view(props: &Props) -> Html {
     let Props { tokens, n_tags } = props.clone();
 
     html! {
-        <pre>
-            <table>
-                <thead>
-                    <tr>
-                        <td>{"Surface"}</td>
-                        {
-                            for (1..n_tags + 1).map(|i| html! {
-                                <td>{"Tag "}{i.to_string()}</td>
-                            })
-                        }
-
-                    </tr>
-                </thead>
-                <tbody>
+        <table>
+            <thead>
+                <tr>
+                    <td>{"Surface"}</td>
                     {
-                        for tokens.into_iter().map(|(surface, tags)| html! {
-                            <tr>
-                                <td>{surface}</td>
-                                {
-                                    for tags.iter().map(|tag| html! {
-                                        <td>{tag}</td>
-                                    })
-                                }
-                            </tr>
+                        for (1..n_tags + 1).map(|i| html! {
+                            <td>{"Tag "}{i.to_string()}</td>
                         })
                     }
-                </tbody>
-            </table>
-        </pre>
+
+                </tr>
+            </thead>
+            <tbody>
+                {
+                    for tokens.into_iter().map(|(surface, tags)| html! {
+                        <tr>
+                            <td>{surface}</td>
+                            {
+                                for tags.iter().map(|tag| html! {
+                                    <td>{tag}</td>
+                                })
+                            }
+                        </tr>
+                    })
+                }
+            </tbody>
+        </table>
     }
 }

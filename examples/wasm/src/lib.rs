@@ -1,12 +1,12 @@
 pub mod text_input;
 pub mod token_view;
 
-use serde::{Deserialize, Serialize};
-use yew_agent::{Bridge, Bridged, HandlerId, Public, WorkerLink};
-
 use std::cell::RefCell;
 use std::io::{Cursor, Read};
 use std::rc::Rc;
+
+use gloo_worker::{Bridge, Bridged, HandlerId, Public, WorkerLink};
+use serde::{Deserialize, Serialize};
 
 use once_cell::sync::Lazy;
 use vaporetto::{CharacterType, Model, Predictor, Sentence};
@@ -51,7 +51,7 @@ pub struct WorkerOutput {
     pub n_tags: usize,
 }
 
-impl yew_agent::Worker for Worker {
+impl gloo_worker::Worker for Worker {
     type Input = WorkerInput;
     type Message = ();
     type Output = WorkerOutput;
@@ -66,9 +66,7 @@ impl yew_agent::Worker for Worker {
         }
     }
 
-    fn update(&mut self, _msg: Self::Message) {
-        // no messaging
-    }
+    fn update(&mut self, _msg: Self::Message) {}
 
     fn handle_input(&mut self, msg: Self::Input, id: HandlerId) {
         println!("test");
@@ -126,7 +124,11 @@ impl yew_agent::Worker for Worker {
     }
 
     fn name_of_resource() -> &'static str {
-        "vaporetto/worker.js"
+        "worker.js"
+    }
+
+    fn resource_path_is_relative() -> bool {
+        true
     }
 }
 
@@ -173,11 +175,11 @@ impl Component for App {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let on_change = ctx.link().callback(Message::SetText);
+        let input_cb = ctx.link().callback(Message::SetText);
         let WorkerOutput { tokens, n_tags } = self.worker_out.clone();
         html! {
             <>
-            <header>{"🛥 Vaporetto Demo"}</header>
+            <header>{"🛥 Vaporetto Wasm Demo"}</header>
             <main>
                 <div class="entry">
                     {
@@ -187,7 +189,7 @@ impl Component for App {
                             }
                         } else {
                             html!{
-                                <TextInput {on_change} value={self.text.clone()} />
+                                <TextInput {input_cb} value={self.text.clone()} />
                             }
                         }
                     }

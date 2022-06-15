@@ -9,7 +9,7 @@ ruzstd = "0.2.4"  # MIT
 serde = "1"  # MIT or Apache-2.0
 vaporetto = { path = "../../vaporetto" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../../vaporetto_rules" }  # MIT or Apache-2.0
-wasm-bindgen = "=0.2.80"  # MIT or Apache-2.0
+wasm-bindgen = "0.2.81"  # MIT or Apache-2.0
 web-sys = { version = "0.3", features = ["Event", "EventTarget", "InputEvent"] }  # MIT or Apache-2.0
 yew = "0.19"  # MIT or Apache-2.0
-yew-agent = { git = "https://github.com/yewstack/yew.git", revision = "475cf20" }  # MIT or Apache-2.0
+gloo-worker = "0.1.0"  # MIT or Apache-2.0
