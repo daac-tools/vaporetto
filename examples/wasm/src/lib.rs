@@ -21,7 +21,7 @@ use crate::text_input::TextInput;
 use crate::token_view::TokenView;
 
 static PREDICTOR: Lazy<Predictor> = Lazy::new(|| {
-    let mut f = Cursor::new(include_bytes!("bccwj-suw+unidic+tag.model.zst"));
+    let mut f = Cursor::new(include_bytes!("bccwj-suw+unidic+tag-huge.model.zst"));
     let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
     let mut buff = vec![];
     decoder.read_to_end(&mut buff).unwrap();

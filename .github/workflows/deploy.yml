@@ -14,9 +14,9 @@ jobs:
     - name: Download model
       working-directory: ./examples/wasm
       run: |
-        wget 'https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag.tar.xz'
-        tar xf ./bccwj-suw+unidic+tag.tar.xz
-        mv ./bccwj-suw+unidic+tag/bccwj-suw+unidic+tag.model.zst ./src/
+        wget 'https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz'
+        tar xf ./bccwj-suw+unidic+tag-huge.tar.xz
+        mv ./bccwj-suw+unidic+tag/bccwj-suw+unidic+tag-huge.model.zst ./src/
     - name: Install environment
       run: |
         rustup target add wasm32-unknown-unknown
