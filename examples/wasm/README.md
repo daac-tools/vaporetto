@@ -14,7 +14,7 @@ rustup target add wasm32-unknown-unknown
 # Installs trunk
 cargo install trunk
 
-# Downloads and extracts a model file
+# Downloads and extracts the model file
 wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag.tar.xz
 tar xf ./bccwj-suw+unidic+tag.tar.xz
 mv ./bccwj-suw+unidic+tag/bccwj-suw+unidic+tag.model.zst ./src/
