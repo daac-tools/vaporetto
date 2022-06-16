@@ -7,7 +7,7 @@ use std::time::Instant;
 use clap::Parser;
 use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
-    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
+    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter, PatternMatchTagger},
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
@@ -92,6 +92,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut f = zstd::Decoder::new(File::open(args.model)?)?;
     let model = Model::read(&mut f)?;
     let predictor = Predictor::new(model, args.predict_tags)?;
+    let word_tag_map: Vec<(String, Vec<Option<String>>)> = if args.predict_tags {
+        let config = bincode::config::standard();
+        bincode::decode_from_std_read(&mut f, config).unwrap_or_else(|_| vec![])
+    } else {
+        vec![]
+    };
+    let pattern_match_tagger = (!word_tag_map.is_empty())
+        .then(|| PatternMatchTagger::new(word_tag_map.into_iter().collect()));
 
     eprintln!("Start tokenization");
     let start = Instant::now();
@@ -110,6 +118,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 post_filters.iter().for_each(|filter| filter.filter(&mut s));
                 if args.predict_tags {
                     s.fill_tags();
+                    if let Some(tagger) = pattern_match_tagger.as_ref() {
+                        tagger.filter(&mut s);
+                    }
                 }
                 s.write_tokenized_text(&mut buf);
                 writeln!(out, "{}", buf)?;
@@ -130,6 +141,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 post_filters.iter().for_each(|filter| filter.filter(&mut s));
                 if args.predict_tags {
                     s.fill_tags();
+                    if let Some(tagger) = pattern_match_tagger.as_ref() {
+                        tagger.filter(&mut s);
+                    }
                 }
                 s_orig.update_raw(line)?;
                 s_orig.reset_tags(s.n_tags());

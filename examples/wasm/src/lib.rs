@@ -12,7 +12,7 @@ use yew::{html, Component, Context, Html};
 use once_cell::sync::Lazy;
 use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
-    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
+    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter, PatternMatchTagger},
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
@@ -20,13 +20,15 @@ use vaporetto_rules::{
 use crate::text_input::TextInput;
 use crate::token_view::TokenView;
 
-static PREDICTOR: Lazy<Predictor> = Lazy::new(|| {
+static PREDICTOR: Lazy<(Predictor, PatternMatchTagger)> = Lazy::new(|| {
     let mut f = Cursor::new(include_bytes!("bccwj-suw+unidic+tag-huge.model.zst"));
     let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
     let mut buff = vec![];
     decoder.read_to_end(&mut buff).unwrap();
-    let (model, _) = Model::read_slice(&buff).unwrap();
-    Predictor::new(model, true).unwrap()
+    let (model, rest) = Model::read_slice(&buff).unwrap();
+    let config = bincode::config::standard();
+    let word_tag_map: Vec<(String, Vec<Option<String>>)> = bincode::decode_from_slice(rest, config).unwrap().0;
+    (Predictor::new(model, true).unwrap(), PatternMatchTagger::new(word_tag_map.into_iter().collect()))
 });
 
 pub enum Message {
@@ -82,7 +84,7 @@ impl gloo_worker::Worker for Worker {
         let filtered_text = pre_filter.filter(sentence_orig.as_raw_text());
         sentence_filtered.update_raw(filtered_text).unwrap();
 
-        PREDICTOR.predict(sentence_filtered);
+        PREDICTOR.0.predict(sentence_filtered);
 
         let wsconst_g = ConcatGraphemeClustersFilter;
         let wsconst_d = KyteaWsConstFilter::new(CharacterType::Digit);
@@ -90,6 +92,7 @@ impl gloo_worker::Worker for Worker {
         wsconst_d.filter(sentence_filtered);
 
         sentence_filtered.fill_tags();
+        PREDICTOR.1.filter(sentence_filtered);
         let n_tags = sentence_filtered.n_tags();
 
         sentence_orig

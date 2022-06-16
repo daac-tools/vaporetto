@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bincode = "2.0.0-rc.1"  # MIT
 once_cell = "1.12.0"  # MIT or Apache-2.0
 ruzstd = "0.2.4"  # MIT
 serde = "1"  # MIT or Apache-2.0

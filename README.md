@@ -202,6 +202,9 @@ To train tags, add slashes and tags following each token in the dataset as follo
   ヴ-ェ-ネ-ツ-ィ-ア/名詞|は/助詞|イ-タ-リ-ア/名詞|に/助詞|あ-り ま-す
   ```
 
+You can also specify tag information to dictionaries as well as corpora.
+When the predictor cannot predict a tag using the model, the tag specified in the dictionary will be annotated to the token.
+
 If the dataset contains tags, the `train` command automatically trains them.
 
 In prediction, tags are not predicted by default, so you have to specify `--predict-tags` argument to `predict` command if necessary.

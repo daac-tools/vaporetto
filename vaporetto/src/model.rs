@@ -36,6 +36,7 @@ const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
 //   scores:  [              475,   1563 ]
 //
 //   results: ["名詞", "ケン"]
+/// Internal representation of a tag model.
 #[derive(Debug, Decode, Encode)]
 pub struct TagModel {
     pub(crate) token: String,
@@ -43,6 +44,13 @@ pub struct TagModel {
     pub(crate) char_ngram_model: TagNgramModel<String>,
     pub(crate) type_ngram_model: TagNgramModel<Vec<u8>>,
     pub(crate) bias: Vec<i32>,
+}
+
+impl TagModel {
+    /// Returns the token string.
+    pub fn token(&self) -> &str {
+        &self.token
+    }
 }
 
 /// Model data.
@@ -152,5 +160,10 @@ impl Model {
     /// Replaces the dictionary with the given data.
     pub fn replace_dictionary(&mut self, dict: Vec<WordWeightRecord>) {
         self.0.dict_model = DictModel::new(dict);
+    }
+
+    /// Returns the slice of tag models.
+    pub fn tag_models(&self) -> &[TagModel] {
+        &self.0.tag_models
     }
 }
