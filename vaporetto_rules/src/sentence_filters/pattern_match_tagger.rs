@@ -50,14 +50,26 @@ mod tests {
     fn test_concat_grapheme_clusters_no_boundary() {
         let mut s = Sentence::from_tokenized("これ/名詞/ソレ は テスト/名詞 です//デス").unwrap();
         let mut rules = HashMap::new();
-        rules.insert("これ".into(), vec![Some("代名詞".into()), Some("コレ".into())]);
+        rules.insert(
+            "これ".into(),
+            vec![Some("代名詞".into()), Some("コレ".into())],
+        );
         rules.insert("は".into(), vec![Some("助詞".into()), Some("ワ".into())]);
-        rules.insert("テスト".into(), vec![Some("名詞".into()), Some("テスト".into())]);
-        rules.insert("です".into(), vec![Some("助動詞".into()), Some("デス".into())]);
+        rules.insert(
+            "テスト".into(),
+            vec![Some("名詞".into()), Some("テスト".into())],
+        );
+        rules.insert(
+            "です".into(),
+            vec![Some("助動詞".into()), Some("デス".into())],
+        );
         let filter = PatternMatchTagger::new(rules);
         filter.filter(&mut s);
         let mut buf = String::new();
         s.write_tokenized_text(&mut buf);
-        assert_eq!("これ/名詞/ソレ は/助詞/ワ テスト/名詞/テスト です/助動詞/デス", buf);
+        assert_eq!(
+            "これ/名詞/ソレ は/助詞/ワ テスト/名詞/テスト です/助動詞/デス",
+            buf
+        );
     }
 }
