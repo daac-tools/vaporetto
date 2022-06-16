@@ -106,6 +106,8 @@ To train a model, use the following command:
 `--tok` argument specifies a fully annotated corpus, and `--part` argument specifies a partially annotated corpus.
 You can also specify a word dictionary with `--dict` argument.
 A word dictionary is a file with words per line.
+You can also specify tag information to dictionaries as well as corpora.
+When the predictor cannot predict a tag using the model, the tag specified in the dictionary will be annotated to the token.
 
 The trainer does not accept empty lines.
 Therefore, remove all empty lines from the corpus before training.
