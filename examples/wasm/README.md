@@ -13,6 +13,7 @@ rustup target add wasm32-unknown-unknown
 
 # Installs trunk
 cargo install trunk
+cargo install wasm-bindgen-cli
 
 # Downloads and extracts the model file
 wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz
@@ -22,4 +23,9 @@ mv ./bccwj-suw+unidic+tag-huge/bccwj-suw+unidic+tag-huge.model.zst ./src/
 # Builds and launches the server
 # Note: We recommend using --release flag to reduce loading time.
 trunk serve --release
+```
+
+For ARM Mac, you may need to install binaryen to build wasm-opt.
+```
+brew install binaryen
 ```
