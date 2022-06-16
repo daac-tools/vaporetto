@@ -119,7 +119,7 @@ impl<'a> TagTrainer<'a> {
         let mut xs = vec![];
         let mut ys = vec![];
         for example in examples {
-            if let Some(tag) = example.tags[idx].as_ref() {
+            if let Some(tag) = example.tags.get(idx).and_then(|tag| tag.as_ref()) {
                 ys.push(tag_ids[tag.as_ref()] as f64)
             } else {
                 continue;

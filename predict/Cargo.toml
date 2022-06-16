@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bincode = "2.0.0-rc.1"  # MIT
 clap = { version = "~3.2.1", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0

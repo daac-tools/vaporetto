@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{prelude::*, stderr, BufReader};
 use std::path::PathBuf;
@@ -125,7 +125,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("# of sentences: {}", train_sents.len());
     }
 
-    let mut dictionary = BTreeSet::new();
+    let mut word_tag_map = BTreeMap::new();
+    let mut word_buf = Sentence::default();
     for path in args.dict {
         eprintln!("Loading {:?} ...", path);
         let f = File::open(path)?;
@@ -136,16 +137,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 stderr().flush()?;
             }
             let line = line?;
-            let line = if args.no_norm {
-                line
-            } else {
-                fullwidth_filter.filter(&line)
-            };
-            dictionary.insert(line);
+            word_buf.update_tokenized(&line).unwrap();
+            for token in word_buf.iter_tokens() {
+                let word = token.surface().to_string();
+                let word = if args.no_norm {
+                    word
+                } else {
+                    fullwidth_filter.filter(&word)
+                };
+                word_tag_map.entry(word).or_insert_with(|| {
+                    token
+                        .tags()
+                        .iter()
+                        .map(|tag| tag.as_ref().map(|tag| tag.to_string()))
+                        .collect()
+                });
+            }
         }
-        eprintln!("# of words: {}", dictionary.len());
+        eprintln!("# of words: {}", word_tag_map.len());
     }
-    let dictionary: Vec<String> = dictionary.into_iter().collect();
+    let dictionary = word_tag_map.iter().map(|(word, _)| word.clone()).collect();
 
     eprintln!("Extracting into features...");
     let mut trainer = Trainer::new(
@@ -166,6 +177,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut f = zstd::Encoder::new(File::create(args.model)?, 19)?;
     model.write(&mut f)?;
+    for tag_model in model.tag_models() {
+        word_tag_map.remove(tag_model.token());
+    }
+    let word_tag_map: Vec<(String, Vec<Option<String>>)> = word_tag_map.into_iter().collect();
+    let config = bincode::config::standard();
+    bincode::encode_into_std_write(&word_tag_map, &mut f, config)?;
     f.finish()?;
 
     Ok(())
