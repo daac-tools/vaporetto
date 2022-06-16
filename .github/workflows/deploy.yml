@@ -1,0 +1,33 @@
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+name: deploy
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Download model
+      working-directory: ./examples/wasm
+      run: |
+        wget 'https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz'
+        tar xf ./bccwj-suw+unidic+tag-huge.tar.xz
+        mv ./bccwj-suw+unidic+tag-huge/bccwj-suw+unidic+tag-huge.model.zst ./src/
+    - name: Install environment
+      run: |
+        rustup target add wasm32-unknown-unknown
+        cargo install trunk
+    - name: Build
+      working-directory: ./examples/wasm
+      run: trunk build --release --public-url vaporetto
+    - name: Publish
+      run: cp -r ./examples/wasm/dist/ ./public/
+    - uses: peaceiris/actions-gh-pages@v3
+      if: ${{ github.ref == 'refs/heads/main' }}
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./public

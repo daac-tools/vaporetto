@@ -1,34 +1,31 @@
-# WebAssembly example of Vaporetto
+# Wasm Example
 
-## How to build?
+Source code of [the demo page](https://daac-tools.github.io/vaporetto/).
 
-1. Build a model file following the [documentation](../README.md).
+## How to launch on your environment?
 
-2. Build a JS file containing a web assembly using `build_portable_js.py`.
-   This script requires a model file, an identifier, and an output path.
+You can also launch the demo server on your machine using [trunk](https://github.com/thedodd/trunk).
 
-   The identifier must consist of alphanumeric characters and underscores.
-   ```
-   ./build_portable_js.py --model <MODEL_FILE> --identifier <IDENTIFIER> --output <OUTPUT>
-   ```
+Run the following commands in this directory:
+```
+# Installs wasm target of Rust compiler.
+rustup target add wasm32-unknown-unknown
 
-3. You can use the generated JS file like the follwing code:
-   ```html
-   <!DOCTYPE html>
-   <html>
-       <head>
-           <!-- Replace vaporetto.js with the script you generated. -->
-           <script src="vaporetto.js"></script>
-           <script>
-               // Replace IDENTIFIER with a string you specified.
-               vaporetto_IDENTIFIER().then((Vaporetto) => {
-                   const vaporetto = Vaporetto.new("DG");
-                   const tokens = vaporetto.tokenize("火星猫の生態");
-                   console.log(tokens);
-               });
-           </script>
-       </head>
-       <body>
-       </body>
-   </html>
-   ```
+# Installs trunk
+cargo install trunk
+cargo install wasm-bindgen-cli
+
+# Downloads and extracts the model file
+wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz
+tar xf ./bccwj-suw+unidic+tag-huge.tar.xz
+mv ./bccwj-suw+unidic+tag-huge/bccwj-suw+unidic+tag-huge.model.zst ./src/
+
+# Builds and launches the server
+# Note: We recommend using --release flag to reduce loading time.
+trunk serve --release
+```
+
+For ARM Mac, you may need to install binaryen to build wasm-opt.
+```
+brew install binaryen
+```
