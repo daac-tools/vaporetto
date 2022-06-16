@@ -93,7 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         vec![]
     };
-    let pattern_match_tagger = PatternMatchTagger::new(word_tag_map.into_iter().collect());
+    let pattern_match_tagger = (!word_tag_map.is_empty())
+        .then(|| PatternMatchTagger::new(word_tag_map.into_iter().collect()));
 
     eprintln!("Start tokenization");
 
@@ -117,7 +118,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         post_filters.iter().for_each(|filter| filter.filter(&mut s));
         if args.predict_tags {
             s.fill_tags();
-            pattern_match_tagger.filter(&mut s);
+            if let Some(tagger) = pattern_match_tagger.as_ref() {
+                tagger.filter(&mut s);
+            }
         }
         let sys_boundaries = s.boundaries().to_vec();
         let mut sys_tags = vec![];
