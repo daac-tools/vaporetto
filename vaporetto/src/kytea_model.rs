@@ -473,7 +473,11 @@ impl TryFrom<KyteaModel> for Model {
                     b'T' => CharacterType::Katakana as u8,
                     b'K' => CharacterType::Kanji as u8,
                     b'O' => CharacterType::Other as u8,
-                    t => t,
+                    t => {
+                        return Err(VaporettoError::invalid_model(format!(
+                            "unsupported character type: {t}"
+                        )));
+                    }
                 };
             }
             type_ngrams.push(NgramData {
