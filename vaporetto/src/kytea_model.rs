@@ -5,6 +5,7 @@ use crate::dict_model::{DictModel, DictWeight, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
+use crate::sentence::CharacterType;
 use crate::utils;
 
 struct KyteaConfig {
@@ -459,12 +460,28 @@ impl TryFrom<KyteaModel> for Model {
         let mut type_ngrams = vec![];
         for (type_ngram, v) in type_dict.dump_items() {
             let weight_size = config.type_w as usize * 2 - type_ngram.len() + 1;
+            let mut ngram = type_ngram
+                .into_iter()
+                .collect::<String>()
+                .as_bytes()
+                .to_vec();
+            for t in &mut ngram {
+                *t = match *t {
+                    b'D' => CharacterType::Digit as u8,
+                    b'R' => CharacterType::Roman as u8,
+                    b'H' => CharacterType::Hiragana as u8,
+                    b'T' => CharacterType::Katakana as u8,
+                    b'K' => CharacterType::Kanji as u8,
+                    b'O' => CharacterType::Other as u8,
+                    t => {
+                        return Err(VaporettoError::invalid_model(format!(
+                            "unsupported character type: {t}"
+                        )));
+                    }
+                };
+            }
             type_ngrams.push(NgramData {
-                ngram: type_ngram
-                    .into_iter()
-                    .collect::<String>()
-                    .as_bytes()
-                    .to_vec(),
+                ngram,
                 weights: v[..weight_size].iter().map(|&w| i32::from(w)).collect(),
             });
         }
@@ -477,14 +494,14 @@ impl TryFrom<KyteaModel> for Model {
                 for j in 0..kytea_dict.n_dicts as usize {
                     if data.in_dict >> j & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * idx;
-                        dict_weight.right += i32::from(feature_lookup.dict_vec[offset]);
+                        dict_weight.left += i32::from(feature_lookup.dict_vec[offset]);
                         dict_weight.inside += i32::from(feature_lookup.dict_vec[offset + 1]);
-                        dict_weight.left += i32::from(feature_lookup.dict_vec[offset + 2]);
+                        dict_weight.right += i32::from(feature_lookup.dict_vec[offset + 2]);
                     }
                 }
                 let mut weights = vec![dict_weight.inside; w.len() + 1];
-                *weights.first_mut().unwrap() = dict_weight.right;
-                *weights.last_mut().unwrap() = dict_weight.left;
+                *weights.first_mut().unwrap() = dict_weight.left;
+                *weights.last_mut().unwrap() = dict_weight.right;
                 dict.push(WordWeightRecord {
                     word: w.into_iter().collect(),
                     weights,
