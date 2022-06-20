@@ -103,10 +103,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Start tokenization");
     let start = Instant::now();
+    let stdout = io::stdout();
     let mut out: Box<dyn Write> = if args.buffered_out {
-        Box::new(BufWriter::new(io::stdout().lock()))
+        Box::new(BufWriter::new(stdout.lock()))
     } else {
-        Box::new(io::stdout().lock())
+        Box::new(stdout.lock())
     };
     let mut buf = String::new();
     let mut s = Sentence::default();
