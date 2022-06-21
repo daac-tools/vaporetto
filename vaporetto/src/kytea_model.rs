@@ -392,13 +392,34 @@ impl KyteaModel {
     ///
     /// * `rdr` - A data source.
     ///
-    /// # Returns
-    ///
-    /// A model data read from `rdr`.
-    ///
     /// # Errors
     ///
     /// When `rdr` generates an error, it will be returned as is.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use std::io::BufReader;
+    ///
+    /// use vaporetto::{KyteaModel, Model, Predictor, Sentence};
+    ///
+    /// let f = BufReader::new(File::open("../resources/kytea-model.bin").unwrap());
+    /// let model = KyteaModel::read(f).unwrap();
+    /// let model = Model::try_from(model).unwrap();
+    ///
+    /// // Vaporetto does not support tagging using KyTea's models.
+    /// let predictor = Predictor::new(model, false).unwrap();
+    ///
+    /// let mut buf = String::new();
+    ///
+    /// let mut s = Sentence::default();
+    ///
+    /// s.update_raw("まぁ社長は火星猫だ").unwrap();
+    /// predictor.predict(&mut s);
+    /// s.write_tokenized_text(&mut buf);
+    /// assert_eq!("まぁ 社長 は 火星 猫 だ", buf);
+    /// ```
     pub fn read<R>(mut rdr: R) -> Result<Self>
     where
         R: BufRead,
