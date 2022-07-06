@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 bincode = "2.0.0-rc.1"  # MIT
 once_cell = "1.12.0"  # MIT or Apache-2.0
-ruzstd = "0.2.4"  # MIT
+ruzstd = "0.3.0"  # MIT
 serde = "1"  # MIT or Apache-2.0
 vaporetto = { path = "../../vaporetto", default-features = false, features = ["std", "cache-type-score", "fix-weight-length", "tag-prediction"] }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../../vaporetto_rules" }  # MIT or Apache-2.0
