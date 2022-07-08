@@ -8,7 +8,7 @@ use bincode::{
     BorrowDecode, Decode, Encode,
 };
 #[cfg(feature = "charwise-pma")]
-use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
+use daachorse::CharwiseDoubleArrayAhoCorasick;
 #[cfg(not(feature = "charwise-pma"))]
 use daachorse::DoubleArrayAhoCorasick;
 
@@ -21,9 +21,9 @@ use crate::sentence::Sentence;
 
 pub struct CharScorerBoundary {
     #[cfg(not(feature = "charwise-pma"))]
-    pma: DoubleArrayAhoCorasick,
+    pma: DoubleArrayAhoCorasick<u32>,
     #[cfg(feature = "charwise-pma")]
-    pma: CharwiseDoubleArrayAhoCorasick,
+    pma: CharwiseDoubleArrayAhoCorasick<u32>,
     weights: Vec<PositionalWeight<WeightVector>>,
 }
 
@@ -34,10 +34,10 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundary {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         #[cfg(not(feature = "charwise-pma"))]
         let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+            unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         #[cfg(feature = "charwise-pma")]
         let (pma, _) =
-            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         Ok(Self {
             pma,
             weights: Decode::decode(decoder)?,
@@ -47,7 +47,7 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundary {
 
 impl Encode for CharScorerBoundary {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize_to_vec();
+        let pma_data = self.pma.serialize();
         Encode::encode(&pma_data, encoder)?;
         Encode::encode(&self.weights, encoder)?;
         Ok(())
@@ -102,8 +102,8 @@ impl CharScorerBoundary {
         for m in it {
             debug_assert!(m.end() != 0 && sentence.text.is_char_boundary(m.end()));
             let end = unsafe { sentence.str_to_char_pos(m.end()) };
-            debug_assert!(m.value() < self.weights.len());
-            let weight = unsafe { self.weights.get_unchecked(m.value()) };
+            debug_assert!((m.value() as usize) < self.weights.len());
+            let weight = unsafe { self.weights.get_unchecked(m.value() as usize) };
             weight.add_score(
                 (end + sentence.score_padding - 1) as isize,
                 &mut sentence.boundary_scores,

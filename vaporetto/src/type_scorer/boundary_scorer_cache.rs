@@ -20,7 +20,7 @@ pub struct TypeScorerBoundaryCache {
 
 impl TypeScorerBoundaryCache {
     pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
-        let pma = DoubleArrayAhoCorasick::new(model.0.iter().map(|d| &d.ngram))
+        let pma = DoubleArrayAhoCorasick::<usize>::new(model.0.iter().map(|d| &d.ngram))
             .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
         let mut weights = vec![];
         for d in model.0 {
