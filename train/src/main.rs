@@ -158,7 +158,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("Extracting into features...");
     let mut trainer = Trainer::new(
-        args.charw, args.charn, args.typew, args.typen, dictionary, args.dictn, &tag_dictionary,
+        args.charw,
+        args.charn,
+        args.typew,
+        args.typen,
+        dictionary,
+        args.dictn,
+        &tag_dictionary,
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {

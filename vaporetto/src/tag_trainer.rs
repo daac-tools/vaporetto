@@ -301,7 +301,13 @@ impl<'a> TagTrainer<'a> {
     pub fn train(mut self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
         for (token, tags) in self.default_tags {
             if !self.examples.contains_key(token) {
-                self.examples.insert(token, vec![TagExample{ tags, features: vec![] }]);
+                self.examples.insert(
+                    token,
+                    vec![TagExample {
+                        tags,
+                        features: vec![],
+                    }],
+                );
             }
         }
         let mut tag_models = vec![];
