@@ -159,7 +159,7 @@ impl<'a> BoundaryFeature<'a> {
 /// }
 ///
 /// let dict: Vec<String> = vec![];
-/// let mut trainer = Trainer::new(3, 3, 3, 3, dict, 0).unwrap();
+/// let mut trainer = Trainer::new(3, 3, 3, 3, dict, 0, &[]).unwrap();
 /// for (i, s) in train_sents.iter().enumerate() {
 ///     trainer.add_example(&s);
 /// }
