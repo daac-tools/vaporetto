@@ -196,6 +196,8 @@ impl<'a> Trainer<'a> {
     /// * `dict_words` - A word dictionary.
     /// * `dict_word_max_len` - Dictionary words longer than this value will be grouped together,
     ///   where the length is in characters.
+    /// * `tag_dictionary` - A tag dictionary. Words not included in the corpus are annotated
+    ///   with the tag specified here.
     ///
     /// # Errors
     ///
@@ -207,6 +209,7 @@ impl<'a> Trainer<'a> {
         type_ngram_size: u8,
         dict_words: Vec<String>,
         dict_word_max_len: u8,
+        tag_dictionary: &'a [Sentence<'a, '_>],
     ) -> Result<Self> {
         let dict_pma = if dict_words.is_empty() {
             None
@@ -216,6 +219,14 @@ impl<'a> Trainer<'a> {
                     .map_err(|e| VaporettoError::invalid_argument("dict_words", e.to_string()))?,
             )
         };
+        let mut default_tags = HashMap::new();
+        for s in tag_dictionary {
+            for token in s.iter_tokens() {
+                if !default_tags.contains_key(token.surface()) {
+                    default_tags.insert(token.surface(), token.tags());
+                }
+            }
+        }
         Ok(Self {
             char_window_size,
             char_ngram_size,
@@ -232,6 +243,7 @@ impl<'a> Trainer<'a> {
                 char_ngram_size,
                 type_window_size,
                 type_ngram_size,
+                default_tags,
             ),
         })
     }
@@ -480,7 +492,7 @@ mod tests {
     #[test]
     fn check_features_3322() {
         let s = Sentence::from_tokenized("これ は テスト です").unwrap();
-        let trainer = Trainer::new(3, 3, 2, 2, vec![], 4).unwrap();
+        let trainer = Trainer::new(3, 3, 2, 2, vec![], 4, &[]).unwrap();
         let mut examples = vec![];
         trainer.gen_features(&s, &mut examples);
 
@@ -683,6 +695,7 @@ mod tests {
             2,
             vec!["これ".into(), "これは".into(), "テスト".into()],
             4,
+            &[],
         )
         .unwrap();
         let mut examples = vec![];
