@@ -46,8 +46,8 @@ pub struct TagTrainer<'a> {
     char_ngram_size: u8,
     _type_window_size: u8,
     type_ngram_size: u8,
-    // Uses BTreeMap to improve compression ratio.
     default_tags: HashMap<&'a str, &'a [Option<Cow<'a, str>>]>,
+    // Uses BTreeMap to improve compression ratio.
     examples: BTreeMap<&'a str, Vec<TagExample<'a>>>,
 }
 
