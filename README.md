@@ -1,6 +1,6 @@
 # 🛥 VAporetto: POintwise pREdicTion based TOkenizer
 
-Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
+Vaporetto is a fast and lightweight pointwise prediction-based tokenizer.
 This repository includes both a Rust crate that provides APIs for Vaporetto and CLI frontends.
 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
@@ -21,15 +21,15 @@ Vaporetto provides three ways to generate tokenization models:
 
 #### Download Distribution Model
 
-The first is the simplest way, which is to download a model that has been trained by us.
-You can find models [here](https://github.com/daac-tools/vaporetto/releases).
+The first is the simplest way, which is to download a model we have trained. 
+Models are available [here](https://github.com/daac-tools/vaporetto/releases).
 
 We chose `bccwj-suw+unidic+tag`:
 ```
 % wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag.tar.xz
 ```
 
-Each file contains a model file and license terms, so you need to extract the downloaded file like the following command:
+Each file is a compressed file containing a model file and license terms, so you need to decompress the downloaded file as shown in the following command:
 ```
 % tar xf ./bccwj-suw+unidic+tag.tar.xz
 ```
@@ -46,7 +46,7 @@ The following will be output:
 
 #### Convert KyTea's Model
 
-The second is also a simple way, which is to convert a model that has been trained by KyTea.
+The second is also a simple way, which is to convert a model trained by KyTea.
 First of all, download the model of your choice from the [KyTea Models](http://www.phontron.com/kytea/model.html) page.
 
 We chose `jp-0.4.7-5.mod.gz`:
@@ -54,7 +54,7 @@ We chose `jp-0.4.7-5.mod.gz`:
 % wget http://www.phontron.com/kytea/download/model/jp-0.4.7-5.mod.gz
 ```
 
-Each model is compressed, so you need to decompress the downloaded model file like the following command:
+Each file is a compressed file, so you need to decompress the downloaded model file as shown in the following command:
 ```
 % gunzip ./jp-0.4.7-5.mod.gz
 ```
@@ -74,9 +74,9 @@ The following will be output:
 ヴェネツィア は イタリア に あ り ま す 。
 ```
 
-#### Train Your Own Model
+#### Train Your Model
 
-The third way, which is mainly for researchers, is to prepare your own training corpus and train your own tokenization models.
+The third way, which is mainly for researchers, is to prepare a training corpus and train your tokenization models.
 
 Vaporetto can train from two types of corpora: fully annotated corpora and partially annotated corpora.
 
@@ -88,7 +88,7 @@ This is the data in the form of spaces inserted into the boundaries of the token
 火星 猫 の 生態 の 調査 結果
 ```
 
-On the other hand, partially annotated corpora are corpora in which only some character boundaries are annotated.
+Besides, partially annotated corpora are corpora in which only some character boundaries are annotated.
 Each character boundary is annotated in the form of `|` (token boundary), `-` (not token boundary), and ` ` (unknown).
 Here is an example:
 
@@ -103,9 +103,10 @@ To train a model, use the following command:
 % cargo run --release -p train -- --model ./your.model.zst --tok path/to/full.txt --part path/to/part.txt --dict path/to/dict.txt --solver 5
 ```
 
-`--tok` argument specifies a fully annotated corpus, and `--part` argument specifies a partially annotated corpus.
-You can also specify a word dictionary with `--dict` argument.
+The `--tok` argument specifies a fully annotated corpus, and the `--part` argument specifies a partially annotated corpus.
+You can also specify a word dictionary with the `--dict` argument.
 A word dictionary is a file that lists words line by line and can be tagged as needed:
+
 ```
 トスカーナ
 パンツァーノ
@@ -122,7 +123,7 @@ You can specify all arguments above multiple times.
 
 Sometimes, your model will output different results than what you expect.
 For example, `外国人参政権` is split into wrong tokens in the following command.
-We use `--scores` option to show the score of each character boundary:
+We use the `--scores` option to show the score of each character boundary:
 ```
 % echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic.model.zst
 外国 人 参 政権 と 政権 交代
@@ -148,11 +149,11 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
 
 2. Edit the dictionary.
 
-   The dictionary is a csv file. Each row contains a string pattern, corresponding weight array, and a comment in the following order:
+   The dictionary is a CSV file. Each row contains a string pattern, a corresponding weight array, and a comment in the following order:
 
-   * `word` - A string pattern (usually, a word)
-   * `weights` - A weight array. When the string pattern is contained in the input string, these weights are added to character boundaries of the range of the found pattern.
-   * `comment` - A comment that does not affect the behaviour.
+   * `word` - A string pattern (usually a word)
+   * `weights` - A weight array. When the input string contains the pattern, these weights are added to the character boundaries of the range of the pattern found.
+   * `comment` - A comment that does not affect the behavior.
 
    Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
    ```diff
@@ -169,7 +170,7 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
    Note that Vaporetto uses 32-bit integers for the total weight, so you have to be careful about overflow.
 
    In addition, The dictionary cannot contain duplicated words.
-   When the word is already contained in the dictionary, you have to edit existing weights.
+   When the dictionary already contains the word, you have to edit existing weights.
 
 3. Replaces weight data of a model file
    ```
@@ -213,7 +214,7 @@ When the predictor cannot predict a tag using the model, the tag specified in th
 
 If the dataset contains tags, the `train` command automatically trains them.
 
-In prediction, tags are not predicted by default, so you have to specify `--predict-tags` argument to `predict` command if necessary.
+In prediction, tags are not predicted by default, so you have to specify the `--predict-tags` argument to the `predict` command if necessary.
 
 ## Speed Comparison of Various Tokenizers
 
@@ -222,11 +223,6 @@ Vaporetto is 8.7 times faster than KyTea.
 Details can be found [here](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison).
 
 ![](./figures/comparison.svg)
-
-## Disclaimer
-
-This software is developed by LegalForce, Inc.,
-but not an officially supported LegalForce product.
 
 ## License
 
@@ -242,12 +238,12 @@ at your option.
 ## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+for inclusion in work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## References
 
-Technical details of Vaporetto can be found in the following paper or the blog post:
+Technical details of Vaporetto are available in the following paper or the blog post:
 
  * Koichi Akabe, Shunsuke Kanda, Yusuke Oda, and Shinsuke Mori.
    [Vaporetto: an Efficient Japanese Tokenizer Based on Pointwise Prediction](https://www.anlp.jp/proceedings/annual_meeting/2022/pdf_dir/D2-5.pdf).
