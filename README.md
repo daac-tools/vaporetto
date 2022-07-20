@@ -105,7 +105,14 @@ To train a model, use the following command:
 
 The `--tok` argument specifies a fully annotated corpus, and the `--part` argument specifies a partially annotated corpus.
 You can also specify a word dictionary with the `--dict` argument.
-A word dictionary is a file with words per line.
+A word dictionary is a file that lists words line by line and can be tagged as needed:
+
+```
+トスカーナ
+パンツァーノ
+灯里/名詞-固有名詞-人名-名/アカリ
+形態/名詞-普通名詞-一般/ケータイ
+```
 
 The trainer does not accept empty lines.
 Therefore, remove all empty lines from the corpus before training.

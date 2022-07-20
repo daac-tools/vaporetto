@@ -46,6 +46,7 @@ pub struct TagTrainer<'a> {
     char_ngram_size: u8,
     _type_window_size: u8,
     type_ngram_size: u8,
+    default_tags: HashMap<&'a str, &'a [Option<Cow<'a, str>>]>,
     // Uses BTreeMap to improve compression ratio.
     examples: BTreeMap<&'a str, Vec<TagExample<'a>>>,
 }
@@ -56,12 +57,14 @@ impl<'a> TagTrainer<'a> {
         char_ngram_size: u8,
         type_window_size: u8,
         type_ngram_size: u8,
+        default_tags: HashMap<&'a str, &'a [Option<Cow<'a, str>>]>,
     ) -> Self {
         Self {
             _char_window_size: char_window_size,
             char_ngram_size,
             _type_window_size: type_window_size,
             type_ngram_size,
+            default_tags,
             examples: BTreeMap::new(),
         }
     }
@@ -295,7 +298,18 @@ impl<'a> TagTrainer<'a> {
         })
     }
 
-    pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
+    pub fn train(mut self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
+        for (token, tags) in self.default_tags {
+            if tags.iter().any(|t| t.is_some()) && !self.examples.contains_key(token) {
+                self.examples.insert(
+                    token,
+                    vec![TagExample {
+                        tags,
+                        features: vec![],
+                    }],
+                );
+            }
+        }
         let mut tag_models = vec![];
         liblinear::toggle_liblinear_stdout_output(false);
         let n_tokens = self.examples.len();

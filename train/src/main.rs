@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{prelude::*, stderr, BufReader};
 use std::path::PathBuf;
@@ -125,42 +125,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("# of sentences: {}", train_sents.len());
     }
 
-    let mut word_tag_map = BTreeMap::new();
-    let mut word_buf = Sentence::default();
+    let mut tag_dictionary = vec![];
+    let mut dictionary = BTreeSet::new();
     for path in args.dict {
         eprintln!("Loading {:?} ...", path);
         let f = File::open(path)?;
         let f = BufReader::new(f);
-        for (i, line) in f.lines().enumerate() {
-            if i % 100000 == 0 {
-                eprint!("# of words: {}\r", i);
+        for line in f.lines() {
+            if dictionary.len() % 10000 == 0 {
+                eprint!("# of words: {}\r", dictionary.len());
                 stderr().flush()?;
             }
-            let line = line?;
-            word_buf.update_tokenized(&line).unwrap();
-            for token in word_buf.iter_tokens() {
-                let word = token.surface().to_string();
-                let word = if args.no_norm {
-                    word
-                } else {
-                    fullwidth_filter.filter(&word)
-                };
-                word_tag_map.entry(word).or_insert_with(|| {
-                    token
-                        .tags()
-                        .iter()
-                        .map(|tag| tag.as_ref().map(|tag| tag.to_string()))
-                        .collect()
-                });
+            let s = Sentence::from_tokenized(&line?)?;
+            let s = if args.no_norm {
+                s
+            } else {
+                let new_line = fullwidth_filter.filter(s.as_raw_text());
+                let mut new_s = Sentence::from_raw(new_line)?;
+                new_s.boundaries_mut().clone_from_slice(s.boundaries());
+                new_s.reset_tags(s.n_tags());
+                new_s.tags_mut().clone_from_slice(s.tags());
+                new_s
+            };
+            for token in s.iter_tokens() {
+                dictionary.insert(token.surface().to_string());
             }
+            tag_dictionary.push(s);
         }
-        eprintln!("# of words: {}", word_tag_map.len());
+        eprintln!("# of words: {}", dictionary.len());
     }
-    let dictionary = word_tag_map.iter().map(|(word, _)| word.clone()).collect();
+    let dictionary = dictionary.into_iter().collect();
 
     eprintln!("Extracting into features...");
     let mut trainer = Trainer::new(
-        args.charw, args.charn, args.typew, args.typen, dictionary, args.dictn,
+        args.charw,
+        args.charn,
+        args.typew,
+        args.typen,
+        dictionary,
+        args.dictn,
+        &tag_dictionary,
     )?;
     for (i, s) in train_sents.iter().enumerate() {
         if i % 10000 == 0 {
@@ -177,12 +181,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut f = zstd::Encoder::new(File::create(args.model)?, 19)?;
     model.write(&mut f)?;
-    for tag_model in model.tag_models() {
-        word_tag_map.remove(tag_model.token());
-    }
-    let word_tag_map: Vec<(String, Vec<Option<String>>)> = word_tag_map.into_iter().collect();
-    let config = bincode::config::standard();
-    bincode::encode_into_std_write(&word_tag_map, &mut f, config)?;
     f.finish()?;
 
     Ok(())
