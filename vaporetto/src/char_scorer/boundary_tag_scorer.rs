@@ -23,9 +23,9 @@ use crate::utils::SplitMix64Builder;
 
 pub struct CharScorerBoundaryTag {
     #[cfg(not(feature = "charwise-pma"))]
-    pma: DoubleArrayAhoCorasick,
+    pma: DoubleArrayAhoCorasick<u32>,
     #[cfg(feature = "charwise-pma")]
-    pma: CharwiseDoubleArrayAhoCorasick,
+    pma: CharwiseDoubleArrayAhoCorasick<u32>,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
     tag_weight: Vec<Vec<HashMap<u32, WeightVector, SplitMix64Builder>>>,
 }
@@ -36,11 +36,9 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         #[cfg(not(feature = "charwise-pma"))]
-        let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         #[cfg(feature = "charwise-pma")]
-        let (pma, _) =
-            unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        let (pma, _) = unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         let tag_weight: Vec<Vec<Vec<(u32, WeightVector)>>> = Decode::decode(decoder)?;
         let tag_weight = tag_weight
             .into_iter()
@@ -56,7 +54,7 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
 
 impl Encode for CharScorerBoundaryTag {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize_to_vec();
+        let pma_data = self.pma.serialize();
         Encode::encode(&pma_data, encoder)?;
         Encode::encode(&self.weights, encoder)?;
         let tag_weight: Vec<Vec<Vec<_>>> = self
@@ -142,17 +140,19 @@ impl CharScorerBoundaryTag {
         for m in it {
             debug_assert!(m.end() != 0 && sentence.text.is_char_boundary(m.end()));
             let end = unsafe { sentence.str_to_char_pos(m.end()) };
-            debug_assert!(m.value() < self.weights.len());
-            if let Some(weight) = unsafe { self.weights.get_unchecked(m.value()).as_ref() } {
+            debug_assert!(usize::try_from(m.value()).unwrap() < self.weights.len());
+            if let Some(weight) = unsafe {
+                self.weights
+                    .get_unchecked(usize::try_from(m.value()).unwrap())
+                    .as_ref()
+            } {
                 weight.add_score(
                     (end + sentence.score_padding - 1) as isize,
                     &mut sentence.boundary_scores,
                 );
             }
             debug_assert!(end as usize <= sentence.char_pma_states.len());
-            unsafe {
-                *sentence.char_pma_states.get_unchecked_mut(end as usize - 1) = m.value() as u32
-            };
+            unsafe { *sentence.char_pma_states.get_unchecked_mut(end as usize - 1) = m.value() };
         }
     }
 
