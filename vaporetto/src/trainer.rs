@@ -145,11 +145,9 @@ impl<'a> BoundaryFeature<'a> {
 #[derive(Clone, Copy)]
 struct DummyValue;
 
-impl TryFrom<usize> for DummyValue {
-    type Error = ();
-
-    fn try_from(_: usize) -> Result<Self, Self::Error> {
-        Ok(Self)
+impl From<usize> for DummyValue {
+    fn from(_: usize) -> Self {
+        Self
     }
 }
 
