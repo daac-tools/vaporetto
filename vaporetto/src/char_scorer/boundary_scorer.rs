@@ -33,8 +33,7 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundary {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         #[cfg(not(feature = "charwise-pma"))]
-        let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         #[cfg(feature = "charwise-pma")]
         let (pma, _) = unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         Ok(Self {
