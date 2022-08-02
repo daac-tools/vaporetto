@@ -20,7 +20,7 @@ pub struct TypeScorerBoundaryCache {
 
 impl TypeScorerBoundaryCache {
     pub fn new(model: NgramModel<Vec<u8>>, window_size: u8) -> Result<Self> {
-        let pma = DoubleArrayAhoCorasick::new(model.0.iter().map(|d| &d.ngram))
+        let pma = DoubleArrayAhoCorasick::<u32>::new(model.0.iter().map(|d| &d.ngram))
             .map_err(|_| VaporettoError::invalid_model("invalid character type n-grams"))?;
         let mut weights = vec![];
         for d in model.0 {
@@ -39,7 +39,9 @@ impl TypeScorerBoundaryCache {
             }
             let mut y = 0;
             for m in pma.find_overlapping_iter(&sequence) {
-                if let Some(w) = weights[m.value()].get(usize::from(sequence_size) - m.end()) {
+                if let Some(w) = weights[usize::try_from(m.value()).unwrap()]
+                    .get(usize::from(sequence_size) - m.end())
+                {
                     y += *w;
                 }
             }

@@ -15,7 +15,7 @@ use crate::sentence::Sentence;
 use crate::type_scorer::TypeWeightMerger;
 
 pub struct TypeScorerBoundary {
-    pma: DoubleArrayAhoCorasick,
+    pma: DoubleArrayAhoCorasick<u32>,
     weights: Vec<PositionalWeight<WeightVector>>,
 }
 
@@ -24,8 +24,7 @@ impl<'de> BorrowDecode<'de> for TypeScorerBoundary {
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
-        let (pma, _) =
-            unsafe { DoubleArrayAhoCorasick::deserialize_from_slice_unchecked(pma_data) };
+        let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         Ok(Self {
             pma,
             weights: Decode::decode(decoder)?,
@@ -35,7 +34,7 @@ impl<'de> BorrowDecode<'de> for TypeScorerBoundary {
 
 impl Encode for TypeScorerBoundary {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize_to_vec();
+        let pma_data = self.pma.serialize();
         Encode::encode(&pma_data, encoder)?;
         Encode::encode(&self.weights, encoder)?;
         Ok(())
@@ -68,8 +67,11 @@ impl TypeScorerBoundary {
             .find_overlapping_no_suffix_iter(&sentence.char_types)
         {
             debug_assert!(m.end() != 0 && m.end() <= sentence.char_types.len());
-            debug_assert!(m.value() < self.weights.len());
-            let weight = unsafe { self.weights.get_unchecked(m.value()) };
+            debug_assert!(usize::try_from(m.value()).unwrap() < self.weights.len());
+            let weight = unsafe {
+                self.weights
+                    .get_unchecked(usize::try_from(m.value()).unwrap())
+            };
             weight.add_score(
                 (m.end() + sentence.score_padding - 1) as isize,
                 &mut sentence.boundary_scores,

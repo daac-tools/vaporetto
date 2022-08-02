@@ -142,6 +142,17 @@ impl<'a> BoundaryFeature<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
+struct DummyValue;
+
+impl TryFrom<usize> for DummyValue {
+    type Error = ();
+
+    fn try_from(_: usize) -> Result<Self, Self::Error> {
+        Ok(Self)
+    }
+}
+
 /// Trainer.
 ///
 /// # Examples
@@ -176,7 +187,7 @@ pub struct Trainer<'a> {
     type_ngram_size: u8,
     feature_ids: HashMap<BoundaryFeature<'a>, u32>,
     dict_words: Vec<String>,
-    dict_pma: Option<DoubleArrayAhoCorasick>,
+    dict_pma: Option<DoubleArrayAhoCorasick<DummyValue>>,
     dict_word_max_len: u8,
     xs: Vec<Vec<(u32, f64)>>,
     ys: Vec<f64>,

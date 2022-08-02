@@ -14,7 +14,7 @@ categories = ["text-processing", "no-std"]
 
 [dependencies]
 bincode = { version = "2.0.0-rc.1", default-features = false, features = ["alloc", "derive"] }  # MIT
-daachorse = { version = "1.0.0", default-features = false }  # MIT or Apache-2.0
+daachorse = "1.0.0"  # MIT or Apache-2.0
 hashbrown = "0.12.1"  # MIT or Apache-2.0
 
 liblinear = { version = "1", optional = true }  # MIT
