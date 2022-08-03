@@ -11,7 +11,6 @@ repository = "https://github.com/daac-tools/vaporetto"
 readme = "README.md"
 keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
-resolver = "2"
 
 [dependencies]
 hashbrown = "0.12.1"  # MIT or Apache-2.0
