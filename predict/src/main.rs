@@ -104,6 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = String::new();
     let mut s = Sentence::default();
     if args.no_norm {
+        #[allow(clippy::significant_drop_in_scrutinee)]
         for line in io::stdin().lock().lines() {
             let line = line?;
             if s.update_raw(line).is_ok() {
@@ -123,6 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     } else {
         let mut s_orig = Sentence::default();
+        #[allow(clippy::significant_drop_in_scrutinee)]
         for line in io::stdin().lock().lines() {
             let line = line?;
             let line_preproc = pre_filter.filter(&line);

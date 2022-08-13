@@ -99,6 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Start tokenization");
 
     let mut results = vec![];
+    #[allow(clippy::significant_drop_in_scrutinee)]
     for line in stdin().lock().lines() {
         let line = line?;
         if line.is_empty() {
