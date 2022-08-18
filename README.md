@@ -245,7 +245,7 @@ dual licensed as above, without any additional terms or conditions.
 
 Technical details of Vaporetto are available in the following paper or the blog post:
 
- * Koichi Akabe, Shunsuke Kanda, Yusuke Oda, and Shinsuke Mori.
-   [Vaporetto: an Efficient Japanese Tokenizer Based on Pointwise Prediction](https://www.anlp.jp/proceedings/annual_meeting/2022/pdf_dir/D2-5.pdf).
+ * 赤部 晃一, 神田 峻介, 小田 悠介, 森 信介. [Vaporetto: 点予測法に基づく高速な日本語トークナイザ](https://www.anlp.jp/proceedings/annual_meeting/2022/pdf_dir/D2-5.pdf). 言語処理学会第28回年次大会 (NLP2022). 浜松. 2022年3月.
+   .
    NLP2022 (in Japanese). Hamamatsu. Mar 2022.
  * [Blog post](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (in Japanese)
