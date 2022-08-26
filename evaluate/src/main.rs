@@ -106,10 +106,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let mut s = Sentence::from_tokenized(&line)?;
         let ref_boundaries = s.boundaries().to_vec();
-        let mut ref_tags = vec![];
-        for i in 0..=ref_boundaries.len() {
-            ref_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
-        }
+
+        let ref_tags = if args.predict_tags {
+            let mut ref_tags = vec![];
+            for i in 0..=ref_boundaries.len() {
+                ref_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
+            }
+            ref_tags
+        } else {
+            vec![vec![]; ref_boundaries.len() + 1]
+        };
         if !args.no_norm {
             let new_line = fullwidth_filter.filter(s.as_raw_text());
             s = Sentence::from_raw(new_line)?
