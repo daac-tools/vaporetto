@@ -61,6 +61,10 @@ struct Args {
     /// Buffers this tokenizer's output.
     #[clap(long, action)]
     buffered_out: bool,
+
+    /// Do not tokenize
+    #[clap(long, action)]
+    no_tokenize: bool,
 }
 
 fn print_scores(s: &Sentence, out: &mut dyn Write) -> Result<(), Box<dyn std::error::Error>> {
@@ -106,8 +110,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.no_norm {
         for line in io::stdin().lock().lines() {
             let line = line?;
-            if s.update_raw(line).is_ok() {
-                predictor.predict(&mut s);
+            let r = if args.no_tokenize {
+                s.update_tokenized(&line)
+            } else {
+                s.update_raw(line)
+            };
+            if r.is_ok() {
+                if args.no_tokenize {
+                    let boundaries = s.boundaries().to_vec();
+                    predictor.predict(&mut s);
+                    s.boundaries_mut().copy_from_slice(&boundaries);
+                } else {
+                    predictor.predict(&mut s);
+                }
                 post_filters.iter().for_each(|filter| filter.filter(&mut s));
                 if args.predict_tags {
                     s.fill_tags();
@@ -125,14 +140,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut s_orig = Sentence::default();
         for line in io::stdin().lock().lines() {
             let line = line?;
-            let line_preproc = pre_filter.filter(&line);
-            if s.update_raw(line_preproc).is_ok() {
-                predictor.predict(&mut s);
+            let r = if args.no_tokenize {
+                s_orig.update_tokenized(&line)
+            } else {
+                s_orig.update_raw(line)
+            };
+            if r.is_ok() {
+                let line_preproc = pre_filter.filter(s_orig.as_raw_text());
+                s.update_raw(line_preproc).unwrap();
+                if args.no_tokenize {
+                    let boundaries = s_orig.boundaries().to_vec();
+                    predictor.predict(&mut s);
+                    s.boundaries_mut().copy_from_slice(&boundaries);
+                } else {
+                    predictor.predict(&mut s);
+                }
                 post_filters.iter().for_each(|filter| filter.filter(&mut s));
                 if args.predict_tags {
                     s.fill_tags();
                 }
-                s_orig.update_raw(line)?;
                 s_orig.reset_tags(s.n_tags());
                 s_orig.boundaries_mut().copy_from_slice(s.boundaries());
                 s_orig.tags_mut().clone_from_slice(s.tags());
