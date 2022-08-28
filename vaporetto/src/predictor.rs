@@ -278,22 +278,35 @@ impl TagPredictor {
     #[inline]
     pub fn predict<'a>(&'a self, scores: &[i32], tags: &mut [Option<Cow<'a, str>>]) {
         let mut offset = 0;
+        let mut first = true;
         for (tag_cands, tag) in self.tags.iter().zip(tags) {
+            if !first {
+                print!("|");
+            }
+            first = false;
             if tag_cands.len() >= 2 {
                 let mut idx = 0;
                 let mut max_score = i32::MIN;
+                let mut first = true;
                 for (i, &s) in scores[offset..offset + tag_cands.len()].iter().enumerate() {
+                    if !first {
+                        print!(",");
+                    }
+                    first = false;
                     if s > max_score {
                         idx = i;
                         max_score = s;
                     }
+                    print!("{}:{s}", tag_cands[i]);
                 }
                 tag.replace(Cow::Borrowed(&tag_cands[idx]));
                 offset += tag_cands.len();
             } else {
+                print!("{}:0", tag_cands[0]);
                 *tag = tag_cands.first().map(|t| Cow::Borrowed(t.as_str()));
             }
         }
+        println!();
     }
 }
 
