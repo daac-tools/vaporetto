@@ -2,7 +2,7 @@
 name = "vaporetto"
 version = "0.5.1"
 edition = "2021"
-rust-version = "1.58"
+rust-version = "1.60"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto: a pointwise prediction based tokenizer"
 license = "MIT OR Apache-2.0"
