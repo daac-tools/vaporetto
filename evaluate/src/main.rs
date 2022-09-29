@@ -46,26 +46,26 @@ enum EvaluationMetric {
 )]
 struct Args {
     /// The model file to use when analyzing text
-    #[clap(long, action)]
+    #[clap(long)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[clap(long, action)]
+    #[clap(long)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[clap(long, action)]
+    #[clap(long)]
     wsconst: Vec<WsConst>,
 
     /// Do not normalize input strings before prediction.
-    #[clap(long, action)]
+    #[clap(long)]
     no_norm: bool,
 
     /// Evaluation metric: {char, word}.
     /// char: evaluates each charactor boundary.
     /// word: evaluates each word using Nagata's method.
-    #[clap(long, action, default_value = "char")]
+    #[clap(long, default_value = "char")]
     metric: EvaluationMetric,
 }
 

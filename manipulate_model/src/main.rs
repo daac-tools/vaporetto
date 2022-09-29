@@ -12,19 +12,19 @@ use vaporetto::{Model, WordWeightRecord};
 )]
 struct Args {
     /// Input path of the model file
-    #[clap(long, action)]
+    #[clap(long)]
     model_in: PathBuf,
 
     /// Output path of the model file
-    #[clap(long, action)]
+    #[clap(long)]
     model_out: Option<PathBuf>,
 
     /// Output a dictionary contained in the model.
-    #[clap(long, action)]
+    #[clap(long)]
     dump_dict: Option<PathBuf>,
 
     /// Replace a dictionary if the argument is specified.
-    #[clap(long, action)]
+    #[clap(long)]
     replace_dict: Option<PathBuf>,
 }
 
