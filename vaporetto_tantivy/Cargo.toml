@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_tantivy"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.60"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
@@ -13,8 +13,8 @@ keywords = ["japanese", "tokenizer", "tantivy"]
 categories = ["text-processing"]
 
 [dependencies]
-vaporetto = { path = "../vaporetto", version = "=0.5.1" }  # MIT or Apache-2.0
-vaporetto_rules = { path = "../vaporetto_rules", version = "=0.5.1" }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "=0.6.0" }  # MIT or Apache-2.0
+vaporetto_rules = { path = "../vaporetto_rules", version = "=0.6.0" }  # MIT or Apache-2.0
 tantivy = "0.18"  # MIT
 
 [dev-dependencies]
