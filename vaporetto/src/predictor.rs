@@ -50,6 +50,7 @@ impl Decode for WeightVector {
         Ok(Self::from(weight))
     }
 }
+bincode::impl_borrow_decode!(WeightVector);
 
 impl Encode for WeightVector {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
@@ -315,13 +316,13 @@ impl<'de> BorrowDecode<'de> for PredictorData {
         let config = bincode::config::standard();
         let char_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
         let char_scorer = if let Some(data) = char_scorer_data {
-            Some(bincode::decode_from_slice(data, config)?.0)
+            Some(bincode::borrow_decode_from_slice(data, config)?.0)
         } else {
             None
         };
         let type_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
         let type_scorer = if let Some(data) = type_scorer_data {
-            Some(bincode::decode_from_slice(data, config)?.0)
+            Some(bincode::borrow_decode_from_slice(data, config)?.0)
         } else {
             None
         };
@@ -617,7 +618,7 @@ impl Predictor {
     pub unsafe fn deserialize_from_slice_unchecked(data: &[u8]) -> Result<(Self, &[u8])> {
         let config = bincode::config::standard();
         // Deserialization is unsafe because the automaton will not be verified.
-        let (predictor_data, size) = bincode::decode_from_slice(data, config)?;
+        let (predictor_data, size) = bincode::borrow_decode_from_slice(data, config)?;
         Ok((Self(predictor_data), &data[size..]))
     }
 }

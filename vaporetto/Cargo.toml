@@ -13,7 +13,7 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
 
 [dependencies]
-bincode = { version = "2.0.0-rc.1", default-features = false, features = ["alloc", "derive"] }  # MIT
+bincode = { version = "2.0.0-rc.2", default-features = false, features = ["alloc", "derive"] }  # MIT
 daachorse = "1.0.0"  # MIT or Apache-2.0
 hashbrown = "0.12.3"  # MIT or Apache-2.0
 
@@ -27,7 +27,7 @@ alloc = []
 std = ["alloc", "bincode/std"]
 cache-type-score = ["alloc"]
 fix-weight-length = ["alloc"]
-tag-prediction = ["alloc", "bincode/atomic"]
+tag-prediction = ["alloc"]
 charwise-pma = ["alloc"]
 
 kytea = ["std"]
