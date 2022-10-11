@@ -151,8 +151,8 @@ impl CharScorerBoundaryTag {
                     &mut sentence.boundary_scores,
                 );
             }
-            debug_assert!(end as usize <= sentence.char_pma_states.len());
-            unsafe { *sentence.char_pma_states.get_unchecked_mut(end as usize - 1) = m.value() };
+            debug_assert!(end <= sentence.char_pma_states.len());
+            unsafe { *sentence.char_pma_states.get_unchecked_mut(end - 1) = m.value() };
         }
     }
 
