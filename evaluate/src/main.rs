@@ -157,10 +157,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let precision = f64::from(n_tp) / f64::from(n_tp + n_fp);
             let recall = f64::from(n_tp) / f64::from(n_tp + n_fn);
             let f1 = 2. * precision * recall / (precision + recall);
-            println!("Precision: {}", precision);
-            println!("Recall: {}", recall);
-            println!("F1: {}", f1);
-            println!("TP: {}, TN: {}, FP: {}, FN: {}", n_tp, n_tn, n_fp, n_fn);
+            println!("Precision: {precision}");
+            println!("Recall: {recall}");
+            println!("F1: {f1}");
+            println!("TP: {n_tp}, TN: {n_tn}, FP: {n_fp}, FN: {n_fn}");
         }
         EvaluationMetric::Word => {
             // Reference:
@@ -201,9 +201,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let precision = f64::from(n_cor) / f64::from(n_sys);
             let recall = f64::from(n_cor) / f64::from(n_ref);
             let f1 = 2. * precision * recall / (precision + recall);
-            println!("Precision: {}", precision);
-            println!("Recall: {}", recall);
-            println!("F1: {}", f1);
+            println!("Precision: {precision}");
+            println!("Recall: {recall}");
+            println!("F1: {f1}");
         }
     }
 

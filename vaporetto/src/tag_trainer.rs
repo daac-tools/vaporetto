@@ -181,7 +181,7 @@ impl<'a> TagTrainer<'a> {
 
             let mut builder = liblinear::Builder::new();
             let training_input = liblinear::util::TrainingInput::from_sparse_features(ys, xs)
-                .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {:?}", e)))?;
+                .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {e:?}")))?;
             builder.problem().input_data(training_input).bias(1.0);
             builder
                 .parameters()
@@ -321,9 +321,9 @@ impl<'a> TagTrainer<'a> {
                 cost,
                 solver,
             )?);
-            eprint!("Tags: {}/{}\r", i, n_tokens);
+            eprint!("Tags: {i}/{n_tokens}\r");
         }
-        eprintln!("Tags: {}/{}", n_tokens, n_tokens);
+        eprintln!("Tags: {n_tokens}/{n_tokens}");
         liblinear::toggle_liblinear_stdout_output(true);
         Ok(tag_models)
     }

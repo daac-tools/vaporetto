@@ -77,12 +77,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut train_sents = vec![];
 
     for path in args.tok {
-        eprintln!("Loading {:?} ...", path);
+        eprintln!("Loading {path:?} ...");
         let f = File::open(path)?;
         let f = BufReader::new(f);
         for (i, line) in f.lines().enumerate() {
             if i % 10000 == 0 {
-                eprint!("# of sentences: {}\r", i);
+                eprint!("# of sentences: {i}\r");
                 stderr().flush()?;
             }
             let s = Sentence::from_tokenized(&line?)?;
@@ -101,12 +101,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("# of sentences: {}", train_sents.len());
     }
     for path in args.part {
-        eprintln!("Loading {:?} ...", path);
+        eprintln!("Loading {path:?} ...");
         let f = File::open(path)?;
         let f = BufReader::new(f);
         for (i, line) in f.lines().enumerate() {
             if i % 10000 == 0 {
-                eprint!("# of sentences: {}\r", i);
+                eprint!("# of sentences: {i}\r");
                 stderr().flush()?;
             }
             let s = Sentence::from_partial_annotation(&line?)?;
@@ -128,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut tag_dictionary = vec![];
     let mut dictionary = BTreeSet::new();
     for path in args.dict {
-        eprintln!("Loading {:?} ...", path);
+        eprintln!("Loading {path:?} ...");
         let f = File::open(path)?;
         let f = BufReader::new(f);
         for line in f.lines() {

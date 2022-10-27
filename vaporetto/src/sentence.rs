@@ -584,7 +584,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
                     } else {
                         return Err(VaporettoError::invalid_argument(
                             "partial_annotation_text",
-                            format!("contains an invalid boundary character: '{}'", c),
+                            format!("contains an invalid boundary character: '{c}'"),
                         ));
                     }
                 }

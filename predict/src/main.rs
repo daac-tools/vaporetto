@@ -67,7 +67,7 @@ fn print_scores(s: &Sentence, out: &mut dyn Write) -> Result<(), Box<dyn std::er
     let mut chars_iter = s.as_raw_text().chars();
     let mut prev_c = chars_iter.next().unwrap();
     for (i, (c, score)) in chars_iter.zip(s.boundary_scores()).enumerate() {
-        writeln!(out, "{}:{}{} {}", i, prev_c, c, score)?;
+        writeln!(out, "{i}:{prev_c}{c} {score}")?;
         prev_c = c;
     }
     writeln!(out)?;
@@ -116,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     s.fill_tags();
                 }
                 s.write_tokenized_text(&mut buf);
-                writeln!(out, "{}", buf)?;
+                writeln!(out, "{buf}")?;
                 if args.scores {
                     print_scores(&s, &mut *out)?;
                 }
@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 s_orig.boundaries_mut().copy_from_slice(s.boundaries());
                 s_orig.tags_mut().clone_from_slice(s.tags());
                 s_orig.write_tokenized_text(&mut buf);
-                writeln!(out, "{}", buf)?;
+                writeln!(out, "{buf}")?;
                 if args.scores {
                     print_scores(&s, &mut *out)?;
                 }

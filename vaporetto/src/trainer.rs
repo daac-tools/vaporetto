@@ -352,7 +352,7 @@ impl<'a> Trainer<'a> {
     pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Model> {
         let mut builder = liblinear::Builder::new();
         let training_input = liblinear::util::TrainingInput::from_sparse_features(self.ys, self.xs)
-            .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {:?}", e)))?;
+            .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {e:?}")))?;
         builder.problem().input_data(training_input).bias(1.0);
         builder
             .parameters()
