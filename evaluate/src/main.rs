@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{prelude::*, stdin};
+use std::io::{self, BufRead};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -99,10 +99,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Start tokenization");
 
     let mut results = vec![];
-    // FIXME: The following clippy annotation is a workaround for the following bug:
-    // https://github.com/rust-lang/rust-clippy/issues/9135
-    #[allow(clippy::significant_drop_in_scrutinee)]
-    for line in stdin().lock().lines() {
+    let lines = io::stdin().lock().lines();
+    for line in lines {
         let line = line?;
         if line.is_empty() {
             continue;
