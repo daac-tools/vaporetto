@@ -24,82 +24,43 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install ${{ matrix.rust }}
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          override: true
-          profile: minimal
-          components: rustfmt, clippy
+        run: |
+          rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt,clippy
+          rustup default ${{ matrix.rust }}
 
       - name: Run cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --features kytea,train
+        run: cargo check --features kytea,train
 
       - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
 
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
         continue-on-error: ${{ matrix.rust == 'nightly' }}
-        with:
-          command: clippy
-          args: -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr
+        run: cargo clippy -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr
 
       - name: Run cargo test (workspace)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --workspace
+        run: cargo test --release --workspace
 
       - name: Run cargo test (vaporetto / no-default-features)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features alloc
+        run: cargo test --release -p vaporetto --no-default-features --features alloc
 
       - name: Run cargo test (vaporetto / features kytea)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features kytea
+        run: cargo test --release -p vaporetto --no-default-features --features kytea
 
       - name: Run cargo test (vaporetto / features train)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features train
+        run: cargo test --release -p vaporetto --no-default-features --features train
 
       - name: Run cargo test (vaporetto / features cache-type-score)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features cache-type-score
+        run: cargo test --release -p vaporetto --no-default-features --features cache-type-score
 
       - name: Run cargo test (vaporetto / features fix-weight-length)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features fix-weight-length
+        run: cargo test --release -p vaporetto --no-default-features --features fix-weight-length
 
       - name: Run cargo test (vaporetto / features tag-prediction)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features tag-prediction
+        run: cargo test --release -p vaporetto --no-default-features --features tag-prediction
 
       - name: Run cargo test (vaporetto / features charwise-daachorse)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features charwise-pma
+        run: cargo test --release -p vaporetto --no-default-features --features charwise-pma
 
       - name: Run cargo test (vaporetto / features std)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release -p vaporetto --no-default-features --features std
+        run: cargo test --release -p vaporetto --no-default-features --features std
