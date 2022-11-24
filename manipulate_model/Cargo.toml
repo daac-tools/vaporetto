@@ -8,4 +8,4 @@ clap = { version = "4.0.2", features = ["derive"] }  # MIT or Apache-2.0
 csv = "1.1"  # Unlicense or MIT
 serde = { version = "1.0", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
-zstd = "0.11"  # MIT
+zstd = "0.12"  # MIT
