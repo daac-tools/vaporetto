@@ -21,7 +21,7 @@ Vaporetto provides three ways to generate tokenization models:
 
 #### Download Distribution Model
 
-The first is the simplest way, which is to download a model we have trained. 
+The first is the simplest way, which is to download a model we have trained.
 Models are available [here](https://github.com/daac-tools/vaporetto/releases).
 
 We chose `bccwj-suw+unidic+tag`:
@@ -237,9 +237,7 @@ at your option.
 
 ## Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+See [the guidelines](./CONTRIBUTING.md).
 
 ## References
 
