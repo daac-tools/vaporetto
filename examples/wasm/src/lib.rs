@@ -146,7 +146,7 @@ impl Component for App {
             .callback(move |m| {
                 link.send_message(Msg::WorkerResult(m));
             })
-            .spawn("https://daac-tools.github.io/vaporetto/vaporetto_worker.js");
+            .spawn("https://vbkaisetsu.github.io/vaporetto/vaporetto_worker.js");
 
         // Sends a dummy message.
         // The first response indicates that the worker is ready.
