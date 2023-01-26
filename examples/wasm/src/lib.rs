@@ -148,7 +148,7 @@ impl Component for App {
             })
             .spawn("https://daac-tools.github.io/vaporetto/vaporetto_worker.js");
 
-        // Send a dummy message.
+        // Sends a dummy message.
         // The first response indicates that the worker is ready.
         bridge.send(String::new());
 
