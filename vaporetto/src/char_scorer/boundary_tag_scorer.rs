@@ -128,7 +128,7 @@ impl CharScorerBoundaryTag {
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
-    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+    pub fn add_scores(&self, sentence: &mut Sentence) {
         sentence.char_pma_states.clear();
         sentence.char_pma_states.resize(sentence.len(), u32::MAX);
         #[cfg(not(feature = "charwise-pma"))]
