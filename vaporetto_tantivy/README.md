@@ -1,7 +1,8 @@
 # vaporetto_tantivy
 
-Vaporetto is a fast and lightweight pointwise prediction based tokenizer.
-vaporetto_tantivy is a crate to use Vaporetto in [Tantivy](https://github.com/quickwit-oss/tantivy).
+[Vaporetto](https://github.com/daac-tools/vaporetto) is a fast and lightweight pointwise prediction
+based tokenizer. vaporetto_tantivy is a crate to use Vaporetto in
+[Tantivy](https://github.com/quickwit-oss/tantivy).
 
 # Example
 
