@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bincode = "2.0.0-rc.2"  # MIT
 gloo-worker = "0.2.1"  # MIT or Apache-2.0
-once_cell = "1.17.0"  # MIT or Apache-2.0
 ouroboros = "0.15.5"  # MIT or Apache-2.0
 ruzstd = "0.3.0"  # MIT
 serde = "1"  # MIT or Apache-2.0
