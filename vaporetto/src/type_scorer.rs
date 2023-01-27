@@ -144,7 +144,7 @@ impl TypeScorer {
     }
 
     #[inline]
-    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+    pub fn add_scores(&self, sentence: &mut Sentence) {
         match self {
             Self::Boundary(scorer) => scorer.add_scores(sentence),
 

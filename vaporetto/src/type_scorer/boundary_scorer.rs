@@ -61,7 +61,7 @@ impl TypeScorerBoundary {
 
     #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
-    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+    pub fn add_scores(&self, sentence: &mut Sentence) {
         for m in self
             .pma
             .find_overlapping_no_suffix_iter(&sentence.char_types)
