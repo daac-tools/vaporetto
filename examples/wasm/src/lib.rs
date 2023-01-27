@@ -1,211 +1,213 @@
 pub mod text_input;
 pub mod token_view;
 
-use std::cell::RefCell;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::rc::Rc;
 
-use gloo_worker::{Bridge, Bridged, HandlerId, Public, WorkerLink};
+use gloo_worker::{HandlerId, Spawnable, Worker, WorkerBridge, WorkerScope};
 use serde::{Deserialize, Serialize};
-use yew::{html, Component, Context, Html};
-
-use once_cell::sync::Lazy;
 use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
+use yew::{html, Component, Context, Html};
 
 use crate::text_input::TextInput;
 use crate::token_view::TokenView;
 
-static PREDICTOR: Lazy<Predictor> = Lazy::new(|| {
-    let mut f = Cursor::new(include_bytes!("bccwj-suw+unidic+tag-huge.model.zst"));
-    let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
-    let mut buff = vec![];
-    decoder.read_to_end(&mut buff).unwrap();
-    let (model, _) = Model::read_slice(&buff).unwrap();
-    Predictor::new(model, true).unwrap()
-});
-
-pub enum Message {
-    SetText(String),
-    WorkerMessage(WorkerOutput),
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct Token {
+    pub surface: String,
+    pub tags: Vec<String>,
 }
 
-pub struct Worker {
-    link: WorkerLink<Self>,
-    sentence1: RefCell<Sentence<'static, 'static>>,
-    sentence2: RefCell<Sentence<'static, 'static>>,
+pub struct WorkerMessage {
+    pub id: HandlerId,
+    pub output: (Vec<Token>, usize),
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct WorkerInput {
-    pub text: String,
+#[ouroboros::self_referencing]
+pub struct VaporettoWorker {
+    predictor: Predictor,
+    wsconst_g: ConcatGraphemeClustersFilter,
+    wsconst_d: KyteaWsConstFilter,
+
+    #[borrows(predictor)]
+    #[covariant]
+    sentence_orig: Sentence<'static, 'this>,
+    #[borrows(predictor)]
+    #[covariant]
+    sentence_filtered: Sentence<'static, 'this>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct WorkerOutput {
-    pub tokens: Vec<(String, Vec<String>)>,
-    pub n_tags: usize,
-}
+impl Worker for VaporettoWorker {
+    type Input = String;
+    type Message = WorkerMessage;
+    type Output = (Vec<Token>, usize);
 
-impl gloo_worker::Worker for Worker {
-    type Input = WorkerInput;
-    type Message = ();
-    type Output = WorkerOutput;
-    type Reach = Public<Self>;
-
-    fn create(link: WorkerLink<Self>) -> Self {
-        Lazy::force(&PREDICTOR);
-        Self {
-            link,
-            sentence1: RefCell::new(Sentence::default()),
-            sentence2: RefCell::new(Sentence::default()),
+    fn create(_scope: &WorkerScope<Self>) -> Self {
+        let model_data = include_bytes!("bccwj-suw+unidic+tag-huge.model.zst");
+        let mut decoder = ruzstd::StreamingDecoder::new(model_data.as_slice()).unwrap();
+        let mut buff = vec![];
+        decoder.read_to_end(&mut buff).unwrap();
+        let (model, _) = Model::read_slice(&buff).unwrap();
+        VaporettoWorkerBuilder {
+            predictor: Predictor::new(model, true).unwrap(),
+            wsconst_g: ConcatGraphemeClustersFilter,
+            wsconst_d: KyteaWsConstFilter::new(CharacterType::Digit),
+            sentence_orig_builder: |_| Sentence::default(),
+            sentence_filtered_builder: |_| Sentence::default(),
         }
+        .build()
     }
 
-    fn update(&mut self, _msg: Self::Message) {}
+    fn update(&mut self, scope: &WorkerScope<Self>, msg: Self::Message) {
+        let WorkerMessage { id, output } = msg;
+        scope.respond(id, output);
+    }
 
-    fn handle_input(&mut self, msg: Self::Input, id: HandlerId) {
+    fn received(&mut self, scope: &WorkerScope<Self>, msg: Self::Input, id: HandlerId) {
         let pre_filter = KyteaFullwidthFilter;
+        let filtered_text = pre_filter.filter(&msg);
 
-        let sentence_orig = &mut self.sentence1.borrow_mut();
-        let sentence_filtered = &mut self.sentence2.borrow_mut();
-
-        if msg.text.is_empty() {
-            sentence_orig.update_raw(" ").unwrap();
-        } else {
-            sentence_orig.update_raw(msg.text).unwrap();
+        if msg.is_empty() {
+            scope.send_message(WorkerMessage {
+                id,
+                output: (vec![], 0),
+            });
+            return;
         }
-        let filtered_text = pre_filter.filter(sentence_orig.as_raw_text());
-        sentence_filtered.update_raw(filtered_text).unwrap();
 
-        PREDICTOR.predict(sentence_filtered);
+        self.with_mut(|fields| {
+            fields.sentence_filtered.update_raw(filtered_text).unwrap();
+            fields.predictor.predict(fields.sentence_filtered);
+            fields.wsconst_g.filter(fields.sentence_filtered);
+            fields.wsconst_d.filter(fields.sentence_filtered);
+            fields.sentence_filtered.fill_tags();
 
-        let wsconst_g = ConcatGraphemeClustersFilter;
-        let wsconst_d = KyteaWsConstFilter::new(CharacterType::Digit);
-        wsconst_g.filter(sentence_filtered);
-        wsconst_d.filter(sentence_filtered);
+            fields.sentence_orig.update_raw(msg).unwrap();
 
-        sentence_filtered.fill_tags();
-        let n_tags = sentence_filtered.n_tags();
+            let n_tags = fields.sentence_filtered.n_tags();
+            fields
+                .sentence_orig
+                .boundaries_mut()
+                .copy_from_slice(fields.sentence_filtered.boundaries());
+            fields.sentence_orig.reset_tags(n_tags);
+            fields
+                .sentence_orig
+                .tags_mut()
+                .clone_from_slice(fields.sentence_filtered.tags());
+        });
 
-        sentence_orig
-            .boundaries_mut()
-            .copy_from_slice(sentence_filtered.boundaries());
-        sentence_orig.reset_tags(n_tags);
-        sentence_orig
-            .tags_mut()
-            .clone_from_slice(sentence_filtered.tags());
-
-        let tokens = sentence_orig
+        let tokens = self
+            .borrow_sentence_orig()
             .iter_tokens()
-            .map(|token| {
-                (
-                    token.surface().to_string(),
-                    token
-                        .tags()
-                        .iter()
-                        .map(|tag| {
-                            tag.as_ref()
-                                .map(|tag| tag.to_string())
-                                .unwrap_or_else(String::new)
-                        })
-                        .collect(),
-                )
+            .map(|token| Token {
+                surface: token.surface().to_string(),
+                tags: token
+                    .tags()
+                    .iter()
+                    .map(|tag| {
+                        tag.as_ref()
+                            .map(|tag| tag.to_string())
+                            .unwrap_or_else(String::new)
+                    })
+                    .collect(),
             })
             .collect();
+        let n_tags = self.borrow_sentence_orig().n_tags();
 
-        let output = Self::Output { tokens, n_tags };
-        self.link.respond(id, output);
+        let output = (tokens, n_tags);
+        scope.send_message(WorkerMessage { id, output })
     }
+}
 
-    fn name_of_resource() -> &'static str {
-        "worker.js"
-    }
-
-    fn resource_path_is_relative() -> bool {
-        true
-    }
+pub enum Msg {
+    SetText(String),
+    WorkerResult((Vec<Token>, usize)),
 }
 
 pub struct App {
-    text: String,
-    worker: Box<dyn Bridge<Worker>>,
-    worker_out: WorkerOutput,
+    bridge: WorkerBridge<VaporettoWorker>,
+    text: Rc<String>,
+    tokens: Option<Rc<Vec<Token>>>,
+    n_tags: usize,
 }
 
 impl Component for App {
-    type Message = Message;
+    type Message = Msg;
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let cb = {
-            let link = ctx.link().clone();
-            move |e| link.send_message(Self::Message::WorkerMessage(e))
-        };
-        let mut worker = Worker::bridge(Rc::new(cb));
-        worker.send(WorkerInput {
-            text: " ".to_string(),
-        });
+        let link = ctx.link().clone();
+        let bridge = VaporettoWorker::spawner()
+            .callback(move |m| {
+                link.send_message(Msg::WorkerResult(m));
+            })
+            .spawn("./vaporetto_worker.js");
+
+        // Sends a dummy message.
+        // The first response indicates that the worker is ready.
+        bridge.send(String::new());
+
         Self {
-            text: String::new(),
-            worker,
-            worker_out: WorkerOutput {
-                tokens: vec![],
-                n_tags: 0,
-            },
+            bridge,
+            text: String::new().into(),
+            tokens: None,
+            n_tags: 0,
         }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Message::SetText(text) => {
-                self.text = text.clone();
-                self.worker.send(WorkerInput { text });
+            Msg::SetText(text) => {
+                self.text = Rc::new(text);
+                self.bridge.send(self.text.to_string());
             }
-            Message::WorkerMessage(message) => {
-                self.worker_out = message;
+            Msg::WorkerResult((tokens, n_tags)) => {
+                self.tokens.replace(Rc::new(tokens));
+                self.n_tags = n_tags;
             }
         };
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let input_cb = ctx.link().callback(Message::SetText);
-        let WorkerOutput { tokens, n_tags } = self.worker_out.clone();
         html! {
             <>
                 <header>
-                    <h1>{"Vaporetto Wasm Demo"}</h1>
-                    <p class="header-link"><a href="https://github.com/daac-tools/vaporetto">{"[Project Page]"}</a></p>
+                    <h1>{"🛥 Vaporetto Wasm Demo"}</h1>
+                    <p class="header-link">
+                        <a href="https://github.com/daac-tools/vaporetto">{"[Project Page]"}</a>
+                    </p>
                 </header>
                 <main>
-                    <div class="entry">
+                    <div>
                         {
-                            if tokens.is_empty() {
-                                html!{
-                                    <input type="text" disabled=true />
+                            if self.tokens.is_some() {
+                                html! {
+                                    <TextInput
+                                        callback={ctx.link().callback(Msg::SetText)}
+                                        value={Rc::clone(&self.text)}
+                                    />
                                 }
                             } else {
                                 html!{
-                                    <TextInput {input_cb} value={self.text.clone()} />
+                                    <input type="text" disabled=true />
                                 }
                             }
                         }
                     </div>
                     {
-                        if tokens.is_empty() {
-                            html!{
-                                <div id="loading">{"Loading..."}</div>
+                        if let Some(tokens) = &self.tokens {
+                            html! {
+                                <TokenView tokens={Rc::clone(&tokens)} n_tags={self.n_tags} />
                             }
                         } else {
-                            html!{
-                                <div class="results">
-                                    <TokenView {tokens} {n_tags} />
-                                </div>
+                            html! {
+                                <div id="loading">{"Loading..."}</div>
                             }
                         }
                     }

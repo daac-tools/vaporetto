@@ -1,34 +1,38 @@
-use yew::{function_component, html, Properties};
+use std::rc::Rc;
+
+use yew::{function_component, html, Html, Properties};
+
+use crate::Token;
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
-    pub tokens: Vec<(String, Vec<String>)>,
+    pub tokens: Rc<Vec<Token>>,
     pub n_tags: usize,
 }
 
 #[function_component(TokenView)]
 pub fn token_view(props: &Props) -> Html {
-    let Props { tokens, n_tags } = props.clone();
+    let Props { tokens, n_tags } = &props;
 
     html! {
         <table>
             <thead>
                 <tr>
-                    <td>{"Surface"}</td>
+                    <th>{"Surface"}</th>
                     {
-                        for (1..n_tags + 1).map(|i| html! {
-                            <td>{"Tag "}{i.to_string()}</td>
+                        for (1..*n_tags + 1).map(|i| html! {
+                            <th>{"Tag "}{i.to_string()}</th>
                         })
                     }
                 </tr>
             </thead>
             <tbody>
                 {
-                    for tokens.into_iter().map(|(surface, tags)| html! {
+                    for tokens.iter().map(|token| html! {
                         <tr>
-                            <td>{surface}</td>
+                            <td>{&token.surface}</td>
                             {
-                                for tags.iter().map(|tag| html! {
+                                for token.tags.iter().map(|tag| html! {
                                     <td>{tag}</td>
                                 })
                             }
