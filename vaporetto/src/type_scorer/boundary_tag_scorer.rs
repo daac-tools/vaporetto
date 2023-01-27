@@ -102,7 +102,7 @@ impl TypeScorerBoundaryTag {
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
-    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+    pub fn add_scores(&self, sentence: &mut Sentence) {
         sentence.type_pma_states.clear();
         sentence.type_pma_states.resize(sentence.len(), u32::MAX);
         for m in self
