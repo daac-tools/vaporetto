@@ -495,7 +495,7 @@ impl Predictor {
 
     /// Predicts word boundaries of the given sentence.
     /// If necessary, this function also prepares for predicting tags.
-    pub fn predict<'a, 'b>(&'b self, sentence: &mut Sentence<'a, 'b>) {
+    pub fn predict<'a>(&'a self, sentence: &mut Sentence<'_, 'a>) {
         sentence.score_padding = WEIGHT_FIXED_LEN - 1;
         sentence.boundary_scores.clear();
         sentence
@@ -522,7 +522,7 @@ impl Predictor {
     }
 
     #[cfg(feature = "tag-prediction")]
-    pub(crate) fn predict_tags<'a, 'b>(&'b self, sentence: &mut Sentence<'a, 'b>) {
+    pub(crate) fn predict_tags<'a>(&'a self, sentence: &mut Sentence<'_, 'a>) {
         let tag_predictor = self
             .0
             .tag_predictor

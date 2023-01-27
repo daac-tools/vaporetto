@@ -56,7 +56,7 @@ impl TypeScorerBoundaryCache {
     }
 
     #[inline(always)]
-    pub fn add_scores<'a, 'b>(&self, sentence: &mut Sentence<'a, 'b>) {
+    pub fn add_scores(&self, sentence: &mut Sentence) {
         sentence.type_pma_states.clear();
         let mut seqid = 0;
         for i in 0..self.window_size {
