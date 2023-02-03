@@ -1,3 +1,5 @@
+pub mod locales;
+
 pub mod text_input;
 pub mod token_view;
 
@@ -178,9 +180,9 @@ impl Component for App {
         html! {
             <>
                 <header>
-                    <h1>{"🛥 Vaporetto Wasm Demo"}</h1>
+                    <h1>{ fluent_format!("title") }</h1>
                     <p class="header-link">
-                        <a href="https://github.com/daac-tools/vaporetto">{"[Project Page]"}</a>
+                        <a href="https://github.com/daac-tools/vaporetto">{ fluent_format!("project-page") }</a>
                     </p>
                 </header>
                 <main>
@@ -207,7 +209,7 @@ impl Component for App {
                             }
                         } else {
                             html! {
-                                <div id="loading">{"Loading..."}</div>
+                                <div id="loading">{ fluent_format!("loading") }</div>
                             }
                         }
                     }
