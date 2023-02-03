@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use yew::{function_component, html, Html, Properties};
 
+use crate::fluent_format;
 use crate::Token;
 
 #[derive(Clone, PartialEq, Properties)]
@@ -18,10 +19,10 @@ pub fn token_view(props: &Props) -> Html {
         <table>
             <thead>
                 <tr>
-                    <th>{"Surface"}</th>
+                    <th>{ fluent_format!("surface") }</th>
                     {
                         for (1..*n_tags + 1).map(|i| html! {
-                            <th>{"Tag "}{i.to_string()}</th>
+                            <th>{ fluent_format!("tag", "id" => i) }</th>
                         })
                     }
                 </tr>
