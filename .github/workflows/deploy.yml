@@ -1,15 +1,4 @@
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
 name: deploy
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build:
@@ -32,33 +21,13 @@ jobs:
 
     - name: Build
       working-directory: ./examples/wasm
-      run: trunk build --release --public-url vaporetto
+      run: trunk build --release
 
-    - name: Archive artifact
-      shell: bash
-      if: runner.os == 'Linux'
-      run: |
-        tar \
-          --dereference --hard-dereference \
-          --directory ./examples/wasm/dist \
-          -cvf ${{ runner.temp }}/artifact.tar \
-          .
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@main
-      if: ${{ github.ref == 'refs/heads/main' }}
+    - name: Publish to Cloudflare Pages
+      uses: cloudflare/pages-action@v1
       with:
-        name: github-pages
-        path: ${{ runner.temp }}/artifact.tar
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    if: ${{ github.ref == 'refs/heads/main' }}
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v1
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: vaporetto-demo
+        directory: ./examples/wasm/dist
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
