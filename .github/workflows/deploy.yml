@@ -5,9 +5,13 @@ on:
 name: deploy
 
 jobs:
-  build:
-    name: Check wasm
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      statuses: write
+    name: Publish to Cloudflare Pages
     steps:
     - uses: actions/checkout@v3
 
@@ -28,6 +32,7 @@ jobs:
       run: trunk build --release
 
     - name: Publish to Cloudflare Pages
+      id: cloudflare_pages_deploy
       uses: cloudflare/pages-action@v1
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -35,3 +40,18 @@ jobs:
         projectName: vaporetto-demo
         directory: ./examples/wasm/dist
         gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Add publish URL as commit status
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const sha = context.payload.pull_request?.head.sha ?? context.sha;
+          await github.rest.repos.createCommitStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            context: 'Cloudflare Pages',
+            description: 'Cloudflare Pages deployment',
+            state: 'success',
+            sha,
+            target_url: "${{ steps.cloudflare_pages_deploy.outputs.url }}",
+          });
