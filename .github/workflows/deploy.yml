@@ -1,3 +1,7 @@
+on:
+  push:
+  pull_request:
+
 name: deploy
 
 jobs:
