@@ -4,7 +4,7 @@ use wasm_bindgen::{JsCast, UnwrapThrowExt};
 use web_sys::{Event, HtmlInputElement, InputEvent};
 use yew::{html, Callback, Component, Context, Html, NodeRef, Properties};
 
-use crate::fluent_format;
+use crate::fl;
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct Props {
@@ -41,7 +41,7 @@ impl Component for TextInput {
             <input
                 ref={self.node_ref.clone()}
                 type="text"
-                placeholder={ fluent_format!("place-holder") }
+                placeholder={ fl!("place-holder") }
                 value={value.to_string()}
                 {oninput}
             />

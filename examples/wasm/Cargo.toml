@@ -4,19 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fluent = "0.16.0"  # MIT or Apache-2.0
-fluent-langneg = "0.13.0"  # MIT or Apache-2.0
 gloo-worker = "0.2.1"  # MIT or Apache-2.0
-intl-memoizer = "0.5.1"  # MIT or Apache-2.0
+i18n-embed = { version = "0.13.8", features = ["fluent-system", "web-sys-requester"]}  # MIT
+i18n-embed-fl = "0.6.5"  # MIT
 once_cell = "1.17.0"  # MIT or Apache-2.0
 ouroboros = "0.15.5"  # MIT or Apache-2.0
+rust-embed = "6.4.2"  # MIT
 ruzstd = "0.3.0"  # MIT
 serde = "1"  # MIT or Apache-2.0
 unic-langid = { version = "0.9.1", features = ["macros"] }  # MIT or Apache-2.0
 vaporetto = { path = "../../vaporetto", default-features = false, features = ["std", "cache-type-score", "fix-weight-length", "tag-prediction"] }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../../vaporetto_rules" }  # MIT or Apache-2.0
 wasm-bindgen = "0.2.83"  # MIT or Apache-2.0
-web-sys = { version = "0.3.61", features = ["Event", "EventTarget", "InputEvent" ,"Navigator"] }  # MIT or Apache-2.0
+web-sys = { version = "0.3.61", features = ["Event", "EventTarget", "InputEvent"] }  # MIT or Apache-2.0
 yew = { version = "0.20", features = ["csr"] }  # MIT or Apache-2.0
 
 [profile.release]
