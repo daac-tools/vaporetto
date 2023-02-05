@@ -1,4 +1,4 @@
-pub mod locales;
+pub mod i18n;
 
 pub mod text_input;
 pub mod token_view;
@@ -180,9 +180,9 @@ impl Component for App {
         html! {
             <>
                 <header>
-                    <h1>{ fluent_format!("title") }</h1>
+                    <h1>{ fl!("title") }</h1>
                     <p class="header-link">
-                        <a href="https://github.com/daac-tools/vaporetto">{ fluent_format!("project-page") }</a>
+                        <a href="https://github.com/daac-tools/vaporetto">{ fl!("project-page") }</a>
                     </p>
                 </header>
                 <main>
@@ -205,11 +205,11 @@ impl Component for App {
                     {
                         if let Some(tokens) = &self.tokens {
                             html! {
-                                <TokenView tokens={Rc::clone(&tokens)} n_tags={self.n_tags} />
+                                <TokenView tokens={Rc::clone(tokens)} n_tags={self.n_tags} />
                             }
                         } else {
                             html! {
-                                <div id="loading">{ fluent_format!("loading") }</div>
+                                <div id="loading">{ fl!("loading") }</div>
                             }
                         }
                     }
