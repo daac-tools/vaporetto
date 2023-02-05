@@ -1,7 +1,5 @@
 # Wasm Example
 
-Source code of [the demo page](https://daac-tools.github.io/vaporetto/).
-
 ## How to launch on your environment?
 
 You can also launch the demo server on your machine using [trunk](https://github.com/thedodd/trunk).
