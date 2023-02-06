@@ -86,3 +86,6 @@ pub use trainer::{SolverType, Trainer};
 
 #[cfg(feature = "kytea")]
 pub use kytea_model::KyteaModel;
+
+/// Version number of this library.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
