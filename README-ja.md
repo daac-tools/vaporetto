@@ -6,6 +6,7 @@ Vaporetto は、高速で軽量な点予測に基づくトークナイザです�
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
 ![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
+[![Slack](https://img.shields.io/badge/join-chat-brightgreen?logo=slack)](https://join.slack.com/t/daac-tools/shared_invite/zt-1pwwqbcz4-KxL95Nam9VinpPlzUpEGyA)
 
 [English document](README.md)
 
@@ -221,6 +222,13 @@ Vaporetto は KyTea に比べて 8.7 倍速く動作します。
 詳細は[ここ](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison)を参照してください。
 
 ![](./figures/comparison.svg)
+
+## Slack
+
+開発者やユーザーの方々が質問したり議論するためのSlackワークスペースを用意しています。
+
+ * https://daac-tools.slack.com/
+ * [こちら](https://join.slack.com/t/daac-tools/shared_invite/zt-1pwwqbcz4-KxL95Nam9VinpPlzUpEGyA)から招待を受けてください.
 
 ## 文献情報
 

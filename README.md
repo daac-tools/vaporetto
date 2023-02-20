@@ -6,6 +6,7 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
 ![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
+[![Slack](https://img.shields.io/badge/join-chat-brightgreen?logo=slack)](https://join.slack.com/t/daac-tools/shared_invite/zt-1pwwqbcz4-KxL95Nam9VinpPlzUpEGyA)
 
 [日本語のドキュメント](README-ja.md)
 
@@ -223,6 +224,13 @@ Vaporetto is 8.7 times faster than KyTea.
 Details can be found [here](https://github.com/daac-tools/vaporetto/wiki/Speed-Comparison).
 
 ![](./figures/comparison.svg)
+
+## Slack
+
+We have a Slack workspace for developers and users to ask questions and discuss a variety of topics.
+
+ * https://daac-tools.slack.com/
+ * Please get an invitation from [here](https://join.slack.com/t/daac-tools/shared_invite/zt-1pwwqbcz4-KxL95Nam9VinpPlzUpEGyA).
 
 ## License
 
