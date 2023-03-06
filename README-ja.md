@@ -53,7 +53,7 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 ```rust
 // zstd クレートまたは ruzstd クレートが必要
 let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
-let dict = Model::read(reader)?;
+let model = Model::read(reader)?;
 ```
 
 最近のLinuxディストリビューションに同梱されている *unzstd* コマンドを利用して展開することもできます。

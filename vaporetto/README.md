@@ -61,7 +61,7 @@ If you want to load these compressed models, you must decompress them outside of
 ```rust
 // Requires zstd crate or ruzstd crate
 let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
-let dict = Model::read(reader)?;
+let model = Model::read(reader)?;
 ```
 
 You can also decompress the file using the *unzstd* command, which is bundled with modern Linux
