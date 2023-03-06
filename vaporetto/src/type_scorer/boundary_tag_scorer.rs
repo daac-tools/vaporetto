@@ -28,6 +28,7 @@ impl<'de> BorrowDecode<'de> for TypeScorerBoundaryTag {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
+        let weights = Decode::decode(decoder)?;
         let tag_weight: Vec<Vec<Vec<(u32, WeightVector)>>> = Decode::decode(decoder)?;
         let tag_weight = tag_weight
             .into_iter()
@@ -35,7 +36,7 @@ impl<'de> BorrowDecode<'de> for TypeScorerBoundaryTag {
             .collect();
         Ok(Self {
             pma,
-            weights: Decode::decode(decoder)?,
+            weights,
             tag_weight,
         })
     }
