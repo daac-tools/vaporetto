@@ -886,6 +886,52 @@ mod tests {
 
     #[cfg(feature = "tag-prediction")]
     #[test]
+    fn test_serialization_tags() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, true).unwrap();
+        let data = predictor.serialize_to_vec().unwrap();
+        let (predictor, _) = unsafe { Predictor::deserialize_from_slice_unchecked(&data).unwrap() };
+        let mut sentence = Sentence::from_raw("この人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+        sentence.fill_tags();
+        assert_eq!(&[-22, 54, 58, 43, -54, 68, 48], sentence.boundary_scores(),);
+        assert_eq!(
+            &[
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary,
+                WordBoundary,
+                NotWordBoundary,
+                WordBoundary,
+                WordBoundary
+            ],
+            sentence.boundaries(),
+        );
+        assert_eq!(
+            &[
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("名詞")),
+                Some(Cow::Borrowed("ヒト")),
+                None,
+                None,
+                None,
+                None,
+                Some(Cow::Borrowed("名詞")),
+                Some(Cow::Borrowed("チキュー")),
+                Some(Cow::Borrowed("接尾辞")),
+                Some(Cow::Borrowed("ジン")),
+                None,
+                None,
+            ],
+            sentence.tags()
+        );
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
     #[should_panic]
     fn test_fill_tags_unsupported() {
         let model = create_test_model();
