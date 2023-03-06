@@ -47,8 +47,8 @@ The following will be output:
 
 ##### Notes for Vaporetto APIs
 
-The distribution models are compressed in zstd format.
-If you want to load these compressed models with the `vaporetto` API,
+The distribution models are compressed in the zstd format.
+If you want to load these compressed models with the *vaporetto* API,
 you must decompress them outside of the API.
 
 ```rust

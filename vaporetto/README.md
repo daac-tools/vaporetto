@@ -55,7 +55,7 @@ The following features are enabled by default:
 
 ## Notes for distributed models
 
-The distributed models are compressed in zstd format.
+The distributed models are compressed in the zstd format.
 If you want to load these compressed models, you must decompress them outside of the API.
 
 ```rust
