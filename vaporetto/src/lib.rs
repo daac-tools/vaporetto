@@ -9,19 +9,20 @@
 ## Examples
 
 ```
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
 use std::fs::File;
 
 use vaporetto::{Model, Predictor, Sentence};
 
-let f = File::open(\"../resources/model.bin\").unwrap();
-let model = Model::read(f).unwrap();
-let predictor = Predictor::new(model, true).unwrap();
+let f = File::open(\"../resources/model.bin\")?;
+let model = Model::read(f)?;
+let predictor = Predictor::new(model, true)?;
 
 let mut buf = String::new();
 
 let mut s = Sentence::default();
 
-s.update_raw(\"まぁ社長は火星猫だ\").unwrap();
+s.update_raw(\"まぁ社長は火星猫だ\")?;
 predictor.predict(&mut s);
 s.fill_tags();
 s.write_tokenized_text(&mut buf);
@@ -30,7 +31,7 @@ assert_eq!(
     buf,
 );
 
-s.update_raw(\"まぁ良いだろう\").unwrap();
+s.update_raw(\"まぁ良いだろう\")?;
 predictor.predict(&mut s);
 s.fill_tags();
 s.write_tokenized_text(&mut buf);
@@ -38,6 +39,8 @@ assert_eq!(
     \"まぁ/副詞/マー 良い/形容詞/ヨイ だろう/助動詞/ダロー\",
     buf,
 );
+# Ok(())
+# }
 ```
 "
 )]
