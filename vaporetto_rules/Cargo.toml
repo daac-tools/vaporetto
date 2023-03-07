@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_rules"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2021"
 rust-version = "1.64"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
@@ -13,9 +13,9 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
 
 [dependencies]
-hashbrown = "0.13.1"  # MIT or Apache-2.0
-unicode-segmentation = "1.10.0"  # MIT or Apache-2.0
-vaporetto = { path = "../vaporetto", version = "=0.6.1", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
+hashbrown = "0.13.2"  # MIT or Apache-2.0
+unicode-segmentation = "1.10.1"  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "=0.6.2", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
 
 [dev-dependencies]
-vaporetto = { path = "../vaporetto", version = "=0.6.1" }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "=0.6.2" }  # MIT or Apache-2.0
