@@ -45,6 +45,21 @@ The following will be output:
 ヴェネツィア は イタリア に あり ます 。
 ```
 
+##### Notes for Vaporetto APIs
+
+The distribution models are compressed in the zstd format.
+If you want to load these compressed models with the *vaporetto* API,
+you must decompress them outside of the API.
+
+```rust
+// Requires zstd crate or ruzstd crate
+let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
+let model = Model::read(reader)?;
+```
+
+You can also decompress the file using the *unzstd* command, which is bundled with modern Linux
+distributions.
+
 #### Convert KyTea's Model
 
 The second is also a simple way, which is to convert a model trained by KyTea.

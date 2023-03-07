@@ -9,15 +9,15 @@ use std::fs::File;
 
 use vaporetto::{Model, Predictor, Sentence};
 
-let f = File::open("../resources/model.bin").unwrap();
-let model = Model::read(f).unwrap();
-let predictor = Predictor::new(model, true).unwrap();
+let f = File::open("../resources/model.bin")?;
+let model = Model::read(f)?;
+let predictor = Predictor::new(model, true)?;
 
 let mut buf = String::new();
 
 let mut s = Sentence::default();
 
-s.update_raw("まぁ社長は火星猫だ").unwrap();
+s.update_raw("まぁ社長は火星猫だ")?;
 predictor.predict(&mut s);
 s.fill_tags();
 s.write_tokenized_text(&mut buf);
@@ -26,7 +26,7 @@ assert_eq!(
     buf,
 );
 
-s.update_raw("まぁ良いだろう").unwrap();
+s.update_raw("まぁ良いだろう")?;
 predictor.predict(&mut s);
 s.fill_tags();
 s.write_tokenized_text(&mut buf);
@@ -52,6 +52,20 @@ The following features are enabled by default:
 * `fix-weight-length` - Uses fixed-size arrays for storing scores to facilitate optimization. If disabled, vectors are used instead.
 * `tag-prediction` - Enables tag prediction.
 * `charwise-pma` - Uses the [Charwise Daachorse](https://docs.rs/daachorse/latest/daachorse/charwise/index.html) instead of the standard version for faster prediction, although it can make to load a model file slower.
+
+## Notes for distributed models
+
+The distributed models are compressed in the zstd format.
+If you want to load these compressed models, you must decompress them outside of the API.
+
+```rust
+// Requires zstd crate or ruzstd crate
+let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
+let model = Model::read(reader)?;
+```
+
+You can also decompress the file using the *unzstd* command, which is bundled with modern Linux
+distributions.
 
 ## License
 

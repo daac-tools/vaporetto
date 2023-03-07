@@ -45,6 +45,19 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 ヴェネツィア は イタリア に あり ます 。
 ```
 
+##### Vaporetto APIs を使用する際の注意点
+
+配布モデルは zstd 形式で圧縮されています。
+*vaporetto* APIでこれらの圧縮済みモデルを読み込むには、APIの外側で展開する必要があります。
+
+```rust
+// zstd クレートまたは ruzstd クレートが必要
+let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
+let model = Model::read(reader)?;
+```
+
+最近のLinuxディストリビューションに同梱されている *unzstd* コマンドを利用して展開することもできます。
+
 #### KyTea のモデルを変換する
 
 2つ目の方法も単純で、 KyTea で学習されたモデルを変換することです。
