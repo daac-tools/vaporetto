@@ -57,20 +57,16 @@ struct Args {
     /// Do not normalize input strings before prediction.
     #[clap(long)]
     no_norm: bool,
-
-    /// Buffers this tokenizer's output.
-    #[clap(long)]
-    buffered_out: bool,
 }
 
-fn print_scores(s: &Sentence, out: &mut dyn Write) -> Result<(), Box<dyn std::error::Error>> {
+fn print_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::error::Error>> {
     let mut chars_iter = s.as_raw_text().chars();
     let mut prev_c = chars_iter.next().unwrap();
     for (i, (c, score)) in chars_iter.zip(s.boundary_scores()).enumerate() {
         writeln!(out, "{i}:{prev_c}{c} {score}")?;
         prev_c = c;
     }
-    writeln!(out)?;
+    out.write_all(b"\n")?;
     Ok(())
 }
 
@@ -93,16 +89,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = Model::read(&mut f)?;
     let predictor = Predictor::new(model, args.predict_tags)?;
 
+    let is_tty = atty::is(atty::Stream::Stdout);
+
     eprintln!("Start tokenization");
-    let start = Instant::now();
-    let stdout = io::stdout();
-    let mut out: Box<dyn Write> = if args.buffered_out {
-        Box::new(BufWriter::new(stdout.lock()))
-    } else {
-        Box::new(stdout.lock())
-    };
+    let mut out = BufWriter::new(io::stdout().lock());
     let mut buf = String::new();
     let mut s = Sentence::default();
+
+    let start = Instant::now();
     if args.no_norm {
         let lines = io::stdin().lock().lines();
         for line in lines {
@@ -114,12 +108,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     s.fill_tags();
                 }
                 s.write_tokenized_text(&mut buf);
-                writeln!(out, "{buf}")?;
+                out.write_all(buf.as_bytes())?;
                 if args.scores {
-                    print_scores(&s, &mut *out)?;
+                    print_scores(&s, &mut out)?;
                 }
-            } else {
-                writeln!(out)?;
+            }
+            out.write_all(b"\n")?;
+            if is_tty {
+                out.flush()?;
             }
         }
     } else {
@@ -139,16 +135,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 s_orig.boundaries_mut().copy_from_slice(s.boundaries());
                 s_orig.tags_mut().clone_from_slice(s.tags());
                 s_orig.write_tokenized_text(&mut buf);
-                writeln!(out, "{buf}")?;
+                out.write_all(buf.as_bytes())?;
                 if args.scores {
-                    print_scores(&s, &mut *out)?;
+                    print_scores(&s, &mut out)?;
                 }
-            } else {
-                writeln!(out)?;
+            }
+            out.write_all(b"\n")?;
+            if is_tty {
+                out.flush()?;
             }
         }
     }
-    out.flush()?;
 
     let duration = start.elapsed();
 
