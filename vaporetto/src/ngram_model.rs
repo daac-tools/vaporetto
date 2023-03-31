@@ -9,7 +9,7 @@ pub struct NgramData<T> {
 }
 
 #[derive(Default, Debug, Decode, Encode)]
-pub struct NgramModel<T>(pub Vec<NgramData<T>>);
+pub struct NgramModel<T: 'static>(pub Vec<NgramData<T>>);
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct TagWeight {
@@ -24,4 +24,4 @@ pub struct TagNgramData<T> {
 }
 
 #[derive(Default, Debug, Decode, Encode)]
-pub struct TagNgramModel<T>(pub Vec<TagNgramData<T>>);
+pub struct TagNgramModel<T: 'static>(pub Vec<TagNgramData<T>>);

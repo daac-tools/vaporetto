@@ -11,7 +11,6 @@ use bincode::{
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 #[cfg(not(feature = "charwise-pma"))]
 use daachorse::DoubleArrayAhoCorasick;
-use hashbrown::HashMap;
 
 use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
@@ -19,7 +18,7 @@ use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
 use crate::predictor::{PositionalWeight, PositionalWeightWithTag, WeightVector};
 use crate::sentence::Sentence;
-use crate::utils::SplitMix64Builder;
+use crate::utils::{SerializableHashMap, SplitMix64Builder};
 
 pub struct CharScorerBoundaryTag {
     #[cfg(not(feature = "charwise-pma"))]
@@ -27,7 +26,7 @@ pub struct CharScorerBoundaryTag {
     #[cfg(feature = "charwise-pma")]
     pma: CharwiseDoubleArrayAhoCorasick<u32>,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
-    tag_weight: Vec<Vec<HashMap<u32, WeightVector, SplitMix64Builder>>>,
+    tag_weight: Vec<Vec<SerializableHashMap<u32, WeightVector, SplitMix64Builder>>>,
 }
 
 impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
@@ -40,11 +39,7 @@ impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
         #[cfg(feature = "charwise-pma")]
         let (pma, _) = unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         let weights = Decode::decode(decoder)?;
-        let tag_weight: Vec<Vec<Vec<(u32, WeightVector)>>> = Decode::decode(decoder)?;
-        let tag_weight = tag_weight
-            .into_iter()
-            .map(|x| x.into_iter().map(|x| x.into_iter().collect()).collect())
-            .collect();
+        let tag_weight = Decode::decode(decoder)?;
         Ok(Self {
             pma,
             weights,
@@ -58,12 +53,7 @@ impl Encode for CharScorerBoundaryTag {
         let pma_data = self.pma.serialize();
         Encode::encode(&pma_data, encoder)?;
         Encode::encode(&self.weights, encoder)?;
-        let tag_weight: Vec<Vec<Vec<_>>> = self
-            .tag_weight
-            .iter()
-            .map(|x| x.iter().map(|x| x.iter().collect()).collect())
-            .collect();
-        Encode::encode(&tag_weight, encoder)?;
+        Encode::encode(&self.tag_weight, encoder)?;
         Ok(())
     }
 }
@@ -90,11 +80,10 @@ impl CharScorerBoundaryTag {
             let weight = PositionalWeightWithTag::with_boundary(-word_len, d.weights);
             merger.add(d.word, weight);
         }
-        let mut tag_weight =
-            vec![
-                vec![HashMap::with_hasher(SplitMix64Builder); usize::from(window_size) + 1];
-                tag_ngram_model.len()
-            ];
+        let mut tag_weight = vec![
+            vec![SerializableHashMap::default(); usize::from(window_size) + 1];
+            tag_ngram_model.len()
+        ];
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
             for d in tag_model.0 {
                 for w in d.weights {

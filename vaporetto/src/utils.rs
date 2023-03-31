@@ -12,7 +12,7 @@ use bincode::{
     error::{DecodeError, EncodeError},
     Decode, Encode,
 };
-use hashbrown::HashMap;
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 
 #[cfg(feature = "fix-weight-length")]
 #[inline(always)]
@@ -35,42 +35,53 @@ impl Writer for VecWriter {
     }
 }
 
-#[derive(Debug)]
-pub struct SerializableHashMap<K, V>(pub HashMap<K, V>);
+#[derive(Clone, Debug, Default)]
+pub struct SerializableHashMap<K, V, S = DefaultHashBuilder>(pub HashMap<K, V, S>);
 
-impl<K, V> Deref for SerializableHashMap<K, V> {
-    type Target = HashMap<K, V>;
+impl<K, V, S> Deref for SerializableHashMap<K, V, S> {
+    type Target = HashMap<K, V, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<K, V> DerefMut for SerializableHashMap<K, V> {
+impl<K, V, S> DerefMut for SerializableHashMap<K, V, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<K, V> Decode for SerializableHashMap<K, V>
+impl<K, V, S> Decode for SerializableHashMap<K, V, S>
 where
-    K: Encode + Decode + Eq + Hash,
-    V: Encode + Decode,
+    K: Decode + Eq + Hash,
+    V: Decode,
+    S: BuildHasher + Default,
 {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let raw: Vec<(K, V)> = Decode::decode(decoder)?;
-        Ok(Self(raw.into_iter().collect()))
+        let mut result = HashMap::with_hasher(S::default());
+        let size: u64 = Decode::decode(decoder)?;
+        for _ in 0..size {
+            let k = Decode::decode(decoder)?;
+            let v = Decode::decode(decoder)?;
+            result.insert(k, v);
+        }
+        Ok(Self(result))
     }
 }
 
-impl<K, V> Encode for SerializableHashMap<K, V>
+impl<K, V, S> Encode for SerializableHashMap<K, V, S>
 where
-    K: Encode + Decode,
-    V: Encode + Decode,
+    K: Encode,
+    V: Encode,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let raw: Vec<(&K, &V)> = self.0.iter().collect();
-        Encode::encode(&raw, encoder)?;
+        let size = u64::try_from(self.0.len()).unwrap();
+        Encode::encode(&size, encoder)?;
+        for (k, v) in &self.0 {
+            Encode::encode(k, encoder)?;
+            Encode::encode(v, encoder)?;
+        }
         Ok(())
     }
 }
