@@ -44,6 +44,12 @@ pub enum WeightVector {
     Fixed(I32Simd),
 }
 
+impl Default for WeightVector {
+    fn default() -> Self {
+        Self::Variable(vec![])
+    }
+}
+
 impl Decode for WeightVector {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let weight: Vec<i32> = Decode::decode(decoder)?;

@@ -35,7 +35,7 @@ impl Writer for VecWriter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SerializableHashMap<K, V>(pub HashMap<K, V>);
 
 impl<K, V> Deref for SerializableHashMap<K, V> {
@@ -54,23 +54,83 @@ impl<K, V> DerefMut for SerializableHashMap<K, V> {
 
 impl<K, V> Decode for SerializableHashMap<K, V>
 where
-    K: Encode + Decode + Eq + Hash,
-    V: Encode + Decode,
+    K: Decode + Eq + Hash,
+    V: Decode,
 {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let raw: Vec<(K, V)> = Decode::decode(decoder)?;
-        Ok(Self(raw.into_iter().collect()))
+        let mut result = HashMap::new();
+        let size: u64 = Decode::decode(decoder)?;
+        for _ in 0..size {
+            let k: K = Decode::decode(decoder)?;
+            let v: V = Decode::decode(decoder)?;
+            result.insert(k, v);
+        }
+        Ok(Self(result))
     }
 }
 
 impl<K, V> Encode for SerializableHashMap<K, V>
 where
-    K: Encode + Decode,
-    V: Encode + Decode,
+    K: Encode,
+    V: Encode,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let raw: Vec<(&K, &V)> = self.0.iter().collect();
-        Encode::encode(&raw, encoder)?;
+        let size = u64::try_from(self.0.len()).unwrap();
+        Encode::encode(&size, encoder)?;
+        for (k, v) in &self.0 {
+            Encode::encode(k, encoder)?;
+            Encode::encode(v, encoder)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SerializableSplitMixHashMap<K, V>(pub HashMap<K, V, SplitMix64Builder>);
+
+impl<K, V> Deref for SerializableSplitMixHashMap<K, V> {
+    type Target = HashMap<K, V, SplitMix64Builder>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<K, V> DerefMut for SerializableSplitMixHashMap<K, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<K, V> Decode for SerializableSplitMixHashMap<K, V>
+where
+    K: Decode + Eq + Hash,
+    V: Decode,
+{
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let mut result = HashMap::with_hasher(SplitMix64Builder);
+        let size: u64 = Decode::decode(decoder)?;
+        for _ in 0..size {
+            let k: K = Decode::decode(decoder)?;
+            let v: V = Decode::decode(decoder)?;
+            result.insert(k, v);
+        }
+        Ok(Self(result))
+    }
+}
+
+impl<K, V> Encode for SerializableSplitMixHashMap<K, V>
+where
+    K: Encode,
+    V: Encode,
+{
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let size = u64::try_from(self.0.len()).unwrap();
+        Encode::encode(&size, encoder)?;
+        for (k, v) in &self.0 {
+            Encode::encode(k, encoder)?;
+            Encode::encode(v, encoder)?;
+        }
         Ok(())
     }
 }

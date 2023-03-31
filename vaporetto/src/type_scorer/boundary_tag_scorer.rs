@@ -7,19 +7,20 @@ use bincode::{
     BorrowDecode, Decode, Encode,
 };
 use daachorse::DoubleArrayAhoCorasick;
-use hashbrown::HashMap;
 
-use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
 use crate::predictor::{PositionalWeight, PositionalWeightWithTag, WeightVector};
 use crate::sentence::Sentence;
 use crate::type_scorer::TypeWeightMerger;
-use crate::utils::SplitMix64Builder;
+use crate::{
+    errors::{Result, VaporettoError},
+    utils::SerializableSplitMixHashMap,
+};
 
 pub struct TypeScorerBoundaryTag {
     pma: DoubleArrayAhoCorasick<u32>,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
-    tag_weight: Vec<Vec<HashMap<u32, WeightVector, SplitMix64Builder>>>,
+    tag_weight: Vec<Vec<SerializableSplitMixHashMap<u32, WeightVector>>>,
 }
 
 impl<'de> BorrowDecode<'de> for TypeScorerBoundaryTag {
@@ -29,11 +30,7 @@ impl<'de> BorrowDecode<'de> for TypeScorerBoundaryTag {
         let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
         let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         let weights = Decode::decode(decoder)?;
-        let tag_weight: Vec<Vec<Vec<(u32, WeightVector)>>> = Decode::decode(decoder)?;
-        let tag_weight = tag_weight
-            .into_iter()
-            .map(|x| x.into_iter().map(|x| x.into_iter().collect()).collect())
-            .collect();
+        let tag_weight = Decode::decode(decoder)?;
         Ok(Self {
             pma,
             weights,
@@ -47,12 +44,7 @@ impl Encode for TypeScorerBoundaryTag {
         let pma_data = self.pma.serialize();
         Encode::encode(&pma_data, encoder)?;
         Encode::encode(&self.weights, encoder)?;
-        let tag_weight: Vec<Vec<Vec<_>>> = self
-            .tag_weight
-            .iter()
-            .map(|x| x.iter().map(|x| x.iter().collect()).collect())
-            .collect();
-        Encode::encode(&tag_weight, encoder)?;
+        Encode::encode(&self.tag_weight, encoder)?;
         Ok(())
     }
 }
@@ -70,7 +62,7 @@ impl TypeScorerBoundaryTag {
         }
         let mut tag_weight =
             vec![
-                vec![HashMap::with_hasher(SplitMix64Builder); usize::from(window_size) + 1];
+                vec![SerializableSplitMixHashMap::default(); usize::from(window_size) + 1];
                 tag_ngram_model.len()
             ];
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
