@@ -2,7 +2,6 @@ use core::hash::{BuildHasher, Hash, Hasher};
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
-use hashbrown::hash_map::DefaultHashBuilder;
 
 #[cfg(feature = "kytea")]
 use std::io::{self, Read};
@@ -13,7 +12,7 @@ use bincode::{
     error::{DecodeError, EncodeError},
     Decode, Encode,
 };
-use hashbrown::HashMap;
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 
 #[cfg(feature = "fix-weight-length")]
 #[inline(always)]
