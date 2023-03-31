@@ -15,7 +15,7 @@ categories = ["text-processing", "no-std"]
 [dependencies]
 hashbrown = "0.13.2"  # MIT or Apache-2.0
 unicode-segmentation = "1.10.1"  # MIT or Apache-2.0
-vaporetto = { path = "../vaporetto", version = "=0.6.2", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "=0.6.3", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
 
 [dev-dependencies]
-vaporetto = { path = "../vaporetto", version = "=0.6.2" }  # MIT or Apache-2.0
+vaporetto = { path = "../vaporetto", version = "=0.6.3" }  # MIT or Apache-2.0
