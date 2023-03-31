@@ -63,8 +63,8 @@ where
         let mut result = HashMap::with_hasher(S::default());
         let size: u64 = Decode::decode(decoder)?;
         for _ in 0..size {
-            let k: K = Decode::decode(decoder)?;
-            let v: V = Decode::decode(decoder)?;
+            let k = Decode::decode(decoder)?;
+            let v = Decode::decode(decoder)?;
             result.insert(k, v);
         }
         Ok(Self(result))
