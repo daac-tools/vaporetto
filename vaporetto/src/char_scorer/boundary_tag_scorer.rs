@@ -12,12 +12,13 @@ use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 #[cfg(not(feature = "charwise-pma"))]
 use daachorse::DoubleArrayAhoCorasick;
 
+use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
 use crate::predictor::{PositionalWeight, PositionalWeightWithTag, WeightVector};
 use crate::sentence::Sentence;
-use crate::{char_scorer::CharWeightMerger, utils::SerializableSplitMixHashMap};
+use crate::utils::{SerializableHashMap, SplitMix64Builder};
 
 pub struct CharScorerBoundaryTag {
     #[cfg(not(feature = "charwise-pma"))]
@@ -25,7 +26,7 @@ pub struct CharScorerBoundaryTag {
     #[cfg(feature = "charwise-pma")]
     pma: CharwiseDoubleArrayAhoCorasick<u32>,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
-    tag_weight: Vec<Vec<SerializableSplitMixHashMap<u32, WeightVector>>>,
+    tag_weight: Vec<Vec<SerializableHashMap<u32, WeightVector, SplitMix64Builder>>>,
 }
 
 impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
@@ -79,11 +80,10 @@ impl CharScorerBoundaryTag {
             let weight = PositionalWeightWithTag::with_boundary(-word_len, d.weights);
             merger.add(d.word, weight);
         }
-        let mut tag_weight =
-            vec![
-                vec![SerializableSplitMixHashMap::default(); usize::from(window_size) + 1];
-                tag_ngram_model.len()
-            ];
+        let mut tag_weight = vec![
+            vec![SerializableHashMap::default(); usize::from(window_size) + 1];
+            tag_ngram_model.len()
+        ];
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
             for d in tag_model.0 {
                 for w in d.weights {

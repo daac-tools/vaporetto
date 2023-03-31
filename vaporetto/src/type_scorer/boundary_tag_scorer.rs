@@ -8,19 +8,17 @@ use bincode::{
 };
 use daachorse::DoubleArrayAhoCorasick;
 
+use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
 use crate::predictor::{PositionalWeight, PositionalWeightWithTag, WeightVector};
 use crate::sentence::Sentence;
 use crate::type_scorer::TypeWeightMerger;
-use crate::{
-    errors::{Result, VaporettoError},
-    utils::SerializableSplitMixHashMap,
-};
+use crate::utils::{SerializableHashMap, SplitMix64Builder};
 
 pub struct TypeScorerBoundaryTag {
     pma: DoubleArrayAhoCorasick<u32>,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
-    tag_weight: Vec<Vec<SerializableSplitMixHashMap<u32, WeightVector>>>,
+    tag_weight: Vec<Vec<SerializableHashMap<u32, WeightVector, SplitMix64Builder>>>,
 }
 
 impl<'de> BorrowDecode<'de> for TypeScorerBoundaryTag {
@@ -60,11 +58,10 @@ impl TypeScorerBoundaryTag {
             let weight = PositionalWeightWithTag::with_boundary(-i16::from(window_size), d.weights);
             merger.add(d.ngram, weight);
         }
-        let mut tag_weight =
-            vec![
-                vec![SerializableSplitMixHashMap::default(); usize::from(window_size) + 1];
-                tag_ngram_model.len()
-            ];
+        let mut tag_weight = vec![
+            vec![SerializableHashMap::default(); usize::from(window_size) + 1];
+            tag_ngram_model.len()
+        ];
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
             for d in tag_model.0 {
                 for w in d.weights {

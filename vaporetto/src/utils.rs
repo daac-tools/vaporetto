@@ -2,6 +2,7 @@ use core::hash::{BuildHasher, Hash, Hasher};
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
+use hashbrown::hash_map::DefaultHashBuilder;
 
 #[cfg(feature = "kytea")]
 use std::io::{self, Read};
@@ -36,29 +37,30 @@ impl Writer for VecWriter {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct SerializableHashMap<K, V>(pub HashMap<K, V>);
+pub struct SerializableHashMap<K, V, S = DefaultHashBuilder>(pub HashMap<K, V, S>);
 
-impl<K, V> Deref for SerializableHashMap<K, V> {
-    type Target = HashMap<K, V>;
+impl<K, V, S> Deref for SerializableHashMap<K, V, S> {
+    type Target = HashMap<K, V, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<K, V> DerefMut for SerializableHashMap<K, V> {
+impl<K, V, S> DerefMut for SerializableHashMap<K, V, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<K, V> Decode for SerializableHashMap<K, V>
+impl<K, V, S> Decode for SerializableHashMap<K, V, S>
 where
     K: Decode + Eq + Hash,
     V: Decode,
+    S: BuildHasher + Default,
 {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let mut result = HashMap::new();
+        let mut result = HashMap::with_hasher(S::default());
         let size: u64 = Decode::decode(decoder)?;
         for _ in 0..size {
             let k: K = Decode::decode(decoder)?;
@@ -69,57 +71,7 @@ where
     }
 }
 
-impl<K, V> Encode for SerializableHashMap<K, V>
-where
-    K: Encode,
-    V: Encode,
-{
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let size = u64::try_from(self.0.len()).unwrap();
-        Encode::encode(&size, encoder)?;
-        for (k, v) in &self.0 {
-            Encode::encode(k, encoder)?;
-            Encode::encode(v, encoder)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct SerializableSplitMixHashMap<K, V>(pub HashMap<K, V, SplitMix64Builder>);
-
-impl<K, V> Deref for SerializableSplitMixHashMap<K, V> {
-    type Target = HashMap<K, V, SplitMix64Builder>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<K, V> DerefMut for SerializableSplitMixHashMap<K, V> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<K, V> Decode for SerializableSplitMixHashMap<K, V>
-where
-    K: Decode + Eq + Hash,
-    V: Decode,
-{
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let mut result = HashMap::with_hasher(SplitMix64Builder);
-        let size: u64 = Decode::decode(decoder)?;
-        for _ in 0..size {
-            let k: K = Decode::decode(decoder)?;
-            let v: V = Decode::decode(decoder)?;
-            result.insert(k, v);
-        }
-        Ok(Self(result))
-    }
-}
-
-impl<K, V> Encode for SerializableSplitMixHashMap<K, V>
+impl<K, V, S> Encode for SerializableHashMap<K, V, S>
 where
     K: Encode,
     V: Encode,
