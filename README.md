@@ -12,6 +12,8 @@ This repository includes both a Rust crate that provides APIs for Vaporetto and 
 
 [Wasm Demo](https://vaporetto-demo.pages.dev/) (takes a little time to load the model.)
 
+A Python wrapper is also available [here](https://github.com/daac-tools/python-vaporetto).
+
 ## Example Usage
 
 ### Try Word Segmentation
