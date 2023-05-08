@@ -5,6 +5,7 @@ members = [
     "vaporetto_rules",
     "vaporetto_tantivy",
     "manipulate_model",
+    "parse_bccwj_xml",
     "predict",
     "train",
     "evaluate",

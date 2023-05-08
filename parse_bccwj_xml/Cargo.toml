@@ -1,0 +1,9 @@
+[package]
+name = "parse_bccwj_xml"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.2", features = ["derive"] } # MIT or Apache-2.0
+quick-xml = "0.28" # MIT
+vaporetto = { path = "../vaporetto" } # MIT or Apache-2.0
