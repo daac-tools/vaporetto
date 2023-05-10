@@ -1,4 +1,4 @@
-# 🛥 VAporetto: POintwise pREdicTion based TOkenizer
+# 🛥 Vaporetto: Very accelerated pointwise prediction based tokenizer
 
 Vaporetto は、高速で軽量な点予測に基づくトークナイザです。
 このリポジトリには、 Vaporetto の API を提供する Rust のクレートと、 CLI フロントエンドが含まれています。
