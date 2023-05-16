@@ -35,27 +35,27 @@ impl FromStr for WsConst {
 }
 
 #[derive(Parser, Debug)]
-#[clap(name = "predict", about = "A program to perform word segmentation.")]
+#[command(about = "A program to perform word segmentation.")]
 struct Args {
     /// The model file to use when analyzing text
-    #[clap(long)]
+    #[arg(long)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[clap(long)]
+    #[arg(long)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[clap(long)]
+    #[arg(long)]
     wsconst: Vec<WsConst>,
 
     /// Prints scores.
-    #[clap(long)]
+    #[arg(long)]
     scores: bool,
 
     /// Do not normalize input strings before prediction.
-    #[clap(long)]
+    #[arg(long)]
     no_norm: bool,
 }
 

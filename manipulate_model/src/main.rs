@@ -6,25 +6,22 @@ use serde::{Deserialize, Serialize};
 use vaporetto::{Model, WordWeightRecord};
 
 #[derive(Parser, Debug)]
-#[clap(
-    name = "manipulate_model",
-    about = "A program to manipulate tarined models."
-)]
+#[command(about = "A program to manipulate tarined models.")]
 struct Args {
     /// Input path of the model file
-    #[clap(long)]
+    #[arg(long)]
     model_in: PathBuf,
 
     /// Output path of the model file
-    #[clap(long)]
+    #[arg(long)]
     model_out: Option<PathBuf>,
 
     /// Output a dictionary contained in the model.
-    #[clap(long)]
+    #[arg(long)]
     dump_dict: Option<PathBuf>,
 
     /// Replace a dictionary if the argument is specified.
-    #[clap(long)]
+    #[arg(long)]
     replace_dict: Option<PathBuf>,
 }
 

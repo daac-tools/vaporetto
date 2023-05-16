@@ -6,7 +6,7 @@ use std::str::FromStr;
 use clap::Parser;
 use vaporetto::{CharacterBoundary, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
-    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter, PatternMatchTagger},
+    sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
@@ -40,32 +40,29 @@ enum EvaluationMetric {
 }
 
 #[derive(Parser, Debug)]
-#[clap(
-    name = "evaluate",
-    about = "A program to evaluate the accuracy of Vaporetto."
-)]
+#[command(about = "A program to evaluate the accuracy of Vaporetto.")]
 struct Args {
     /// The model file to use when analyzing text
-    #[clap(long)]
+    #[arg(long)]
     model: PathBuf,
 
     /// Predicts POS tags.
-    #[clap(long)]
+    #[arg(long)]
     predict_tags: bool,
 
     /// Do not segment some character types: {D, R, H, T, K, O, G}.
     /// D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other, G: Grapheme cluster.
-    #[clap(long)]
+    #[arg(long)]
     wsconst: Vec<WsConst>,
 
     /// Do not normalize input strings before prediction.
-    #[clap(long)]
+    #[arg(long)]
     no_norm: bool,
 
     /// Evaluation metric: {char, word}.
     /// char: evaluates each charactor boundary.
     /// word: evaluates each word using Nagata's method.
-    #[clap(long, default_value = "char")]
+    #[arg(long, default_value = "char")]
     metric: EvaluationMetric,
 }
 
@@ -87,14 +84,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut f = zstd::Decoder::new(File::open(args.model)?)?;
     let model = Model::read(&mut f)?;
     let predictor = Predictor::new(model, args.predict_tags)?;
-    let word_tag_map: Vec<(String, Vec<Option<String>>)> = if args.predict_tags {
-        let config = bincode::config::standard();
-        bincode::decode_from_std_read(&mut f, config).unwrap_or_else(|_| vec![])
-    } else {
-        vec![]
-    };
-    let pattern_match_tagger = (!word_tag_map.is_empty())
-        .then(|| PatternMatchTagger::new(word_tag_map.into_iter().collect()));
 
     eprintln!("Start tokenization");
 
@@ -119,9 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         post_filters.iter().for_each(|filter| filter.filter(&mut s));
         if args.predict_tags {
             s.fill_tags();
-            if let Some(tagger) = pattern_match_tagger.as_ref() {
-                tagger.filter(&mut s);
-            }
         }
         let sys_boundaries = s.boundaries().to_vec();
         let mut sys_tags = vec![];
