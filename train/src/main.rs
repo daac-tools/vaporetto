@@ -8,63 +8,62 @@ use vaporetto::{Sentence, SolverType, Trainer};
 use vaporetto_rules::{string_filters::KyteaFullwidthFilter, StringFilter};
 
 #[derive(Parser, Debug)]
-#[clap(
-    name = "train",
+#[command(
     about = "A program to train models of Vaporetto.",
     group = ArgGroup::new("dataset").required(true).multiple(true),
 )]
 struct Args {
     /// A tokenized training corpus
-    #[clap(long, group = "dataset")]
+    #[arg(long, group = "dataset")]
     tok: Vec<PathBuf>,
 
     /// A partially annotated training corpus
-    #[clap(long, group = "dataset")]
+    #[arg(long, group = "dataset")]
     part: Vec<PathBuf>,
 
     /// A word dictionary file
-    #[clap(long)]
+    #[arg(long)]
     dict: Vec<PathBuf>,
 
     /// The file to write the trained model to
-    #[clap(long)]
+    #[arg(long)]
     model: PathBuf,
 
     /// The character window to use for word segmentation
-    #[clap(long, default_value = "3")]
+    #[arg(long, default_value = "3")]
     charw: u8,
 
     /// The character n-gram length to use for word segmentation
-    #[clap(long, default_value = "3")]
+    #[arg(long, default_value = "3")]
     charn: u8,
 
     /// The character type window to use for word segmentation
-    #[clap(long, default_value = "3")]
+    #[arg(long, default_value = "3")]
     typew: u8,
 
     /// The character type n-gram length to use for word segmentation
-    #[clap(long, default_value = "3")]
+    #[arg(long, default_value = "3")]
     typen: u8,
 
     /// Dictionary words longer than this value will be grouped together, where the length is in
     /// characters
-    #[clap(long, default_value = "4")]
+    #[arg(long, default_value = "4")]
     dictn: u8,
 
     /// The epsilon stopping criterion for classifier training
-    #[clap(long, default_value = "0.01")]
+    #[arg(long, default_value = "0.01")]
     eps: f64,
 
     /// The cost hyperparameter for classifier training
-    #[clap(long, default_value = "1.0")]
+    #[arg(long, default_value = "1.0")]
     cost: f64,
 
     /// The solver. {0, 1, 2, 3, 4, 5, 6, 7} (see LIBLINEAR documentation for more details)
-    #[clap(long)]
+    #[arg(long)]
     solver: SolverType,
 
     /// Do not normalize training data.
-    #[clap(long)]
+    #[arg(long)]
     no_norm: bool,
 }
 
