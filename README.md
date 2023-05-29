@@ -25,21 +25,21 @@ Vaporetto provides three ways to generate tokenization models:
 #### Download Distribution Model
 
 The first is the simplest way, which is to download a model we have trained.
-Models are available [here](https://github.com/daac-tools/vaporetto/releases).
+Models are available [here](https://github.com/daac-tools/vaporetto-models/releases).
 
-We chose `bccwj-suw+unidic+tag`:
+We chose `bccwj-suw+unidic_pos+pron`:
 ```
-% wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag.tar.xz
+% wget https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz
 ```
 
 Each file is a compressed file containing a model file and license terms, so you need to decompress the downloaded file as shown in the following command:
 ```
-% tar xf ./bccwj-suw+unidic+tag.tar.xz
+% tar xf ./bccwj-suw+unidic_pos+pron.tar.xz
 ```
 
 To perform tokenization, run the following command:
 ```
-% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic+tag.model.zst
+% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic_pos+pron.model.zst
 ```
 
 The following will be output:
@@ -55,7 +55,7 @@ you must decompress them outside of the API.
 
 ```rust
 // Requires zstd crate or ruzstd crate
-let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
+let reader = zstd::Decoder::new(File::open("path/to/model.zst")?)?;
 let model = Model::read(reader)?;
 ```
 
@@ -143,7 +143,7 @@ Sometimes, your model will output different results than what you expect.
 For example, `外国人参政権` is split into wrong tokens in the following command.
 We use the `--scores` option to show the score of each character boundary:
 ```
-% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic.model.zst
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic_pos+pron.model.zst
 外国 人 参 政権 と 政権 交代
 0:外国 -11785
 1:国人 16634
@@ -162,7 +162,7 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
 
 1. Dump a dictionary by the following command:
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --dump-dict path/to/dictionary.csv
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic_pos+pron.model.zst --dump-dict path/to/dictionary.csv
    ```
 
 2. Edit the dictionary.
@@ -192,12 +192,12 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
 
 3. Replaces weight data of a model file
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic-new.model.zst
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic_pos+pron.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic_pos+pron-new.model.zst
    ```
 
 Now `外国人参政権` is split into correct tokens.
 ```
-% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic-new.model.zst
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic_pos+pron-new.model.zst
 外国 人 参政 権 と 政権 交代
 0:外国 -11785
 1:国人 16634
