@@ -25,10 +25,11 @@ jobs:
         tar xf 'bccwj-suw+unidic_pos+pron.tar.xz'
         mv ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst ./src/
 
-    - name: Build
-      uses: jetli/trunk-action@v0.4.0
+    - uses: jetli/trunk-action@v0.4.0
       with:
         version: 'latest'
+
+    - name: Build
       working-directory: ./examples/wasm
       run: trunk build --release
 
