@@ -31,7 +31,9 @@ jobs:
 
     - name: Build
       working-directory: ./examples/wasm
-      run: trunk build --release
+      run: |
+        rustup target add wasm32-unknown-unknown
+        trunk build --release
 
     - name: Publish to Cloudflare Pages
       id: cloudflare_pages_deploy
