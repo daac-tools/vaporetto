@@ -145,16 +145,16 @@ We use the `--scores` option to show the score of each character boundary:
 ```
 % echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic_pos+pron.model.zst
 外国 人 参 政権 と 政権 交代
-0:外国 -11785
-1:国人 16634
-2:人参 5450
-3:参政 4480
-4:政権 -3697
-5:権と 17702
-6:と政 18699
-7:政権 -12742
-8:権交 14578
-9:交代 -7658
+0:外国 -10784
+1:国人 17935
+2:人参 5308
+3:参政 3833
+4:政権 -3299
+5:権と 14635
+6:と政 17653
+7:政権 -12705
+8:権交 11611
+9:交代 -5794
 ```
 
 The correct is `外国 人 参政 権`.
@@ -175,11 +175,11 @@ To split `外国人参政権` into correct tokens, manipulate the model in the f
 
    Vaporetto splits a text when the total weight of the boundary is a positive number, so we add a new entry as follows:
    ```diff
-    参撾,3167 -6074 3790,
-    参政,3167 -6074 3790,
+    参撾,3328 -5545 3514,
+    参政,3328 -5545 3514,
    +参政権,0 -10000 10000 0,参政/権
-    参朝,3167 -6074 3790,
-    参校,3167 -6074 3790,
+    参朝,3328 -5545 3514,
+    参校,3328 -5545 3514,
    ```
 
    In this case, `-10000` will be added between `参` and `政`, and `10000` will be added between `政` and `権`.
@@ -199,16 +199,16 @@ Now `外国人参政権` is split into correct tokens.
 ```
 % echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic_pos+pron-new.model.zst
 外国 人 参政 権 と 政権 交代
-0:外国 -11785
-1:国人 16634
-2:人参 5450
-3:参政 -5520
-4:政権 6303
-5:権と 17702
-6:と政 18699
-7:政権 -12742
-8:権交 14578
-9:交代 -7658
+0:外国 -10784
+1:国人 17935
+2:人参 5308
+3:参政 -6167
+4:政権 6701
+5:権と 14635
+6:と政 17653
+7:政権 -12705
+8:権交 11611
+9:交代 -5794
 ```
 
 ### Tagging

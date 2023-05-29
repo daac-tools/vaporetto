@@ -136,11 +136,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 s_orig.tags_mut().clone_from_slice(s.tags());
                 s_orig.write_tokenized_text(&mut buf);
                 out.write_all(buf.as_bytes())?;
+                out.write_all(b"\n")?;
                 if args.scores {
                     print_scores(&s, &mut out)?;
                 }
+            } else {
+                out.write_all(b"\n")?;
             }
-            out.write_all(b"\n")?;
             if is_tty {
                 out.flush()?;
             }
