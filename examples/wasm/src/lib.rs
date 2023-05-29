@@ -50,7 +50,7 @@ impl Worker for VaporettoWorker {
     type Output = (Vec<Token>, usize);
 
     fn create(_scope: &WorkerScope<Self>) -> Self {
-        let model_data = include_bytes!("bccwj-suw+unidic+tag-huge.model.zst");
+        let model_data = include_bytes!("bccwj-suw+unidic_pos+pron.model.zst");
         let mut decoder = ruzstd::StreamingDecoder::new(model_data.as_slice()).unwrap();
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();

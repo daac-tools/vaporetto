@@ -23,21 +23,21 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 #### 配布モデルをダウンロードする
 
 1つ目は最も単純な方法で、学習済みモデルをダウンロードすることです。
-モデルファイルは[ここ](https://github.com/daac-tools/vaporetto/releases)にあります。
+モデルファイルは[ここ](https://github.com/daac-tools/vaporetto-models/releases)にあります。
 
 `bccwj-suw+unidic+tag` を選びました。
 ```
-% wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag.tar.xz
+% wget https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz
 ```
 
 各ファイルはモデルファイルとライセンス条項が含まれた圧縮ファイルなので、ダウンロードしたファイルを展開する必要があります。
 ```
-% tar xf ./bccwj-suw+unidic+tag.tar.xz
+% tar xf ./bccwj-suw+unidic_pos+pron.tar.xz
 ```
 
 トークン化には、以下のコマンドを実行します。
 ```
-% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic+tag.model.zst
+% echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic_pos+pron.model.zst
 ```
 
 以下が出力されます。
@@ -52,7 +52,7 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 
 ```rust
 // zstd クレートまたは ruzstd クレートが必要
-let reader = zstd::Decoder::new(File::open("path/to/model.bin.zst")?)?;
+let reader = zstd::Decoder::new(File::open("path/to/model.zst")?)?;
 let model = Model::read(reader)?;
 ```
 
@@ -137,18 +137,18 @@ Vaporetto は2種類のコーパス（フルアノテーションコーパスと
 例えば、以下のコマンドで `外国人参政権` は誤ったトークンに分割されます。
 `--scores` オプションを使って、各文字間のスコアを出力します。
 ```
-% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic.model.zst
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic_pos+pron.model.zst
 外国 人 参 政権 と 政権 交代
-0:外国 -11785
-1:国人 16634
-2:人参 5450
-3:参政 4480
-4:政権 -3697
-5:権と 17702
-6:と政 18699
-7:政権 -12742
-8:権交 14578
-9:交代 -7658
+0:外国 -10784
+1:国人 17935
+2:人参 5308
+3:参政 3833
+4:政権 -3299
+5:権と 14635
+6:と政 17653
+7:政権 -12705
+8:権交 11611
+9:交代 -5794
 ```
 
 正しくは `外国 人 参政 権` です。
@@ -169,11 +169,11 @@ Vaporetto は2種類のコーパス（フルアノテーションコーパスと
 
    Vaporetto は、重みの合計が正の値になった際にテキストを分割するので、以下のように新しいエントリを追加します。
    ```diff
-    参撾,3167 -6074 3790,
-    参政,3167 -6074 3790,
+    参撾,3328 -5545 3514,
+    参政,3328 -5545 3514,
    +参政権,0 -10000 10000 0,参政/権
-    参朝,3167 -6074 3790,
-    参校,3167 -6074 3790,
+    参朝,3328 -5545 3514,
+    参校,3328 -5545 3514,
    ```
 
    この場合、 `参` と `政` の間に `-10000` が、 `政` と `権` の間に `10000` が加算されます。
@@ -186,23 +186,23 @@ Vaporetto は2種類のコーパス（フルアノテーションコーパスと
 
 3. モデルファイルの重みを置換します。
    ```
-   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic-new.model.zst
+   % cargo run --release -p manipulate_model -- --model-in path/to/bccwj-suw+unidic_pos+pron.model.zst --replace-dict path/to/dictionary.csv --model-out path/to/bccwj-suw+unidic_pos+pron-new.model.zst
    ```
 
 これで `外国人参政権` が正しいトークンに分割されます。
 ```
-% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic-new.model.zst
+% echo '外国人参政権と政権交代' | cargo run --release -p predict -- --scores --model path/to/bccwj-suw+unidic_pos+pron-new.model.zst
 外国 人 参政 権 と 政権 交代
-0:外国 -11785
-1:国人 16634
-2:人参 5450
-3:参政 -5520
-4:政権 6303
-5:権と 17702
-6:と政 18699
-7:政権 -12742
-8:権交 14578
-9:交代 -7658
+0:外国 -10784
+1:国人 17935
+2:人参 5308
+3:参政 -6167
+4:政権 6701
+5:権と 14635
+6:と政 17653
+7:政権 -12705
+8:権交 11611
+9:交代 -5794
 ```
 
 ### 品詞推定
