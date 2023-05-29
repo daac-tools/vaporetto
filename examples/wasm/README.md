@@ -14,9 +14,9 @@ cargo install trunk
 cargo install wasm-bindgen-cli
 
 # Downloads and extracts the model file
-wget https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz
-tar xf ./bccwj-suw+unidic+tag-huge.tar.xz
-mv ./bccwj-suw+unidic+tag-huge/bccwj-suw+unidic+tag-huge.model.zst ./src/
+wget https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz
+tar xf ./bccwj-suw+unidic_pos+pron.tar.xz
+mv ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst ./src/
 
 # Builds and launches the server
 # Note: We recommend using --release flag to reduce loading time.

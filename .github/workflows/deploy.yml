@@ -21,16 +21,14 @@ jobs:
     - name: Download model
       working-directory: ./examples/wasm
       run: |
-        wget 'https://github.com/daac-tools/vaporetto/releases/download/v0.5.0/bccwj-suw+unidic+tag-huge.tar.xz'
-        tar xf ./bccwj-suw+unidic+tag-huge.tar.xz
-        mv ./bccwj-suw+unidic+tag-huge/bccwj-suw+unidic+tag-huge.model.zst ./src/
-
-    - name: Install environment
-      run: |
-        rustup target add wasm32-unknown-unknown
-        cargo install trunk
+        wget 'https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz'
+        tar xf 'bccwj-suw+unidic_pos+pron.tar.xz'
+        mv ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst ./src/
 
     - name: Build
+      uses: jetli/trunk-action@v0.4.0
+      with:
+        version: 'latest'
       working-directory: ./examples/wasm
       run: trunk build --release
 
