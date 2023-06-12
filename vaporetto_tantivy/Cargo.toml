@@ -15,7 +15,7 @@ categories = ["text-processing"]
 [dependencies]
 vaporetto = { path = "../vaporetto", version = "=0.6.3" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules", version = "=0.6.3" }  # MIT or Apache-2.0
-tantivy = "0.19"  # MIT
+tantivy = "0.20"  # MIT
 
 [dev-dependencies]
 ruzstd = "0.4.0"  # MIT
