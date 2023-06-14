@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_tantivy"
-version = "0.19.2" # Match with Tantivy version number
+version = "0.20.0" # Match with Tantivy version number
 edition = "2021"
 rust-version = "1.65"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
@@ -15,7 +15,7 @@ categories = ["text-processing"]
 [dependencies]
 vaporetto = { path = "../vaporetto", version = "=0.6.3" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules", version = "=0.6.3" }  # MIT or Apache-2.0
-tantivy = "0.19"  # MIT
+tantivy = "0.20"  # MIT
 
 [dev-dependencies]
 ruzstd = "0.4.0"  # MIT

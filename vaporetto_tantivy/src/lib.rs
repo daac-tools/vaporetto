@@ -8,7 +8,7 @@
 //! use std::fs::File;
 //! use std::io::{Read, BufReader};
 //!
-//! use tantivy::tokenizer::Tokenizer;
+//! use tantivy::tokenizer::{TokenStream, Tokenizer};
 //! use vaporetto::Model;
 //! use vaporetto_tantivy::VaporettoTokenizer;
 //!
@@ -18,7 +18,7 @@
 //! decoder.read_to_end(&mut buff).unwrap();
 //! let model = Model::read(&mut buff.as_slice()).unwrap();
 //!
-//! let tokenizer = VaporettoTokenizer::new(model, "DGR").unwrap();
+//! let mut tokenizer = VaporettoTokenizer::new(model, "DGR").unwrap();
 //!
 //! let mut stream = tokenizer.token_stream("東京特許許可局");
 //!
@@ -50,7 +50,7 @@
 /// ```
 use std::sync::Arc;
 
-use tantivy::tokenizer::{BoxTokenStream, Token, TokenStream, Tokenizer};
+use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 use vaporetto::{CharacterBoundary, CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter, SplitLinebreaksFilter},
@@ -112,15 +112,17 @@ pub struct VaporettoTokenStream<'a> {
 }
 
 impl Tokenizer for VaporettoTokenizer {
-    fn token_stream<'a>(&self, text: &'a str) -> BoxTokenStream<'a> {
+    type TokenStream<'a> = VaporettoTokenStream<'a>;
+
+    fn token_stream<'a>(&mut self, text: &'a str) -> Self::TokenStream<'a> {
         if text.is_empty() {
-            return BoxTokenStream::from(VaporettoTokenStream {
+            return VaporettoTokenStream {
                 text,
                 boundary_pos: vec![],
                 token: Token::default(),
                 offset_to: 0,
                 position: 0,
-            });
+            };
         }
 
         // pre filter
@@ -145,13 +147,13 @@ impl Tokenizer for VaporettoTokenizer {
         }
         boundary_pos.push(text.len());
 
-        BoxTokenStream::from(VaporettoTokenStream {
+        VaporettoTokenStream {
             text,
             token: Token::default(),
             boundary_pos,
             offset_to: 0,
             position: 0,
-        })
+        }
     }
 }
 
@@ -197,7 +199,7 @@ mod tests {
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();
         let model = Model::read(&mut buff.as_slice()).unwrap();
-        let a = TextAnalyzer::from(VaporettoTokenizer::new(model, wsconst).unwrap());
+        let mut a = TextAnalyzer::from(VaporettoTokenizer::new(model, wsconst).unwrap());
         let mut token_stream = a.token_stream(text);
         let mut tokens: Vec<Token> = vec![];
         let mut add_token = |token: &Token| {
