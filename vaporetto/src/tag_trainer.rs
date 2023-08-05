@@ -52,7 +52,7 @@ pub struct TagTrainer<'a> {
 }
 
 impl<'a> TagTrainer<'a> {
-    pub fn new(
+    pub const fn new(
         char_window_size: u8,
         char_ngram_size: u8,
         type_window_size: u8,
