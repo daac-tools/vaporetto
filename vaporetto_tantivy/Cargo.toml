@@ -2,7 +2,7 @@
 name = "vaporetto_tantivy"
 version = "0.20.0" # Match with Tantivy version number
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.67"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto Tokenizer for Tantivy"
 license = "MIT OR Apache-2.0"
