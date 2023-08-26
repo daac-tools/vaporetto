@@ -120,7 +120,7 @@ fn print_tag_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std
     if let Some((cands, scores)) = s.as_ref() {
         print_tag_scores_one(cands, scores, &mut out)?;
     }
-    out.write_all(b"\n")?;
+    out.write_all(b"\n\n")?;
     Ok(())
 }
 
