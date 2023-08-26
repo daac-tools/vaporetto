@@ -211,7 +211,7 @@ Now `外国人参政権` is split into correct tokens.
 9:交代 -5794
 ```
 
-### Tagging
+### Tag prediction
 
 Vaporetto experimentally supports tagging (e.g., part-of-speech and pronunciation tags).
 
@@ -233,6 +233,17 @@ When the predictor cannot predict a tag using the model, the tag specified in th
 If the dataset contains tags, the `train` command automatically trains them.
 
 In prediction, tags are not predicted by default, so you have to specify the `--predict-tags` argument to the `predict` command if necessary.
+
+If you specify the `--tag-scores` argument, the score of each candidate calculated during tag prediction is displayed.
+If there is only one candidate, the score becomes 0.
+
+```
+% echo "花が咲く" | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic_pos+pron.model.zst --predict-tags --tag-scores
+花/名詞-普通名詞-一般/ハナ が/助詞-格助詞/ガ 咲く/動詞-一般/サク
+花	名詞-普通名詞-一般:18613,接尾辞-名詞的-一般:-18613	ハナ:19973,バナ:-20377,カ:-20480,ゲ:-20410
+が	助詞-接続助詞:-20408,助詞-格助詞:23543,接続詞:-25332	ガ:0
+咲く	動詞-一般:0	サク:0
+```
 
 ## Speed Comparison of Various Tokenizers
 
