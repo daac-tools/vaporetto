@@ -91,6 +91,8 @@ pub struct Sentence<'a, 'b> {
     pub(crate) char_pma_states: Vec<u32>,
     pub(crate) type_pma_states: Vec<u32>,
     pub(crate) tags: Vec<Option<Cow<'b, str>>>,
+    #[allow(clippy::type_complexity)]
+    pub(crate) tag_scores: Vec<Option<(&'b [Vec<String>], Vec<i32>)>>,
     pub(crate) n_tags: usize,
     predictor: Option<&'b Predictor>,
     str_to_char_pos: Vec<usize>,
@@ -120,6 +122,7 @@ impl<'a, 'b> Default for Sentence<'a, 'b> {
             char_pma_states: vec![],
             type_pma_states: vec![],
             tags: vec![],
+            tag_scores: vec![],
             n_tags: 0,
             predictor: None,
             str_to_char_pos: vec![],
@@ -232,6 +235,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags: vec![],
+            tag_scores: vec![],
             n_tags: 0,
             str_to_char_pos,
             char_to_str_pos,
@@ -451,6 +455,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags,
+            tag_scores: vec![],
             n_tags,
             str_to_char_pos,
             char_to_str_pos,
@@ -688,6 +693,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags,
+            tag_scores: vec![],
             n_tags,
             str_to_char_pos,
             char_to_str_pos,
@@ -1087,6 +1093,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     #[inline]
     pub fn tags_mut(&mut self) -> &mut [Option<Cow<'b, str>>] {
         &mut self.tags
+    }
+
+    /// Returns a slice of tag scores.
+    #[allow(clippy::type_complexity)]
+    #[inline]
+    pub fn tag_scores(&self) -> &[Option<(&'b [Vec<String>], Vec<i32>)>] {
+        &self.tag_scores
     }
 
     /// Update the tag information.
