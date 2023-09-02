@@ -1095,13 +1095,6 @@ impl<'a, 'b> Sentence<'a, 'b> {
         &mut self.tags
     }
 
-    /// Returns a slice of tag scores.
-    #[allow(clippy::type_complexity)]
-    #[inline]
-    pub fn tag_scores(&self) -> &[Option<(&'b [Vec<String>], Vec<i32>)>] {
-        &self.tag_scores
-    }
-
     /// Update the tag information.
     /// If you want to predict tags, call this function after calling [`Predictor::predict()`] and
     /// word boundaries are fixed.
@@ -1214,6 +1207,31 @@ impl<'a, 'b> Token<'a, 'b> {
         let start = (self.end - 1) * self.sentence.n_tags();
         let end = self.end * self.sentence.n_tags();
         &self.sentence.tags[start..end]
+    }
+
+    /// Returns tag candidates with scores.
+    ///
+    /// The return value is a two-dimensional array. The outer array index corresponding to the
+    /// return value of [`Token::tags()`]. The inner array is a candidate set, where each element
+    /// is a tuple of the tag name and its score.
+    pub fn tag_candidates(&self) -> Vec<Vec<(&'b str, i32)>> {
+        let mut results = vec![];
+        if let Some((tags, scores)) = self.sentence.tag_scores[self.end - 1].as_ref() {
+            let mut i = 0;
+            for cands in *tags {
+                let mut inner = vec![];
+                if cands.len() == 1 {
+                    inner.push((cands[0].as_str(), 0));
+                } else {
+                    for cand in cands {
+                        inner.push((cand.as_str(), scores[i]));
+                        i += 1;
+                    }
+                }
+                results.push(inner);
+            }
+        }
+        results
     }
 
     /// Returns the start position of this token in characters.

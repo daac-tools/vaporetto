@@ -5,7 +5,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use clap::Parser;
-use vaporetto::{CharacterBoundary, CharacterType, Model, Predictor, Sentence};
+use vaporetto::{CharacterType, Model, Predictor, Sentence};
 use vaporetto_rules::{
     sentence_filters::{ConcatGraphemeClustersFilter, KyteaWsConstFilter},
     string_filters::KyteaFullwidthFilter,
@@ -74,53 +74,21 @@ fn print_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn print_tag_scores_one(
-    cands: &[Vec<String>],
-    scores: &[i32],
-    mut out: impl Write,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut i = 0;
-    for cands in cands {
-        out.write_all(b"\t")?;
-        if cands.len() == 1 {
-            write!(out, "{}:0", cands[0])?;
-        } else {
-            for (j, cand) in cands.iter().enumerate() {
-                if j != 0 {
+fn print_tag_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::error::Error>> {
+    for token in s.iter_tokens() {
+        out.write_all(token.surface().as_bytes())?;
+        for cands in token.tag_candidates() {
+            out.write_all(b"\t")?;
+            for (i, (tag, score)) in cands.iter().enumerate() {
+                if i != 0 {
                     out.write_all(b",")?;
                 }
-                write!(out, "{cand}:{}", scores[i])?;
-                i += 1;
+                write!(out, "{tag}:{score}")?;
             }
         }
+        out.write_all(b"\n")?;
     }
-    Ok(())
-}
-
-fn print_tag_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::error::Error>> {
-    let mut chars_iter = s.as_raw_text().chars();
-    let mut scores_iter = s.tag_scores().iter();
-    for ((b, c), s) in s
-        .boundaries()
-        .iter()
-        .zip(&mut chars_iter)
-        .zip(&mut scores_iter)
-    {
-        write!(out, "{c}")?;
-        if *b == CharacterBoundary::WordBoundary {
-            if let Some((cands, scores)) = s.as_ref() {
-                print_tag_scores_one(cands, scores, &mut out)?;
-            }
-            out.write_all(b"\n")?;
-        }
-    }
-    let c = chars_iter.next().unwrap();
-    let s = scores_iter.next().unwrap();
-    write!(out, "{c}")?;
-    if let Some((cands, scores)) = s.as_ref() {
-        print_tag_scores_one(cands, scores, &mut out)?;
-    }
-    out.write_all(b"\n\n")?;
+    out.write_all(b"\n")?;
     Ok(())
 }
 
