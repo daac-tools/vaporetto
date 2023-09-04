@@ -1202,6 +1202,8 @@ impl<'a, 'b> Token<'a, 'b> {
     }
 
     /// Returns tags of this token.
+    #[cfg(feature = "tag-prediction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     #[inline]
     pub fn tags(&self) -> &'a [Option<Cow<'b, str>>] {
         let start = (self.end - 1) * self.sentence.n_tags();
@@ -1214,6 +1216,12 @@ impl<'a, 'b> Token<'a, 'b> {
     /// The return value is a two-dimensional array. The outer array index corresponding to the
     /// return value of [`Token::tags()`]. The inner array is a candidate set, where each element
     /// is a tuple of the tag name and its score.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if [`Predictor::store_tag_scores()`] is set to false.
+    #[cfg(feature = "tag-prediction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     pub fn tag_candidates(&self) -> Vec<Vec<(&'b str, i32)>> {
         let mut results = vec![];
         if let Some((tags, scores)) = self.sentence.tag_scores[self.end - 1].as_ref() {
