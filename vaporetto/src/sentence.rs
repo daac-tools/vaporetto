@@ -1222,6 +1222,10 @@ impl<'a, 'b> Token<'a, 'b> {
     #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     pub fn tag_candidates(&self) -> Vec<Vec<(&'b str, i32)>> {
         let mut results = vec![];
+        assert!(
+            !self.sentence.tag_scores.is_empty(),
+            "Predictor::store_tag_scores() must be set to true to use this function.",
+        );
         if let Some((tags, scores)) = self.sentence.tag_scores[self.end - 1].as_ref() {
             let mut i = 0;
             for cands in *tags {
