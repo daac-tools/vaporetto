@@ -50,9 +50,13 @@ struct Args {
     #[arg(long)]
     wsconst: Vec<WsConst>,
 
-    /// Prints scores.
+    /// Prints boundary scores.
     #[arg(long)]
     scores: bool,
+
+    /// Prints tag scores.
+    #[arg(long)]
+    tag_scores: bool,
 
     /// Do not normalize input strings before prediction.
     #[arg(long)]
@@ -65,6 +69,24 @@ fn print_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::er
     for (i, (c, score)) in chars_iter.zip(s.boundary_scores()).enumerate() {
         writeln!(out, "{i}:{prev_c}{c} {score}")?;
         prev_c = c;
+    }
+    out.write_all(b"\n")?;
+    Ok(())
+}
+
+fn print_tag_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::error::Error>> {
+    for token in s.iter_tokens() {
+        out.write_all(token.surface().as_bytes())?;
+        for cands in token.tag_candidates() {
+            out.write_all(b"\t")?;
+            for (i, (tag, score)) in cands.iter().enumerate() {
+                if i != 0 {
+                    out.write_all(b",")?;
+                }
+                write!(out, "{tag}:{score}")?;
+            }
+        }
+        out.write_all(b"\n")?;
     }
     out.write_all(b"\n")?;
     Ok(())
@@ -87,7 +109,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Loading model file...");
     let mut f = zstd::Decoder::new(File::open(args.model)?)?;
     let model = Model::read(&mut f)?;
-    let predictor = Predictor::new(model, args.predict_tags)?;
+    let mut predictor = Predictor::new(model, args.predict_tags)?;
+    if args.tag_scores {
+        predictor.store_tag_scores(true);
+    }
 
     let is_tty = atty::is(atty::Stream::Stdout);
 
@@ -114,6 +139,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             out.write_all(b"\n")?;
+            if args.tag_scores {
+                print_tag_scores(&s, &mut out)?;
+            }
             if is_tty {
                 out.flush()?;
             }
@@ -142,6 +170,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else {
                 out.write_all(b"\n")?;
+            }
+            if args.tag_scores {
+                print_tag_scores(&s, &mut out)?;
             }
             if is_tty {
                 out.flush()?;

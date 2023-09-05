@@ -91,6 +91,8 @@ pub struct Sentence<'a, 'b> {
     pub(crate) char_pma_states: Vec<u32>,
     pub(crate) type_pma_states: Vec<u32>,
     pub(crate) tags: Vec<Option<Cow<'b, str>>>,
+    #[allow(clippy::type_complexity)]
+    pub(crate) tag_scores: Vec<Option<(&'b [Vec<String>], Vec<i32>)>>,
     pub(crate) n_tags: usize,
     predictor: Option<&'b Predictor>,
     str_to_char_pos: Vec<usize>,
@@ -120,6 +122,7 @@ impl<'a, 'b> Default for Sentence<'a, 'b> {
             char_pma_states: vec![],
             type_pma_states: vec![],
             tags: vec![],
+            tag_scores: vec![],
             n_tags: 0,
             predictor: None,
             str_to_char_pos: vec![],
@@ -232,6 +235,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags: vec![],
+            tag_scores: vec![],
             n_tags: 0,
             str_to_char_pos,
             char_to_str_pos,
@@ -451,6 +455,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags,
+            tag_scores: vec![],
             n_tags,
             str_to_char_pos,
             char_to_str_pos,
@@ -688,6 +693,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags,
+            tag_scores: vec![],
             n_tags,
             str_to_char_pos,
             char_to_str_pos,
@@ -1201,6 +1207,41 @@ impl<'a, 'b> Token<'a, 'b> {
         let start = (self.end - 1) * self.sentence.n_tags();
         let end = self.end * self.sentence.n_tags();
         &self.sentence.tags[start..end]
+    }
+
+    /// Returns tag candidates with scores.
+    ///
+    /// The return value is a two-dimensional array. The outer array index corresponding to the
+    /// return value of [`Token::tags()`]. The inner array is a candidate set, where each element
+    /// is a tuple of the tag name and its score.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if [`Predictor::store_tag_scores()`] is set to false.
+    #[cfg(feature = "tag-prediction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
+    pub fn tag_candidates(&self) -> Vec<Vec<(&'b str, i32)>> {
+        let mut results = vec![];
+        assert!(
+            !self.sentence.tag_scores.is_empty(),
+            "Predictor::store_tag_scores() must be set to true to use this function.",
+        );
+        if let Some((tags, scores)) = self.sentence.tag_scores[self.end - 1].as_ref() {
+            let mut i = 0;
+            for cands in *tags {
+                let mut inner = vec![];
+                if cands.len() == 1 {
+                    inner.push((cands[0].as_str(), 0));
+                } else {
+                    for cand in cands {
+                        inner.push((cand.as_str(), scores[i]));
+                        i += 1;
+                    }
+                }
+                results.push(inner);
+            }
+        }
+        results
     }
 
     /// Returns the start position of this token in characters.

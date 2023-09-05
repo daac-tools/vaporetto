@@ -430,7 +430,10 @@ assert_eq!(
 ```
 "
 )]
-pub struct Predictor(PredictorData);
+pub struct Predictor {
+    data: PredictorData,
+    tag_scores: bool,
+}
 
 impl Predictor {
     /// Creates a new predictor from the model.
@@ -487,16 +490,25 @@ impl Predictor {
             #[cfg(feature = "tag-prediction")]
             tag_type_ngram_model,
         )?;
-        Ok(Self(PredictorData {
-            char_scorer,
-            type_scorer,
-            bias: model.0.bias,
+        Ok(Self {
+            data: PredictorData {
+                char_scorer,
+                type_scorer,
+                bias: model.0.bias,
 
-            #[cfg(feature = "tag-prediction")]
-            tag_predictor,
-            #[cfg(feature = "tag-prediction")]
-            n_tags,
-        }))
+                #[cfg(feature = "tag-prediction")]
+                tag_predictor,
+                #[cfg(feature = "tag-prediction")]
+                n_tags,
+            },
+            tag_scores: false,
+        })
+    }
+
+    /// Stores tag scores if the given `flag` is `true`.
+    #[cfg(feature = "tag-prediction")]
+    pub fn store_tag_scores(&mut self, flag: bool) {
+        self.tag_scores = flag;
     }
 
     /// Predicts word boundaries of the given sentence.
@@ -504,13 +516,14 @@ impl Predictor {
     pub fn predict<'a>(&'a self, sentence: &mut Sentence<'_, 'a>) {
         sentence.score_padding = WEIGHT_FIXED_LEN - 1;
         sentence.boundary_scores.clear();
-        sentence
-            .boundary_scores
-            .resize(sentence.score_padding * 2 + sentence.len() - 1, self.0.bias);
-        if let Some(scorer) = self.0.char_scorer.as_ref() {
+        sentence.boundary_scores.resize(
+            sentence.score_padding * 2 + sentence.len() - 1,
+            self.data.bias,
+        );
+        if let Some(scorer) = self.data.char_scorer.as_ref() {
             scorer.add_scores(sentence);
         }
-        if let Some(scorer) = self.0.type_scorer.as_ref() {
+        if let Some(scorer) = self.data.type_scorer.as_ref() {
             scorer.add_scores(sentence);
         }
         for (b, s) in sentence
@@ -530,19 +543,25 @@ impl Predictor {
     #[cfg(feature = "tag-prediction")]
     pub(crate) fn predict_tags<'a>(&'a self, sentence: &mut Sentence<'_, 'a>) {
         let tag_predictor = self
-            .0
+            .data
             .tag_predictor
             .as_ref()
             .expect("this predictor is created with predict_tags = false");
 
-        if self.0.n_tags == 0 {
+        if self.data.n_tags == 0 {
             return;
         }
         let mut scores = vec![];
         let mut range_start = Some(0);
-        sentence.n_tags = self.0.n_tags;
+        sentence.n_tags = self.data.n_tags;
         sentence.tags.clear();
-        sentence.tags.resize(sentence.len() * self.0.n_tags, None);
+        sentence
+            .tags
+            .resize(sentence.len() * self.data.n_tags, None);
+        sentence.tag_scores.clear();
+        if self.tag_scores {
+            sentence.tag_scores.resize(sentence.len(), None);
+        }
         for (i, &b) in sentence.boundaries.iter().enumerate() {
             if b == CharacterBoundary::Unknown {
                 range_start.take();
@@ -553,7 +572,7 @@ impl Predictor {
                         scores.clear();
                         scores.resize(tag_predictor.bias().len(), 0);
                         tag_predictor.bias().add_scores(&mut scores);
-                        if let Some(scorer) = self.0.char_scorer.as_ref() {
+                        if let Some(scorer) = self.data.char_scorer.as_ref() {
                             debug_assert!(i < sentence.char_pma_states.len());
                             // token_id is always smaller than tag_weight.len() because
                             // tag_predictor is created to contain such values in the new()
@@ -562,7 +581,7 @@ impl Predictor {
                                 scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
                             }
                         }
-                        if let Some(scorer) = self.0.type_scorer.as_ref() {
+                        if let Some(scorer) = self.data.type_scorer.as_ref() {
                             debug_assert!(i < sentence.type_pma_states.len());
                             // token_id is always smaller than tag_weight.len() because
                             // tag_predictor is created to contain such values in the new()
@@ -573,8 +592,12 @@ impl Predictor {
                         }
                         tag_predictor.predict(
                             &scores,
-                            &mut sentence.tags[i * self.0.n_tags..(i + 1) * self.0.n_tags],
+                            &mut sentence.tags[i * self.data.n_tags..(i + 1) * self.data.n_tags],
                         );
+                        if !sentence.tag_scores.is_empty() {
+                            sentence.tag_scores[i].replace((&tag_predictor.tags, scores));
+                            scores = vec![];
+                        }
                     }
                 }
                 range_start.replace(i + 1);
@@ -586,7 +609,7 @@ impl Predictor {
                 scores.clear();
                 scores.resize(tag_predictor.bias().len(), 0);
                 tag_predictor.bias().add_scores(&mut scores);
-                if let Some(scorer) = self.0.char_scorer.as_ref() {
+                if let Some(scorer) = self.data.char_scorer.as_ref() {
                     debug_assert!(sentence.len() <= sentence.char_pma_states.len());
                     // token_id is always smaller than tag_weight.len() because tag_predictor is
                     // created to contain such values in the new() function.
@@ -594,7 +617,7 @@ impl Predictor {
                         scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
                     }
                 }
-                if let Some(scorer) = self.0.type_scorer.as_ref() {
+                if let Some(scorer) = self.data.type_scorer.as_ref() {
                     debug_assert!(sentence.len() <= sentence.type_pma_states.len());
                     // token_id is always smaller than tag_weight.len() because tag_predictor is
                     // created to contain such values in the new() function.
@@ -603,7 +626,10 @@ impl Predictor {
                     }
                 }
                 let i = sentence.len() - 1;
-                tag_predictor.predict(&scores, &mut sentence.tags[i * self.0.n_tags..]);
+                tag_predictor.predict(&scores, &mut sentence.tags[i * self.data.n_tags..]);
+                if !sentence.tag_scores.is_empty() {
+                    sentence.tag_scores[i].replace((&tag_predictor.tags, scores));
+                }
             }
         }
     }
@@ -611,7 +637,7 @@ impl Predictor {
     /// Serializes the predictor into a Vec.
     pub fn serialize_to_vec(&self) -> Result<Vec<u8>> {
         let config = bincode::config::standard();
-        let result = bincode::encode_to_vec(&self.0, config)?;
+        let result = bincode::encode_to_vec(&self.data, config)?;
         Ok(result)
     }
 
@@ -625,7 +651,13 @@ impl Predictor {
         let config = bincode::config::standard();
         // Deserialization is unsafe because the automaton will not be verified.
         let (predictor_data, size) = bincode::borrow_decode_from_slice(data, config)?;
-        Ok((Self(predictor_data), &data[size..]))
+        Ok((
+            Self {
+                data: predictor_data,
+                tag_scores: false,
+            },
+            &data[size..],
+        ))
     }
 }
 
