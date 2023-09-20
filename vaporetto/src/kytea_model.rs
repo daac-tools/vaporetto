@@ -479,7 +479,7 @@ impl TryFrom<KyteaModel> for Model {
         }
 
         let mut type_ngrams = vec![];
-        for (type_ngram, v) in type_dict.dump_items() {
+        'a: for (type_ngram, v) in type_dict.dump_items() {
             let weight_size = config.type_w as usize * 2 - type_ngram.len() + 1;
             let mut ngram = type_ngram
                 .into_iter()
@@ -494,6 +494,9 @@ impl TryFrom<KyteaModel> for Model {
                     b'T' => CharacterType::Katakana as u8,
                     b'K' => CharacterType::Kanji as u8,
                     b'O' => CharacterType::Other as u8,
+                    4 => {
+                        continue 'a;
+                    }
                     t => {
                         return Err(VaporettoError::invalid_model(format!(
                             "unsupported character type: {t}"
