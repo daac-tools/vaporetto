@@ -494,8 +494,7 @@ impl TryFrom<KyteaModel> for Model {
                     b'T' => CharacterType::Katakana as u8,
                     b'K' => CharacterType::Kanji as u8,
                     b'O' => CharacterType::Other as u8,
-                    // 
-https://github.com/daac-tools/vaporetto/issues/110
+                    // https://github.com/daac-tools/vaporetto/issues/110
                     // Some models distributed on KyTea's web site contain the invalid character
                     // type `0x04`. The following supports them.
                     4 => {
