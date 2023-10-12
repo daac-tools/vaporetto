@@ -100,7 +100,7 @@ impl<'a> TagTrainer<'a> {
             }
             self.examples
                 .entry(token.surface())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(TagExample {
                     tags: token.tags(),
                     features,
