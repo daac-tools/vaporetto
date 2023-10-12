@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.2", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto", features = ["kytea"] }  # MIT or Apache-2.0
-zstd = "0.12"  # MIT
+zstd = "0.13"  # MIT
