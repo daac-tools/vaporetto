@@ -65,6 +65,10 @@ struct Args {
     /// Do not normalize training data.
     #[arg(long)]
     no_norm: bool,
+
+    /// The number of workers for zstd (0 means multithreaded will be disabled)
+    #[arg(long, default_value="0")]
+    zstd_workers: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -179,6 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Finish training.");
 
     let mut f = zstd::Encoder::new(File::create(args.model)?, 19)?;
+    f.multithread(args.zstd_workers)?;
     model.write(&mut f)?;
     f.finish()?;
 

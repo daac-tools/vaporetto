@@ -19,6 +19,10 @@ struct Args {
     /// Vaporetto model file
     #[clap(long)]
     model_out: PathBuf,
+
+    /// The number of workers for zstd (0 means multithreaded will be disabled)
+    #[arg(long, default_value="0")]
+    zstd_workers: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Saving model file...");
     let model = Model::try_from(model)?;
     let mut f = zstd::Encoder::new(fs::File::create(args.model_out)?, 19)?;
+    f.multithread(args.zstd_workers)?;
     model.write(&mut f)?;
     f.finish()?;
 
