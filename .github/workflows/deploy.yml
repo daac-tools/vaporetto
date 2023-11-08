@@ -47,6 +47,7 @@ jobs:
         projectName: vaporetto-demo
         directory: ./examples/wasm/dist
         gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${GITHUB_REF##*/}
 
     - name: Add publish URL as commit status
       uses: actions/github-script@v6
