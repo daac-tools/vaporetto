@@ -1,8 +1,8 @@
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  pull_request_target:
+    types: [ labeled ]
 
 name: deploy
 
@@ -10,6 +10,7 @@ jobs:
   publish:
     name: Publish to Cloudflare Pages
     runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'ok to test')
     permissions:
       contents: read
       deployments: write
