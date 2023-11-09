@@ -23,6 +23,10 @@ struct Args {
     /// Replace a dictionary if the argument is specified.
     #[arg(long)]
     replace_dict: Option<PathBuf>,
+
+    /// The number of workers for zstd (0 means multithreaded will be disabled)
+    #[arg(long, default_value="0")]
+    zstd_workers: u32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -72,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(path) = args.model_out {
         eprintln!("Saving model file...");
         let mut f = zstd::Encoder::new(fs::File::create(path)?, 19)?;
+        f.multithread(args.zstd_workers)?;
         model.write(&mut f)?;
         f.finish()?;
     }
