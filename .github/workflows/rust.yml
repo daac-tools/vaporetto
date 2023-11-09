@@ -3,8 +3,8 @@ on:
     - cron: '0 0 * * *'
   push:
     branches: [ main ]
-  pull_request_target:
-    types: [ labeled ]
+  pull_request:
+    branches: [ main ]
 
 name: build
 
@@ -15,9 +15,6 @@ jobs:
   build:
     name: Check on ${{ matrix.rust }}
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'ok to test')) ||
-      (github.event_name != 'pull_request_target')
     strategy:
       matrix:
         rust:
