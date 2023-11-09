@@ -13,15 +13,15 @@ use vaporetto::{KyteaModel, Model};
 )]
 struct Args {
     /// KyTea model file
-    #[clap(long)]
+    #[arg(long)]
     model_in: PathBuf,
 
     /// Vaporetto model file
-    #[clap(long)]
+    #[arg(long)]
     model_out: PathBuf,
 
     /// The number of workers for zstd (0 means multithreaded will be disabled)
-    #[arg(long, default_value="0")]
+    #[arg(long, default_value = "0")]
     zstd_workers: u32,
 }
 
