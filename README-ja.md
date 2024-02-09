@@ -5,7 +5,7 @@ Vaporetto は、高速で軽量な点予測に基づくトークナイザです�
 
 [![Crates.io](https://img.shields.io/crates/v/vaporetto)](https://crates.io/crates/vaporetto)
 [![Documentation](https://docs.rs/vaporetto/badge.svg)](https://docs.rs/vaporetto)
-![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)
+[![Build Status](https://github.com/daac-tools/vaporetto/actions/workflows/rust.yml/badge.svg)](https://github.com/daac-tools/vaporetto/actions)
 [![Slack](https://img.shields.io/badge/join-chat-brightgreen?logo=slack)](https://join.slack.com/t/daac-tools/shared_invite/zt-1pwwqbcz4-KxL95Nam9VinpPlzUpEGyA)
 
 [English document](README.md)
