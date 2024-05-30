@@ -246,7 +246,7 @@ impl AddAssign<&Self> for PositionalWeightWithTag {
                 *y += x;
             }
         } else {
-            self.weight = other.weight.clone();
+            self.weight.clone_from(&other.weight);
         }
         for (k, v) in &other.tag_info {
             self.tag_info
