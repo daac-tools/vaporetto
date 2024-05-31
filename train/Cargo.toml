@@ -9,4 +9,4 @@ vaporetto = { path = "../vaporetto", features = ["train"] }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
 zstd = { version = "0.13", features = ["zstdmt"] }  # MIT
 # workaround: https://github.com/gyscos/zstd-rs/issues/270
-zstd-sys = "=2.0.9"
+zstd-sys = "=2.0.10"
