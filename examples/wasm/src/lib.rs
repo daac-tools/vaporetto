@@ -3,6 +3,7 @@ pub mod i18n;
 pub mod text_input;
 pub mod token_view;
 
+use std::borrow::Cow;
 use std::io::Read;
 use std::rc::Rc;
 
@@ -14,6 +15,7 @@ use vaporetto_rules::{
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
+use web_sys::UrlSearchParams;
 use yew::{html, Component, Context, Html};
 
 use crate::text_input::TextInput;
@@ -97,10 +99,14 @@ impl Worker for VaporettoWorker {
                 .boundaries_mut()
                 .copy_from_slice(fields.sentence_filtered.boundaries());
             fields.sentence_orig.reset_tags(n_tags);
-            fields
+            for (d, s) in fields
                 .sentence_orig
                 .tags_mut()
-                .clone_from_slice(fields.sentence_filtered.tags());
+                .iter_mut()
+                .zip(fields.sentence_filtered.tags())
+            {
+                *d = s.as_ref().map(|x| Cow::Owned(x.to_string()));
+            }
         });
 
         let tokens = self
@@ -150,13 +156,19 @@ impl Component for App {
             })
             .spawn("./vaporetto_worker.js");
 
-        // Sends a dummy message.
-        // The first response indicates that the worker is ready.
-        bridge.send(String::new());
+        let text = web_sys::window()
+            .unwrap()
+            .location()
+            .search()
+            .ok()
+            .and_then(|s| UrlSearchParams::new_with_str(&s).ok())
+            .and_then(|q| q.get("text"))
+            .unwrap_or_else(String::new);
+        bridge.send(text.clone());
 
         Self {
             bridge,
-            text: String::new().into(),
+            text: text.into(),
             tokens: None,
             n_tags: 0,
         }
