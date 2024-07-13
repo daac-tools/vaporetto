@@ -29,6 +29,11 @@ thead, tfoot {
     color: #fff;
 }
 
+html {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
 body {
     width: calc(100% - 20px);
     margin: 10px;
@@ -37,6 +42,26 @@ body {
 
 .header-link {
     text-align: right;
+}
+
+.input-bar {
+    display: flex;
+    flex-direction: row;
+}
+
+.input-bar button {
+    font-size: 14pt;
+    align-self: center;
+    background-color: #ffffff;
+    border: 1px solid #000000;
+}
+
+.input-bar button:hover {
+    background-color: #dddddd;
+}
+
+.input-bar button.copied {
+    background-color: #008800;
 }
 
 a {

@@ -198,22 +198,14 @@ impl Component for App {
                     </p>
                 </header>
                 <main>
-                    <div>
-                        {
-                            if self.tokens.is_some() {
-                                html! {
-                                    <TextInput
-                                        callback={ctx.link().callback(Msg::SetText)}
-                                        value={Rc::clone(&self.text)}
-                                    />
-                                }
-                            } else {
-                                html!{
-                                    <input type="text" disabled=true />
-                                }
-                            }
+                    {
+                        html! {
+                            <TextInput
+                                callback={ctx.link().callback(Msg::SetText)}
+                                value={self.tokens.is_some().then(|| Rc::clone(&self.text))}
+                            />
                         }
-                    </div>
+                    }
                     {
                         if let Some(tokens) = &self.tokens {
                             html! {
