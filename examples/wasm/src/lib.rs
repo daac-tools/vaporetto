@@ -92,10 +92,12 @@ impl Worker for VaporettoWorker {
 
             fields.sentence_orig.update_raw(msg).unwrap();
 
+            let n_tags = fields.sentence_filtered.n_tags();
             fields
                 .sentence_orig
                 .boundaries_mut()
                 .copy_from_slice(fields.sentence_filtered.boundaries());
+            fields.sentence_orig.reset_tags(n_tags);
             fields
                 .sentence_orig
                 .tags_mut()
