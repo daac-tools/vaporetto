@@ -39,10 +39,10 @@ pub struct VaporettoWorker {
 
     #[borrows(predictor)]
     #[covariant]
-    sentence_orig: Sentence<'static, 'this>,
+    sentence_filtered: Sentence<'static, 'this>,
     #[borrows(predictor)]
     #[covariant]
-    sentence_filtered: Sentence<'static, 'this>,
+    sentence_orig: Sentence<'static, 'this>,
 }
 
 impl Worker for VaporettoWorker {
