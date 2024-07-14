@@ -18,4 +18,4 @@ vaporetto_rules = { path = "../vaporetto_rules", version = "=0.6.3" }  # MIT or 
 tantivy = "0.22"  # MIT
 
 [dev-dependencies]
-ruzstd = "0.6.0"  # MIT
+ruzstd = "0.7.0"  # MIT
