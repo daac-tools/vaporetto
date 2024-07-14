@@ -1,8 +1,8 @@
 [package]
 name = "vaporetto_tantivy"
-version = "0.21.0" # Match with Tantivy version number
+version = "0.22.0" # Match with Tantivy version number
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.75"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto Tokenizer for Tantivy"
 license = "MIT OR Apache-2.0"
@@ -15,7 +15,7 @@ categories = ["text-processing"]
 [dependencies]
 vaporetto = { path = "../vaporetto", version = "=0.6.3" }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules", version = "=0.6.3" }  # MIT or Apache-2.0
-tantivy = "0.21"  # MIT
+tantivy = "0.22"  # MIT
 
 [dev-dependencies]
-ruzstd = "0.5.0"  # MIT
+ruzstd = "0.7.0"  # MIT
