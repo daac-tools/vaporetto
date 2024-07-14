@@ -16,7 +16,7 @@ alloc-cortex-m = "0.4.0"
 
 [build-dependencies]
 vaporetto = { path = "../../vaporetto", default-features = false, features = ["alloc"] }
-ruzstd = "0.6.0"  # MIT
+ruzstd = "0.7.0"  # MIT
 
 [profile.release]
 codegen-units = 1
