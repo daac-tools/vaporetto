@@ -3,7 +3,6 @@ pub mod i18n;
 pub mod text_input;
 pub mod token_view;
 
-use std::borrow::Cow;
 use std::io::Read;
 use std::rc::Rc;
 
@@ -93,20 +92,14 @@ impl Worker for VaporettoWorker {
 
             fields.sentence_orig.update_raw(msg).unwrap();
 
-            let n_tags = fields.sentence_filtered.n_tags();
             fields
                 .sentence_orig
                 .boundaries_mut()
                 .copy_from_slice(fields.sentence_filtered.boundaries());
-            fields.sentence_orig.reset_tags(n_tags);
-            for (d, s) in fields
+            fields
                 .sentence_orig
                 .tags_mut()
-                .iter_mut()
-                .zip(fields.sentence_filtered.tags())
-            {
-                *d = s.as_ref().map(|x| Cow::Owned(x.to_string()));
-            }
+                .clone_from_slice(fields.sentence_filtered.tags());
         });
 
         let tokens = self
