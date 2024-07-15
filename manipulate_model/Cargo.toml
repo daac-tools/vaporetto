@@ -10,4 +10,4 @@ serde = { version = "1.0", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto" }  # MIT or Apache-2.0
 zstd = { version = "0.13", features = ["zstdmt"] }  # MIT
 # workaround: https://github.com/gyscos/zstd-rs/issues/270
-zstd-sys = "=2.0.9"
+zstd-sys = "=2.0.12"
