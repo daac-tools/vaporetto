@@ -68,7 +68,7 @@ impl WordWeightRecord {
 pub struct DictModel(pub(crate) Vec<WordWeightRecord>);
 
 impl DictModel {
-    pub fn new(dict: Vec<WordWeightRecord>) -> Self {
+    pub const fn new(dict: Vec<WordWeightRecord>) -> Self {
         Self(dict)
     }
 

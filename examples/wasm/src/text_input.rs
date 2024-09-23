@@ -43,28 +43,27 @@ impl Component for TextInput {
         let button_ref = self.button_ref.clone();
         let clipboard_click = Callback::from(move |_| {
             let input = input_ref.cast::<HtmlInputElement>().unwrap();
-            if let Some(clipboard) = web_sys::window().unwrap().navigator().clipboard() {
-                let loc = web_sys::window().unwrap().location();
-                let content = format!(
-                    "{}{}?text={}",
-                    loc.origin().unwrap(),
-                    loc.pathname().unwrap(),
-                    js_sys::encode_uri_component(&input.value())
-                );
-                let promise = clipboard.write_text(&content);
+            let clipboard = web_sys::window().unwrap().navigator().clipboard();
+            let loc = web_sys::window().unwrap().location();
+            let content = format!(
+                "{}{}?text={}",
+                loc.origin().unwrap(),
+                loc.pathname().unwrap(),
+                js_sys::encode_uri_component(&input.value())
+            );
+            let promise = clipboard.write_text(&content);
+            let button_ref = button_ref.clone();
+            spawn_local(async move {
+                JsFuture::from(promise).await.unwrap();
+                let button = button_ref.cast::<HtmlInputElement>().unwrap();
+                button.set_class_name("copied");
                 let button_ref = button_ref.clone();
-                spawn_local(async move {
-                    JsFuture::from(promise).await.unwrap();
+                let timeout = Timeout::new(1000, move || {
                     let button = button_ref.cast::<HtmlInputElement>().unwrap();
-                    button.set_class_name("copied");
-                    let button_ref = button_ref.clone();
-                    let timeout = Timeout::new(1000, move || {
-                        let button = button_ref.cast::<HtmlInputElement>().unwrap();
-                        button.set_class_name("");
-                    });
-                    timeout.forget();
+                    button.set_class_name("");
                 });
-            }
+                timeout.forget();
+            });
         });
         if let Some(value) = value.as_ref() {
             html! {

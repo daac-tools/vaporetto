@@ -141,7 +141,7 @@ pub struct PositionalWeight<W> {
 }
 
 impl PositionalWeight<Vec<i32>> {
-    pub fn new(offset: i16, weight: Vec<i32>) -> Self {
+    pub const fn new(offset: i16, weight: Vec<i32>) -> Self {
         Self { offset, weight }
     }
 }
