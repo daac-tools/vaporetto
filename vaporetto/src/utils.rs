@@ -12,7 +12,7 @@ use bincode::{
     error::{DecodeError, EncodeError},
     Decode, Encode,
 };
-use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use hashbrown::{DefaultHashBuilder, HashMap};
 
 #[cfg(feature = "fix-weight-length")]
 #[inline(always)]
