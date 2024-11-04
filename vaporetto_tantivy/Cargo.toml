@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto_tantivy"
-version = "0.22.0" # Match with Tantivy version number
+version = "0.22.1" # Match with Tantivy version number
 edition = "2021"
 rust-version = "1.75"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
