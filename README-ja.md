@@ -258,7 +258,16 @@ Vaporetto は KyTea に比べて 8.7 倍速く動作します。
 
 Vaporettoにおける単語分割の仕組みについては、以下の論文またはブログ記事を参照してください。
 
+ * Koichi Akabe, Shunsuke Kanda, Yusuke Oda, Shinsuke Mori.
+   [Vaporetto: Efficient Japanese Tokenization Based on Improved Pointwise Linear Classification](https://arxiv.org/abs/2406.17185).
+   arXiv. 2024.
  * 赤部晃一，神田峻介，小田悠介，森信介．
    [Vaporetto: 点予測法に基づく高速な日本語トークナイザ](https://www.anlp.jp/proceedings/annual_meeting/2022/pdf_dir/D2-5.pdf)．
    言語処理学会第28回年次大会(NLP2022)．浜松．2022年3月．
  * [速度の高みを目指す：高速な単語分割器 Vaporetto の技術解説](https://tech.legalforce.co.jp/entry/2021/09/28/180844) (技術ブログ)
+
+Vaporettoで使用しているダブル配列Aho-Corasick法 (DAAC) の技術情報については、以下の論文を参照してください。
+
+ * Shunsuke Kanda, Koichi Akabe, and Yusuke Oda.
+   [Engineering faster double-array Aho-Corasick automata](https://doi.org/10.1002/spe.3190). Software: Practice and Experience (SPE),
+   53(6): 1332–1361, 2023 ([arXiv](https://arxiv.org/abs/2207.13870))

@@ -5,6 +5,7 @@ use bincode::{Decode, Encode};
 
 use crate::errors::{Result, VaporettoError};
 
+#[cfg(feature = "kytea")]
 #[derive(Clone, Copy, Default)]
 pub struct DictWeight {
     pub right: i32,
@@ -67,7 +68,7 @@ impl WordWeightRecord {
 pub struct DictModel(pub(crate) Vec<WordWeightRecord>);
 
 impl DictModel {
-    pub fn new(dict: Vec<WordWeightRecord>) -> Self {
+    pub const fn new(dict: Vec<WordWeightRecord>) -> Self {
         Self(dict)
     }
 

@@ -14,6 +14,7 @@ use vaporetto_rules::{
     string_filters::KyteaFullwidthFilter,
     SentenceFilter, StringFilter,
 };
+use web_sys::UrlSearchParams;
 use yew::{html, Component, Context, Html};
 
 use crate::text_input::TextInput;
@@ -38,10 +39,10 @@ pub struct VaporettoWorker {
 
     #[borrows(predictor)]
     #[covariant]
-    sentence_orig: Sentence<'static, 'this>,
+    sentence_filtered: Sentence<'static, 'this>,
     #[borrows(predictor)]
     #[covariant]
-    sentence_filtered: Sentence<'static, 'this>,
+    sentence_orig: Sentence<'static, 'this>,
 }
 
 impl Worker for VaporettoWorker {
@@ -150,13 +151,19 @@ impl Component for App {
             })
             .spawn("./vaporetto_worker.js");
 
-        // Sends a dummy message.
-        // The first response indicates that the worker is ready.
-        bridge.send(String::new());
+        let text = web_sys::window()
+            .unwrap()
+            .location()
+            .search()
+            .ok()
+            .and_then(|s| UrlSearchParams::new_with_str(&s).ok())
+            .and_then(|q| q.get("text"))
+            .unwrap_or_else(String::new);
+        bridge.send(text.clone());
 
         Self {
             bridge,
-            text: String::new().into(),
+            text: text.into(),
             tokens: None,
             n_tags: 0,
         }
@@ -186,22 +193,14 @@ impl Component for App {
                     </p>
                 </header>
                 <main>
-                    <div>
-                        {
-                            if self.tokens.is_some() {
-                                html! {
-                                    <TextInput
-                                        callback={ctx.link().callback(Msg::SetText)}
-                                        value={Rc::clone(&self.text)}
-                                    />
-                                }
-                            } else {
-                                html!{
-                                    <input type="text" disabled=true />
-                                }
-                            }
+                    {
+                        html! {
+                            <TextInput
+                                callback={ctx.link().callback(Msg::SetText)}
+                                value={self.tokens.is_some().then(|| Rc::clone(&self.text))}
+                            />
                         }
-                    </div>
+                    }
                     {
                         if let Some(tokens) = &self.tokens {
                             html! {
