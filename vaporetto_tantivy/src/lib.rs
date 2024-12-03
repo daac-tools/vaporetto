@@ -200,7 +200,7 @@ impl Tokenizer for VaporettoTokenizer {
     }
 }
 
-impl<'a> TokenStream for VaporettoTokenStream<'a> {
+impl TokenStream for VaporettoTokenStream<'_> {
     fn advance(&mut self) -> bool {
         if self.position < self.boundary_pos.len() {
             self.token.offset_from = self.offset_to;

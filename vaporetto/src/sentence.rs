@@ -99,7 +99,7 @@ pub struct Sentence<'a, 'b> {
     char_to_str_pos: Vec<usize>,
 }
 
-impl<'a, 'b> Default for Sentence<'a, 'b> {
+impl Default for Sentence<'_, '_> {
     /// Creates a new [`Sentence`] consisting of a space.
     ///
     /// # Examples
