@@ -25,7 +25,7 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 1つ目は最も単純な方法で、学習済みモデルをダウンロードすることです。
 モデルファイルは[ここ](https://github.com/daac-tools/vaporetto-models/releases)にあります。
 
-`bccwj-suw+unidic+tag` を選びました。
+`bccwj-suw+unidic_pos+pron` を選びました。
 ```
 % wget https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz
 ```
