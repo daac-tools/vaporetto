@@ -519,7 +519,7 @@ impl TryFrom<KyteaModel> for Model {
                 let idx = std::cmp::min(w.len(), config.dict_n as usize) - 1;
                 let mut dict_weight = DictWeight::default();
                 for j in 0..kytea_dict.n_dicts as usize {
-                    if data.in_dict >> j & 1 == 1 {
+                    if (data.in_dict >> j) & 1 == 1 {
                         let offset = 3 * config.dict_n as usize * j + 3 * idx;
                         dict_weight.left += i32::from(feature_lookup.dict_vec[offset]);
                         dict_weight.inside += i32::from(feature_lookup.dict_vec[offset + 1]);
