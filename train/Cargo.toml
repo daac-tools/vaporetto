@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4.2", features = ["derive"] }  # MIT or Apache-2.0
+clap = { version = "4.5", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto", features = ["train"] }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
-zstd = { version = "0.13.2", features = ["zstdmt"] }  # MIT
+zstd = { version = "0.13.3", features = ["zstdmt"] }  # MIT

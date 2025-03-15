@@ -1,8 +1,8 @@
 [package]
 name = "vaporetto"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
 description = "Vaporetto: a pointwise prediction based tokenizer"
 license = "MIT OR Apache-2.0"
@@ -13,9 +13,9 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
 
 [dependencies]
-bincode = { version = "2.0.0-rc.3", default-features = false, features = ["alloc", "derive"] }  # MIT
+bincode = { version = "2.0.1", default-features = false, features = ["alloc", "derive"] }  # MIT
 daachorse = "1.0.0"  # MIT or Apache-2.0
-hashbrown = "0.15.0"  # MIT or Apache-2.0
+hashbrown = "0.15.2"  # MIT or Apache-2.0
 
 liblinear = { version = "1", optional = true }  # MIT
 
