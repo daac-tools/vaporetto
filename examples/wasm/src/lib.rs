@@ -52,7 +52,7 @@ impl Worker for VaporettoWorker {
 
     fn create(_scope: &WorkerScope<Self>) -> Self {
         let model_data = include_bytes!("bccwj-suw+unidic_pos+pron.model.zst");
-        let mut decoder = ruzstd::StreamingDecoder::new(model_data.as_slice()).unwrap();
+        let mut decoder = ruzstd::decoding::StreamingDecoder::new(model_data.as_slice()).unwrap();
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();
         let (model, _) = Model::read_slice(&buff).unwrap();

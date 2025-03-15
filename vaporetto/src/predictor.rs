@@ -432,6 +432,7 @@ assert_eq!(
 )]
 pub struct Predictor {
     data: PredictorData,
+    #[cfg(feature = "tag-prediction")]
     tag_scores: bool,
 }
 
@@ -501,6 +502,7 @@ impl Predictor {
                 #[cfg(feature = "tag-prediction")]
                 n_tags,
             },
+            #[cfg(feature = "tag-prediction")]
             tag_scores: false,
         })
     }
@@ -654,6 +656,7 @@ impl Predictor {
         Ok((
             Self {
                 data: predictor_data,
+                #[cfg(feature = "tag-prediction")]
                 tag_scores: false,
             },
             &data[size..],

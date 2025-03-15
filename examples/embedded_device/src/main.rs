@@ -43,20 +43,20 @@ fn main() -> ! {
 
     loop {
         for &text in docs {
-            hprintln!("\x1b[32mINPUT:\x1b[m {:?}", text).unwrap();
+            hprintln!("\x1b[32mINPUT:\x1b[m {:?}", text);
             let mut s = Sentence::from_raw(text).unwrap();
             predictor.predict(&mut s);
             wsconst_d_filter.filter(&mut s);
             let mut buf = String::new();
             s.write_tokenized_text(&mut buf);
-            hprintln!("\x1b[31mOUTPUT:\x1b[m {}", buf).unwrap();
+            hprintln!("\x1b[31mOUTPUT:\x1b[m {}", buf);
         }
     }
 }
 
 #[alloc_error_handler]
 fn alloc_error(_layout: Layout) -> ! {
-    hprintln!("alloc error").unwrap();
+    hprintln!("alloc error");
     asm::bkpt();
 
     loop {}
