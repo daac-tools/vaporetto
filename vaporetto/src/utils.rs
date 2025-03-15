@@ -52,13 +52,13 @@ impl<K, V, S> DerefMut for SerializableHashMap<K, V, S> {
     }
 }
 
-impl<K, V, S> Decode for SerializableHashMap<K, V, S>
+impl<K, V, S, Context> Decode<Context> for SerializableHashMap<K, V, S>
 where
-    K: Decode + Eq + Hash,
-    V: Decode,
+    K: Decode<Context> + Eq + Hash,
+    V: Decode<Context>,
     S: BuildHasher + Default,
 {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut result = HashMap::with_hasher(S::default());
         let size: u64 = Decode::decode(decoder)?;
         for _ in 0..size {
