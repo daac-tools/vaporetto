@@ -91,6 +91,7 @@ pub struct Sentence<'a, 'b> {
     pub(crate) char_pma_states: Vec<u32>,
     pub(crate) type_pma_states: Vec<u32>,
     pub(crate) tags: Vec<Option<Cow<'b, str>>>,
+    #[cfg(feature = "tag-prediction")]
     #[allow(clippy::type_complexity)]
     pub(crate) tag_scores: Vec<Option<(&'b [Vec<String>], Vec<i32>)>>,
     pub(crate) n_tags: usize,
@@ -122,6 +123,7 @@ impl Default for Sentence<'_, '_> {
             char_pma_states: vec![],
             type_pma_states: vec![],
             tags: vec![],
+            #[cfg(feature = "tag-prediction")]
             tag_scores: vec![],
             n_tags: 0,
             predictor: None,
@@ -235,6 +237,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags: vec![],
+            #[cfg(feature = "tag-prediction")]
             tag_scores: vec![],
             n_tags: 0,
             str_to_char_pos,
@@ -455,6 +458,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags,
+            #[cfg(feature = "tag-prediction")]
             tag_scores: vec![],
             n_tags,
             str_to_char_pos,
@@ -693,6 +697,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             type_pma_states: vec![],
             predictor: None,
             tags,
+            #[cfg(feature = "tag-prediction")]
             tag_scores: vec![],
             n_tags,
             str_to_char_pos,

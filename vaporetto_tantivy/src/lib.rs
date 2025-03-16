@@ -13,7 +13,7 @@
 //! use vaporetto_tantivy::VaporettoTokenizer;
 //!
 //! let mut f = BufReader::new(File::open("model.zst").unwrap());
-//! let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
+//! let mut decoder = ruzstd::decoding::StreamingDecoder::new(&mut f).unwrap();
 //! let mut buff = vec![];
 //! decoder.read_to_end(&mut buff).unwrap();
 //! let model = Model::read(&mut buff.as_slice()).unwrap();
@@ -238,7 +238,7 @@ mod tests {
 
     fn token_stream_helper(text: &str, wsconst: &str) -> Vec<Token> {
         let mut f = Cursor::new(include_bytes!("../test_model/model.zst"));
-        let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
+        let mut decoder = ruzstd::decoding::StreamingDecoder::new(&mut f).unwrap();
         let mut buff = vec![];
         decoder.read_to_end(&mut buff).unwrap();
         let model = Model::read(&mut buff.as_slice()).unwrap();

@@ -19,7 +19,7 @@ pub struct TypeScorerBoundary {
     weights: Vec<PositionalWeight<WeightVector>>,
 }
 
-impl<'de> BorrowDecode<'de> for TypeScorerBoundary {
+impl<'de, Context> BorrowDecode<'de, Context> for TypeScorerBoundary {
     /// WARNING: This function is inherently unsafe. Do not publish this function outside this
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {

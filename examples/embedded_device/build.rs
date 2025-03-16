@@ -15,7 +15,7 @@ fn main() {
     println!("cargo:rerun-if-changed=memory.x");
 
     let mut f = Cursor::new(include_bytes!(env!("VAPORETTO_MODEL_PATH")));
-    let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
+    let mut decoder = ruzstd::decoding::StreamingDecoder::new(&mut f).unwrap();
     let mut buff = vec![];
     decoder.read_to_end(&mut buff).unwrap();
     let (model, _) = Model::read_slice(&buff).unwrap();

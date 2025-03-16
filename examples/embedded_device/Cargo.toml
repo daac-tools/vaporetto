@@ -4,19 +4,19 @@ edition = "2021"
 version = "0.1.0"
 
 [dependencies]
-cortex-m = "0.6.0"
-cortex-m-rt = "0.6.10"
-cortex-m-semihosting = "0.3.3"
-panic-halt = "0.2.0"
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+cortex-m-semihosting = "0.5.0"
+panic-halt = "1.0.0"
 
 vaporetto = { path = "../../vaporetto", default-features = false }
 vaporetto_rules = { path = "../../vaporetto_rules" }
 
-alloc-cortex-m = "0.4.0"
+alloc-cortex-m = "0.4.4"
 
 [build-dependencies]
 vaporetto = { path = "../../vaporetto", default-features = false, features = ["alloc"] }
-ruzstd = "0.7.0"  # MIT
+ruzstd = "0.8.0"  # MIT
 
 [profile.release]
 codegen-units = 1

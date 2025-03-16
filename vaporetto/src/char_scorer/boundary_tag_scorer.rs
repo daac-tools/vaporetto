@@ -29,7 +29,7 @@ pub struct CharScorerBoundaryTag {
     tag_weight: Vec<Vec<SerializableHashMap<u32, WeightVector, SplitMix64Builder>>>,
 }
 
-impl<'de> BorrowDecode<'de> for CharScorerBoundaryTag {
+impl<'de, Context> BorrowDecode<'de, Context> for CharScorerBoundaryTag {
     /// WARNING: This function is inherently unsafe. Do not publish this function outside this
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {

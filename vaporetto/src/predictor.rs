@@ -50,7 +50,7 @@ impl Default for WeightVector {
     }
 }
 
-impl Decode for WeightVector {
+impl<Context> Decode<Context> for WeightVector {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let weight: Vec<i32> = Decode::decode(decoder)?;
         Ok(Self::from(weight))
@@ -315,7 +315,7 @@ pub struct PredictorData {
     n_tags: usize,
 }
 
-impl<'de> BorrowDecode<'de> for PredictorData {
+impl<'de, Context> BorrowDecode<'de, Context> for PredictorData {
     /// WARNING: This function is inherently unsafe. Do not publish this function outside this
     /// crate.
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
@@ -432,6 +432,7 @@ assert_eq!(
 )]
 pub struct Predictor {
     data: PredictorData,
+    #[cfg(feature = "tag-prediction")]
     tag_scores: bool,
 }
 
@@ -501,6 +502,7 @@ impl Predictor {
                 #[cfg(feature = "tag-prediction")]
                 n_tags,
             },
+            #[cfg(feature = "tag-prediction")]
             tag_scores: false,
         })
     }
@@ -654,6 +656,7 @@ impl Predictor {
         Ok((
             Self {
                 data: predictor_data,
+                #[cfg(feature = "tag-prediction")]
                 tag_scores: false,
             },
             &data[size..],
