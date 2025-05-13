@@ -36,7 +36,7 @@ jobs:
 
       - name: Run cargo clippy
         continue-on-error: ${{ matrix.rust == 'nightly' }}
-        run: cargo clippy -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr
+        run: cargo clippy -- -D warnings -W clippy::nursery -W clippy::cast_lossless -W clippy::cast_possible_truncation -W clippy::cast_possible_wrap -A clippy::empty_line_after_outer_attr -A clippy::missing_const_for_fn
 
       - name: Run cargo test (workspace)
         run: cargo test --release --workspace

@@ -92,7 +92,7 @@ pub struct SplitMix64 {
 }
 
 impl SplitMix64 {
-    fn add(&mut self, i: u64) {
+    const fn add(&mut self, i: u64) {
         self.x ^= i;
         self.x = self.x.wrapping_add(0x9e3779b97f4a7c15);
         self.x = (self.x ^ (self.x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
