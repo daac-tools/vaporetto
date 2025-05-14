@@ -92,8 +92,8 @@ impl VaporettoTokenizer {
     ///
     /// * `model` - A model data of Vaporetto.
     /// * `wsconst` - Character types that the tokenizer does not segment.
-    ///               D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other,
-    ///               G: Grapheme cluster.
+    ///   D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other,
+    ///   G: Grapheme cluster.
     ///
     /// # Errors
     ///
@@ -116,8 +116,8 @@ impl VaporettoTokenizer {
     ///
     /// * `data` - Serialized data of Vaporetto.
     /// * `wsconst` - Character types that the tokenizer does not segment.
-    ///               D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other,
-    ///               G: Grapheme cluster.
+    ///   D: Digit, R: Roman, H: Hiragana, T: Katakana, K: Kanji, O: Other,
+    ///   G: Grapheme cluster.
     ///
     /// # Errors
     ///

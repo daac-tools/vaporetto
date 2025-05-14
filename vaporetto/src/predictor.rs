@@ -509,7 +509,7 @@ impl Predictor {
 
     /// Stores tag scores if the given `flag` is `true`.
     #[cfg(feature = "tag-prediction")]
-    pub fn store_tag_scores(&mut self, flag: bool) {
+    pub const fn store_tag_scores(&mut self, flag: bool) {
         self.tag_scores = flag;
     }
 

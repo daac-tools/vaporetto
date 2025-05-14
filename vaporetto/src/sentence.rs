@@ -1168,7 +1168,7 @@ assert_eq!(
     }
 
     #[inline]
-    pub(crate) fn set_predictor(&mut self, predictor: &'b Predictor) {
+    pub(crate) const fn set_predictor(&mut self, predictor: &'b Predictor) {
         self.predictor.replace(predictor);
     }
 
