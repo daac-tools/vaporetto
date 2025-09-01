@@ -13,7 +13,7 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
 
 [dependencies]
-hashbrown = "0.15.2"  # MIT or Apache-2.0
+hashbrown = "0.16.0"  # MIT or Apache-2.0
 unicode-segmentation = "1.12.0"  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto", version = "=0.6.5", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
 
