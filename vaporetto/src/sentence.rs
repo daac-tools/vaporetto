@@ -1272,26 +1272,23 @@ impl<'a, 'b> Iterator for TokenIterator<'a, 'b> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.token.start = self.token.end;
-        if let Some(boundaries) = self.token.sentence.boundaries().get(self.token.start..) {
-            let mut skip_token = false;
-            for (i, &b) in boundaries.iter().enumerate() {
-                if b == CharacterBoundary::WordBoundary {
-                    if skip_token {
-                        self.token.start += i + 1;
-                        skip_token = false;
-                    } else {
-                        self.token.end += i + 1;
-                        return Some(self.token);
-                    }
-                } else if b == CharacterBoundary::Unknown {
-                    skip_token = true;
+        let boundaries = self.token.sentence.boundaries().get(self.token.start..)?;
+        let mut skip_token = false;
+        for (i, &b) in boundaries.iter().enumerate() {
+            if b == CharacterBoundary::WordBoundary {
+                if skip_token {
+                    self.token.start += i + 1;
+                    skip_token = false;
+                } else {
+                    self.token.end += i + 1;
+                    return Some(self.token);
                 }
+            } else if b == CharacterBoundary::Unknown {
+                skip_token = true;
             }
-            if skip_token {
-                self.token.end = self.token.sentence.boundaries().len() + 1;
-                return None;
-            }
-        } else {
+        }
+        if skip_token {
+            self.token.end = self.token.sentence.boundaries().len() + 1;
             return None;
         }
         self.token.end = self.token.sentence.boundaries().len() + 1;
