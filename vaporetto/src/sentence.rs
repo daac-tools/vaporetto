@@ -48,7 +48,18 @@ impl CharacterType {
     /// assert_eq!(CharacterType::Roman, t);
     /// ```
     pub fn get_type(c: char) -> Self {
-        match u32::from(c) {
+        let c = u32::from(c);
+        if let Ok(c) = u16::try_from(c) {
+            let (index, blocks) = &CHAR_TYPE_TABLE;
+            let c = usize::from(c);
+            return blocks[usize::from(index[c / CHAR_TYPE_BLOCK_SIZE])][c % CHAR_TYPE_BLOCK_SIZE];
+        }
+        Self::get_type_by_ranges(c)
+    }
+
+    /// Gets a character type of a given code point by comparing ranges.
+    const fn get_type_by_ranges(c: u32) -> Self {
+        match c {
             0x30..=0x39 | 0xFF10..=0xFF19 => Self::Digit,
             0x41..=0x5A | 0x61..=0x7A | 0xFF21..=0xFF3A | 0xFF41..=0xFF5A => Self::Roman,
             0x3040..=0x3096 => Self::Hiragana,
@@ -66,6 +77,90 @@ impl CharacterType {
         }
     }
 }
+
+/// Number of code points in each block of [`CHAR_TYPE_TABLE`].
+const CHAR_TYPE_BLOCK_SIZE: usize = 256;
+
+/// Number of blocks in the BMP.
+const N_BMP_BLOCKS: usize = 0x10000 / CHAR_TYPE_BLOCK_SIZE;
+
+/// Returns the character type of the `b`-th block if all characters in the block have the same
+/// type.
+#[allow(clippy::cast_possible_truncation)]
+const fn uniform_char_type(b: usize) -> Option<CharacterType> {
+    let t = CharacterType::get_type_by_ranges((b * CHAR_TYPE_BLOCK_SIZE) as u32);
+    let mut i = 1;
+    while i < CHAR_TYPE_BLOCK_SIZE {
+        if CharacterType::get_type_by_ranges((b * CHAR_TYPE_BLOCK_SIZE + i) as u32) as u8 != t as u8
+        {
+            return None;
+        }
+        i += 1;
+    }
+    Some(t)
+}
+
+/// Number of blocks in the BMP containing multiple character types.
+const N_MIXED_CHAR_TYPE_BLOCKS: usize = {
+    let mut n = 0;
+    let mut b = 0;
+    while b < N_BMP_BLOCKS {
+        if uniform_char_type(b).is_none() {
+            n += 1;
+        }
+        b += 1;
+    }
+    n
+};
+
+/// Two-level table of character types in the BMP.
+///
+/// The first table maps the upper 8 bits of a code point to a block of the second table. The
+/// `(t - 1)`-th block of the second table consists of the character type `t`, and the other
+/// blocks contain multiple types.
+#[allow(clippy::type_complexity)]
+static CHAR_TYPE_TABLE: (
+    [u8; N_BMP_BLOCKS],
+    [[CharacterType; CHAR_TYPE_BLOCK_SIZE]; 6 + N_MIXED_CHAR_TYPE_BLOCKS],
+) = {
+    let types = [
+        CharacterType::Digit,
+        CharacterType::Roman,
+        CharacterType::Hiragana,
+        CharacterType::Katakana,
+        CharacterType::Kanji,
+        CharacterType::Other,
+    ];
+    let mut index = [0; N_BMP_BLOCKS];
+    let mut blocks = [[CharacterType::Other; CHAR_TYPE_BLOCK_SIZE]; 6 + N_MIXED_CHAR_TYPE_BLOCKS];
+    let mut t = 0;
+    while t < types.len() {
+        blocks[t] = [types[t]; CHAR_TYPE_BLOCK_SIZE];
+        t += 1;
+    }
+    let mut n = types.len();
+    let mut b = 0;
+    while b < N_BMP_BLOCKS {
+        if let Some(t) = uniform_char_type(b) {
+            index[b] = t as u8 - 1;
+        } else {
+            let mut i = 0;
+            while i < CHAR_TYPE_BLOCK_SIZE {
+                #[allow(clippy::cast_possible_truncation)]
+                let c = (b * CHAR_TYPE_BLOCK_SIZE + i) as u32;
+                blocks[n][i] = CharacterType::get_type_by_ranges(c);
+                i += 1;
+            }
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                index[b] = n as u8;
+            }
+            n += 1;
+        }
+        b += 1;
+    }
+    (index, blocks)
+};
 
 /// Boundary type.
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -1299,6 +1394,22 @@ impl<'a, 'b> Iterator for TokenIterator<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_type_table() {
+        for c in (0..=0x10FFFF).filter_map(char::from_u32) {
+            assert_eq!(
+                CharacterType::get_type_by_ranges(u32::from(c)),
+                CharacterType::get_type(c),
+                "{c:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_char_type_table_size() {
+        assert_eq!(4, N_MIXED_CHAR_TYPE_BLOCKS);
+    }
 
     use alloc::string::ToString;
 

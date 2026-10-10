@@ -5,14 +5,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
-use crate::predictor::{PositionalWeight, WeightVector};
+use crate::predictor::{BoundaryWeights, PatternValue, PositionalWeight};
 use crate::sentence::Sentence;
 use crate::type_scorer::TypeWeightMerger;
 use crate::utils::Bytes;
 
 pub struct TypeScorerBoundary {
-    pma: DoubleArrayAhoCorasick<u32>,
-    weights: Vec<PositionalWeight<WeightVector>>,
+    pma: DoubleArrayAhoCorasick<PatternValue>,
+    weights: BoundaryWeights,
 }
 
 impl<'de> Deserialize<'de> for TypeScorerBoundary {
@@ -44,18 +44,16 @@ impl TypeScorerBoundary {
             let weight = PositionalWeight::new(-i16::from(window_size), d.weights);
             merger.add(d.ngram, weight);
         }
-        let mut ngrams = vec![];
-        let mut weights = vec![];
+        let mut patvals = vec![];
+        let mut weights = BoundaryWeights::new(window_size);
         for (ngram, weight) in merger.merge() {
-            ngrams.push(ngram);
-            weights.push(weight.into());
+            patvals.push((ngram, weights.push(weight)?));
         }
-        let pma = DoubleArrayAhoCorasick::new(ngrams)
+        let pma = DoubleArrayAhoCorasick::with_values(patvals)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self { pma, weights })
     }
 
-    #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
     pub fn add_scores(&self, sentence: &mut Sentence) {
         for m in self
@@ -63,15 +61,14 @@ impl TypeScorerBoundary {
             .find_overlapping_no_suffix_iter(&sentence.char_types)
         {
             debug_assert!(m.end() != 0 && m.end() <= sentence.char_types.len());
-            debug_assert!(usize::try_from(m.value()).unwrap() < self.weights.len());
-            let weight = unsafe {
-                self.weights
-                    .get_unchecked(usize::try_from(m.value()).unwrap())
-            };
-            weight.add_score(
-                (m.end() + sentence.score_padding - 1) as isize,
-                &mut sentence.boundary_scores,
-            );
+            // The value is always returned by `BoundaryWeights::push()`.
+            unsafe {
+                self.weights.add_score(
+                    &m.value(),
+                    m.end() + sentence.score_padding - 1,
+                    &mut sentence.boundary_scores,
+                );
+            }
         }
     }
 }

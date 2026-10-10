@@ -158,7 +158,6 @@ impl TypeScorer {
 
     /// # Satety
     ///
-    /// `token_id` must be smaller than `scorer.tag_weight.len()`.
     /// `pos` must be smaller than `sentence.type_pma_states.len()`.
     #[cfg(feature = "tag-prediction")]
     #[inline]
@@ -470,5 +469,126 @@ mod tests {
             scorer.add_tag_scores(2, 3, &sentence, &mut tag_scores);
         }
         assert_eq!(&[55, 57, 1, 1, 1, 1, 1, 1], &tag_scores);
+    }
+
+    /// Computes boundary scores by adding weights of all occurrences of patterns.
+    /// Each pattern is given as a tuple of the pattern, the offset of weights, and weights.
+    fn naive_boundary_scores(types: &[u8], patterns: &[(Vec<u8>, isize, Vec<i32>)]) -> Vec<i32> {
+        let mut ys = vec![0; types.len() - 1];
+        for (pattern, offset, weights) in patterns {
+            for end in pattern.len()..=types.len() {
+                if types[end - pattern.len()..end] != pattern[..] {
+                    continue;
+                }
+                for (j, &w) in weights.iter().enumerate() {
+                    let k = isize::try_from(end + j).unwrap() - 1 + offset;
+                    if let Some(y) = usize::try_from(k).ok().and_then(|k| ys.get_mut(k)) {
+                        *y += w;
+                    }
+                }
+            }
+        }
+        ys
+    }
+
+    const TEST_TEXT: &str = "我らは全世界の国民でありＶａｐｏｒｅｔｔｏを2026年に使う";
+
+    fn test_ngram_model(window_size: u8) -> (NgramModel<Vec<u8>>, Vec<(Vec<u8>, isize, Vec<i32>)>) {
+        let ngrams = [
+            vec![Kanji as u8],
+            vec![Hiragana as u8],
+            vec![Kanji as u8, Hiragana as u8],
+            vec![Kanji as u8, Kanji as u8],
+            vec![Hiragana as u8, Roman as u8],
+            vec![Kanji as u8, Kanji as u8, Kanji as u8],
+            vec![Roman as u8, Roman as u8, Roman as u8, Hiragana as u8],
+            vec![
+                Digit as u8,
+                Kanji as u8,
+                Hiragana as u8,
+                Kanji as u8,
+                Hiragana as u8,
+            ],
+        ];
+        let mut data = vec![];
+        let mut patterns = vec![];
+        let mut x = 0;
+        for ngram in ngrams {
+            if ngram.len() > usize::from(window_size) * 2 {
+                continue;
+            }
+            let weights: Vec<i32> = (0..usize::from(window_size) * 2 - ngram.len() + 1)
+                .map(|_| {
+                    x += 1;
+                    x * 3 - 40
+                })
+                .collect();
+            patterns.push((ngram.clone(), -isize::from(window_size), weights.clone()));
+            data.push(NgramData { ngram, weights });
+        }
+        (NgramModel(data), patterns)
+    }
+
+    #[test]
+    fn test_add_scores_matches_naive() {
+        // Window sizes larger than or equal to WEIGHT_FIXED_LEN do not use fixed-length weights.
+        for window_size in 1..=9 {
+            let (ngram_model, patterns) = test_ngram_model(window_size);
+            let scorer = TypeScorerBoundary::new(ngram_model, window_size).unwrap();
+            let mut sentence = Sentence::from_raw(TEST_TEXT).unwrap();
+            sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+            sentence.boundary_scores.clear();
+            sentence
+                .boundary_scores
+                .resize(sentence.score_padding * 2 + sentence.len() - 1, 0);
+            scorer.add_scores(&mut sentence);
+            assert_eq!(
+                naive_boundary_scores(sentence.char_types(), &patterns),
+                sentence.boundary_scores(),
+                "window_size={window_size}",
+            );
+        }
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_add_scores_with_tags_matches_naive() {
+        for window_size in 1..=9 {
+            let (ngram_model, patterns) = test_ngram_model(window_size);
+            // "RHD" only has tag weights.
+            let tag_ngram_model = vec![TagNgramModel(vec![TagNgramData {
+                ngram: vec![Roman as u8, Hiragana as u8, Digit as u8],
+                weights: vec![TagWeight {
+                    rel_position: window_size,
+                    weights: vec![1, 2],
+                }],
+            }])];
+            let scorer =
+                TypeScorerBoundaryTag::new(ngram_model, window_size, tag_ngram_model).unwrap();
+            let mut sentence = Sentence::from_raw(TEST_TEXT).unwrap();
+            sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+            sentence.boundary_scores.clear();
+            sentence
+                .boundary_scores
+                .resize(sentence.score_padding * 2 + sentence.len() - 1, 0);
+            scorer.add_scores(&mut sentence);
+            assert_eq!(
+                naive_boundary_scores(sentence.char_types(), &patterns),
+                sentence.boundary_scores(),
+                "window_size={window_size}",
+            );
+
+            // The last character of "RHD" (ｏを2) is at index 22.
+            let pos = 22 - usize::from(window_size);
+            let mut tag_scores = [0; 8];
+            unsafe {
+                scorer.add_tag_scores(0, pos, &sentence, &mut tag_scores);
+            }
+            assert_eq!(
+                &[1, 2, 0, 0, 0, 0, 0, 0],
+                &tag_scores,
+                "window_size={window_size}"
+            );
+        }
     }
 }
