@@ -1,20 +1,16 @@
-#![feature(alloc_error_handler)]
 #![no_std]
 #![no_main]
 
 extern crate alloc;
 
-// core crate
-use core::alloc::Layout;
-
 // alloc crate
 use alloc::string::String;
 
 // devices
-use alloc_cortex_m::CortexMHeap;
-use cortex_m::asm;
+use cortex_m as _; // provides the critical-section implementation
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
+use embedded_alloc::LlffHeap as Heap;
 
 // other crates
 use vaporetto::{CharacterType, Predictor, Sentence};
@@ -24,13 +20,13 @@ use vaporetto_rules::{sentence_filters::KyteaWsConstFilter, SentenceFilter};
 use panic_halt as _;
 
 #[global_allocator]
-static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
+static HEAP: Heap = Heap::empty();
 
 const HEAP_SIZE: usize = 40 * 1024; // in bytes
 
 #[entry]
 fn main() -> ! {
-    unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
+    unsafe { HEAP.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
     let predictor_data = include_bytes!(concat!(env!("OUT_DIR"), "/predictor.bin"));
     let (predictor, _) =
@@ -52,12 +48,4 @@ fn main() -> ! {
             hprintln!("\x1b[31mOUTPUT:\x1b[m {}", buf);
         }
     }
-}
-
-#[alloc_error_handler]
-fn alloc_error(_layout: Layout) -> ! {
-    hprintln!("alloc error");
-    asm::bkpt();
-
-    loop {}
 }

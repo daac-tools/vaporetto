@@ -1,7 +1,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 use crate::errors::{Result, VaporettoError};
 
@@ -14,7 +14,7 @@ pub struct DictWeight {
 }
 
 /// Record of weights for each word.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WordWeightRecord {
     pub(crate) word: String,
     pub(crate) weights: Vec<i32>,
@@ -64,7 +64,7 @@ impl WordWeightRecord {
     }
 }
 
-#[derive(Debug, Decode, Encode)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DictModel(pub(crate) Vec<WordWeightRecord>);
 
 impl DictModel {

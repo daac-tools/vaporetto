@@ -149,6 +149,8 @@ impl Component for App {
             .callback(move |m| {
                 link.send_message(Msg::WorkerResult(m));
             })
+            // Trunk builds workers with the `no-modules` target of wasm-bindgen.
+            .as_module(false)
             .spawn("./vaporetto_worker.js");
 
         let text = web_sys::window()

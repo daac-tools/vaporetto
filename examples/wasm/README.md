@@ -16,7 +16,11 @@ cargo install wasm-bindgen-cli
 # Downloads and extracts the model file
 wget https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz
 tar xf ./bccwj-suw+unidic_pos+pron.tar.xz
-mv ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst ./src/
+
+# Converts the model file created by Vaporetto 0.6 or earlier into the current format
+cargo run --release --manifest-path ../../Cargo.toml -p convert_bincode_model -- \
+  --model-in ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst \
+  --model-out ./src/bccwj-suw+unidic_pos+pron.model.zst
 
 # Builds and launches the server
 # Note: We recommend using --release flag to reduce loading time.

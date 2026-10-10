@@ -25,11 +25,8 @@ pub enum VaporettoError {
     /// The error variant for [`TryFromIntError`](core::num::TryFromIntError).
     CastError(core::num::TryFromIntError),
 
-    /// The error variant for [`DecodeError`](bincode::error::DecodeError).
-    DecodeError(bincode::error::DecodeError),
-
-    /// The error variant for [`EncodeError`](bincode::error::EncodeError).
-    EncodeError(bincode::error::EncodeError),
+    /// The error variant for [`postcard::Error`].
+    SerializationError(postcard::Error),
 
     /// The error variant for [`std::io::Error`].
     #[cfg(feature = "std")]
@@ -63,8 +60,7 @@ impl fmt::Display for VaporettoError {
             Self::InvalidArgument(e) => e.fmt(f),
             Self::UTF8Error(e) => e.fmt(f),
             Self::CastError(e) => e.fmt(f),
-            Self::DecodeError(e) => e.fmt(f),
-            Self::EncodeError(e) => e.fmt(f),
+            Self::SerializationError(e) => e.fmt(f),
 
             #[cfg(feature = "std")]
             Self::IOError(e) => e.fmt(f),
@@ -122,15 +118,9 @@ impl From<core::num::TryFromIntError> for VaporettoError {
     }
 }
 
-impl From<bincode::error::DecodeError> for VaporettoError {
-    fn from(error: bincode::error::DecodeError) -> Self {
-        Self::DecodeError(error)
-    }
-}
-
-impl From<bincode::error::EncodeError> for VaporettoError {
-    fn from(error: bincode::error::EncodeError) -> Self {
-        Self::EncodeError(error)
+impl From<postcard::Error> for VaporettoError {
+    fn from(error: postcard::Error) -> Self {
+        Self::SerializationError(error)
     }
 }
 

@@ -23,7 +23,13 @@ jobs:
       run: |
         wget 'https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz'
         tar xf 'bccwj-suw+unidic_pos+pron.tar.xz'
-        mv ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst ./src/
+
+    # The distribution model was created by Vaporetto 0.6 or earlier.
+    - name: Convert model
+      run: |
+        cargo run --release -p convert_bincode_model -- \
+          --model-in './examples/wasm/bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst' \
+          --model-out './examples/wasm/src/bccwj-suw+unidic_pos+pron.model.zst'
 
     - uses: jetli/trunk-action@v0.4.0
       with:

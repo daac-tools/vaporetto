@@ -10,24 +10,15 @@ use alloc::borrow::Cow;
 #[cfg(feature = "tag-prediction")]
 use alloc::string::String;
 
-use bincode::{
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode,
-};
-
 #[cfg(feature = "tag-prediction")]
 use hashbrown::HashMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::char_scorer::CharScorer;
 use crate::errors::Result;
 use crate::model::Model;
 use crate::sentence::{CharacterBoundary, Sentence};
 use crate::type_scorer::TypeScorer;
-
-#[cfg(feature = "tag-prediction")]
-use crate::utils::SerializableHashMap;
 
 pub const WEIGHT_FIXED_LEN: usize = 8;
 
@@ -50,30 +41,32 @@ impl Default for WeightVector {
     }
 }
 
-impl<Context> Decode<Context> for WeightVector {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let weight: Vec<i32> = Decode::decode(decoder)?;
+impl<'de> Deserialize<'de> for WeightVector {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let weight: Vec<i32> = Deserialize::deserialize(deserializer)?;
         Ok(Self::from(weight))
     }
 }
-bincode::impl_borrow_decode!(WeightVector);
 
-impl Encode for WeightVector {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+impl Serialize for WeightVector {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         match self {
-            Self::Variable(w) => {
-                Encode::encode(&w, encoder)?;
-            }
+            Self::Variable(w) => w.serialize(serializer),
 
             #[cfg(feature = "fix-weight-length")]
             Self::Fixed(w) => {
                 #[cfg(feature = "portable-simd")]
                 let w = w.as_array();
 
-                Encode::encode(&crate::utils::trim_end_zeros(w).to_vec(), encoder)?;
+                crate::utils::trim_end_zeros(w).serialize(serializer)
             }
         }
-        Ok(())
     }
 }
 
@@ -134,7 +127,7 @@ impl From<Vec<i32>> for WeightVector {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Decode, Encode)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct PositionalWeight<W> {
     offset: i16,
     weight: W,
@@ -262,7 +255,7 @@ impl AddAssign<&Self> for PositionalWeightWithTag {
 }
 
 #[cfg(feature = "tag-prediction")]
-#[derive(Decode, Encode)]
+#[derive(Deserialize, Serialize)]
 struct TagPredictor {
     tags: Vec<Vec<String>>,
     bias: WeightVector,
@@ -304,73 +297,17 @@ impl TagPredictor {
     }
 }
 
+/// WARNING: Deserialization is inherently unsafe. Do not publish this struct outside this crate.
+#[derive(Deserialize, Serialize)]
 pub struct PredictorData {
     char_scorer: Option<CharScorer>,
     type_scorer: Option<TypeScorer>,
     bias: i32,
 
     #[cfg(feature = "tag-prediction")]
-    tag_predictor: Option<SerializableHashMap<String, (u32, TagPredictor)>>,
+    tag_predictor: Option<HashMap<String, (u32, TagPredictor)>>,
     #[cfg(feature = "tag-prediction")]
     n_tags: usize,
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for PredictorData {
-    /// WARNING: This function is inherently unsafe. Do not publish this function outside this
-    /// crate.
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let config = bincode::config::standard();
-        let char_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
-        let char_scorer = if let Some(data) = char_scorer_data {
-            Some(bincode::borrow_decode_from_slice(data, config)?.0)
-        } else {
-            None
-        };
-        let type_scorer_data: Option<&[u8]> = BorrowDecode::borrow_decode(decoder)?;
-        let type_scorer = if let Some(data) = type_scorer_data {
-            Some(bincode::borrow_decode_from_slice(data, config)?.0)
-        } else {
-            None
-        };
-        let bias = Decode::decode(decoder)?;
-        #[cfg(feature = "tag-prediction")]
-        let tag_predictor = Decode::decode(decoder)?;
-        #[cfg(feature = "tag-prediction")]
-        let n_tags = Decode::decode(decoder)?;
-        Ok(Self {
-            char_scorer,
-            type_scorer,
-            bias,
-            #[cfg(feature = "tag-prediction")]
-            tag_predictor,
-            #[cfg(feature = "tag-prediction")]
-            n_tags,
-        })
-    }
-}
-
-impl Encode for PredictorData {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let config = bincode::config::standard();
-        let char_scorer_data = if let Some(char_scorer) = self.char_scorer.as_ref() {
-            Some(bincode::encode_to_vec(char_scorer, config)?)
-        } else {
-            None
-        };
-        Encode::encode(&char_scorer_data, encoder)?;
-        let type_scorer_data = if let Some(type_scorer) = self.type_scorer.as_ref() {
-            Some(bincode::encode_to_vec(type_scorer, config)?)
-        } else {
-            None
-        };
-        Encode::encode(&type_scorer_data, encoder)?;
-        Encode::encode(&self.bias, encoder)?;
-        #[cfg(feature = "tag-prediction")]
-        Encode::encode(&self.tag_predictor, encoder)?;
-        #[cfg(feature = "tag-prediction")]
-        Encode::encode(&self.n_tags, encoder)?;
-        Ok(())
-    }
 }
 
 /// Predictor created from the model.
@@ -475,7 +412,7 @@ impl Predictor {
                 tag_char_ngram_model.push(tag_model.char_ngram_model);
                 tag_type_ngram_model.push(tag_model.type_ngram_model);
             }
-            SerializableHashMap(tag_predictor)
+            tag_predictor
         });
 
         let char_scorer = CharScorer::new(
@@ -637,10 +574,12 @@ impl Predictor {
     }
 
     /// Serializes the predictor into a Vec.
+    ///
+    /// # Errors
+    ///
+    /// When postcard generates an error, it will be returned as is.
     pub fn serialize_to_vec(&self) -> Result<Vec<u8>> {
-        let config = bincode::config::standard();
-        let result = bincode::encode_to_vec(&self.data, config)?;
-        Ok(result)
+        Ok(postcard::to_allocvec(&self.data)?)
     }
 
     /// Deserializes a predictor from a given slice and returns a tuple of the predictor and the remaining slice.
@@ -650,16 +589,15 @@ impl Predictor {
     /// The given data must be a correct predictor exported by [`Predictor::serialize_to_vec()`]
     /// function.
     pub unsafe fn deserialize_from_slice_unchecked(data: &[u8]) -> Result<(Self, &[u8])> {
-        let config = bincode::config::standard();
         // Deserialization is unsafe because the automaton will not be verified.
-        let (predictor_data, size) = bincode::borrow_decode_from_slice(data, config)?;
+        let (predictor_data, rest) = postcard::take_from_bytes(data)?;
         Ok((
             Self {
                 data: predictor_data,
                 #[cfg(feature = "tag-prediction")]
                 tag_scores: false,
             },
-            &data[size..],
+            rest,
         ))
     }
 }

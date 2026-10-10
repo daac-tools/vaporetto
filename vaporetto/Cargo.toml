@@ -1,6 +1,6 @@
 [package]
 name = "vaporetto"
-version = "0.6.5"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.88"
 authors = ["Koichi Akabe <vbkaisetsu@gmail.com>"]
@@ -13,9 +13,10 @@ keywords = ["japanese", "analyzer", "tokenizer", "morphological"]
 categories = ["text-processing", "no-std"]
 
 [dependencies]
-bincode = { version = "2.0.1", default-features = false, features = ["alloc", "derive"] }  # MIT
-daachorse = "1.0.0"  # MIT or Apache-2.0
-hashbrown = "0.15.2"  # MIT or Apache-2.0
+daachorse = "5.0.0"  # MIT or Apache-2.0
+hashbrown = { version = "0.17.1", features = ["serde"] }  # MIT or Apache-2.0
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }  # MIT or Apache-2.0
+serde = { version = "1.0.228", default-features = false, features = ["alloc", "derive"] }  # MIT or Apache-2.0
 
 liblinear = { version = "1", optional = true }  # MIT
 
@@ -24,7 +25,7 @@ default = ["std", "cache-type-score", "fix-weight-length", "tag-prediction", "ch
 
 # default: on
 alloc = []
-std = ["alloc", "bincode/std"]
+std = ["alloc", "postcard/use-std"]
 cache-type-score = ["alloc"]
 fix-weight-length = ["alloc"]
 tag-prediction = ["alloc"]

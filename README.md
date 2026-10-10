@@ -37,6 +37,12 @@ Each file is a compressed file containing a model file and license terms, so you
 % tar xf ./bccwj-suw+unidic_pos+pron.tar.xz
 ```
 
+The distribution models were created by Vaporetto 0.6 or earlier, whose model format is not compatible with the current version.
+Convert the model into the current format using the following command:
+```
+% cargo run --release -p convert_bincode_model -- --model-in ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst --model-out path/to/bccwj-suw+unidic_pos+pron.model.zst
+```
+
 To perform tokenization, run the following command:
 ```
 % echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic_pos+pron.model.zst

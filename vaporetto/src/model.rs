@@ -4,15 +4,14 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::io::{Read, Write};
 
-use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
-use crate::utils::VecWriter;
 
 /// Magic number.
-const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
+const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.7.0\n";
 
 // For each token, a model is trained for every tag independently, but the scores of all tags are
 // calculated in parallel during prediction.
@@ -37,7 +36,7 @@ const MODEL_MAGIC: &[u8] = b"VaporettoTokenizer 0.5.0\n";
 //
 //   results: ["名詞", "ケン"]
 /// Internal representation of a tag model.
-#[derive(Debug, Decode, Encode)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TagModel {
     pub(crate) token: String,
     pub(crate) tags: Vec<Vec<String>>,
@@ -57,7 +56,7 @@ impl TagModel {
 #[derive(Debug)]
 pub struct Model(pub(crate) ModelData);
 
-#[derive(Debug, Decode, Encode)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ModelData {
     pub(crate) char_ngram_model: NgramModel<String>,
     pub(crate) type_ngram_model: NgramModel<Vec<u8>>,
@@ -95,27 +94,23 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// When bincode generates an error, it will be returned as is.
+    /// When postcard generates an error, it will be returned as is.
     pub fn to_vec(&self) -> Result<Vec<u8>> {
-        let mut wtr = VecWriter(MODEL_MAGIC.to_vec());
-        let config = bincode::config::standard();
-        bincode::encode_into_writer(&self.0, &mut wtr, config)?;
-        Ok(wtr.0)
+        Ok(postcard::to_extend(&self.0, MODEL_MAGIC.to_vec())?)
     }
 
     /// Exports the model data.
     ///
     /// # Errors
     ///
-    /// When bincode generates an error, it will be returned as is.
+    /// When postcard generates an error, it will be returned as is.
     #[cfg(feature = "std")]
     pub fn write<W>(&self, mut wtr: W) -> Result<()>
     where
         W: Write,
     {
         wtr.write_all(MODEL_MAGIC)?;
-        let config = bincode::config::standard();
-        bincode::encode_into_std_write(&self.0, &mut wtr, config)?;
+        postcard::to_io(&self.0, wtr)?;
         Ok(())
     }
 
@@ -123,21 +118,20 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// When bincode generates an error, it will be returned as is.
+    /// When postcard generates an error, it will be returned as is.
     pub fn read_slice(slice: &[u8]) -> Result<(Self, &[u8])> {
-        if &slice[..MODEL_MAGIC.len()] != MODEL_MAGIC {
+        let Some(slice) = slice.strip_prefix(MODEL_MAGIC) else {
             return Err(VaporettoError::invalid_model("model version mismatch"));
-        }
-        let config = bincode::config::standard();
-        let (data, size) = bincode::decode_from_slice(&slice[MODEL_MAGIC.len()..], config)?;
-        Ok((Self(data), &slice[MODEL_MAGIC.len() + size..]))
+        };
+        let (data, rest) = postcard::take_from_bytes(slice)?;
+        Ok((Self(data), rest))
     }
 
     /// Creates a model from a reader.
     ///
     /// # Errors
     ///
-    /// When bincode generates an error, it will be returned as is.
+    /// When postcard generates an error, it will be returned as is.
     #[cfg(feature = "std")]
     pub fn read<R>(mut rdr: R) -> Result<Self>
     where
@@ -148,8 +142,11 @@ impl Model {
         if magic != MODEL_MAGIC {
             return Err(VaporettoError::invalid_model("model version mismatch"));
         }
-        let config = bincode::config::standard();
-        Ok(Self(bincode::decode_from_std_read(&mut rdr, config)?))
+        // postcard does not support streaming deserialization of owned data, so the whole model
+        // is loaded into memory first.
+        let mut data = vec![];
+        rdr.read_to_end(&mut data)?;
+        Ok(Self(postcard::from_bytes(&data)?))
     }
 
     /// Returns the slice of dictionary words.
@@ -165,5 +162,44 @@ impl Model {
     /// Returns the slice of tag models.
     pub fn tag_models(&self) -> &[TagModel] {
         &self.0.tag_models
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MODEL_DATA: &[u8] = include_bytes!("../../resources/model.bin");
+
+    #[test]
+    fn test_read_slice_and_to_vec() {
+        let mut data = MODEL_DATA.to_vec();
+        data.extend_from_slice(b"rest");
+        let (model, rest) = Model::read_slice(&data).unwrap();
+        assert_eq!(b"rest", rest);
+        assert_eq!(MODEL_DATA, model.to_vec().unwrap());
+    }
+
+    #[test]
+    fn test_read_slice_version_mismatch() {
+        let mut data = b"VaporettoTokenizer 0.5.0\n".to_vec();
+        data.extend_from_slice(&MODEL_DATA[MODEL_MAGIC.len()..]);
+        assert!(matches!(
+            Model::read_slice(&data),
+            Err(VaporettoError::InvalidModel(_)),
+        ));
+        assert!(matches!(
+            Model::read_slice(b"Vaporetto"),
+            Err(VaporettoError::InvalidModel(_)),
+        ));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_and_write() {
+        let model = Model::read(MODEL_DATA).unwrap();
+        let mut data = vec![];
+        model.write(&mut data).unwrap();
+        assert_eq!(MODEL_DATA, data);
     }
 }
