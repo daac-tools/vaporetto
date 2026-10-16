@@ -1,18 +1,9 @@
-use core::hash::{BuildHasher, Hash, Hasher};
-use core::ops::{Deref, DerefMut};
-
-use alloc::vec::Vec;
+use core::hash::{BuildHasher, Hasher};
 
 #[cfg(feature = "kytea")]
 use std::io::{self, Read};
 
-use bincode::{
-    de::Decoder,
-    enc::{write::Writer, Encoder},
-    error::{DecodeError, EncodeError},
-    Decode, Encode,
-};
-use hashbrown::{DefaultHashBuilder, HashMap};
+use serde::{Serialize, Serializer};
 
 #[cfg(feature = "fix-weight-length")]
 #[inline(always)]
@@ -26,63 +17,16 @@ pub const fn trim_end_zeros(mut w: &[i32]) -> &[i32] {
     w
 }
 
-pub struct VecWriter(pub Vec<u8>);
+/// Wrapper to serialize a byte slice with [`Serializer::serialize_bytes()`] instead of as a
+/// sequence of `u8`. The serialized data can be deserialized as `&[u8]` without copying.
+pub struct Bytes<'a>(pub &'a [u8]);
 
-impl Writer for VecWriter {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
-        self.0.extend_from_slice(bytes);
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct SerializableHashMap<K, V, S = DefaultHashBuilder>(pub HashMap<K, V, S>);
-
-impl<K, V, S> Deref for SerializableHashMap<K, V, S> {
-    type Target = HashMap<K, V, S>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<K, V, S> DerefMut for SerializableHashMap<K, V, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<K, V, S, Context> Decode<Context> for SerializableHashMap<K, V, S>
-where
-    K: Decode<Context> + Eq + Hash,
-    V: Decode<Context>,
-    S: BuildHasher + Default,
-{
-    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let mut result = HashMap::with_hasher(S::default());
-        let size: u64 = Decode::decode(decoder)?;
-        for _ in 0..size {
-            let k = Decode::decode(decoder)?;
-            let v = Decode::decode(decoder)?;
-            result.insert(k, v);
-        }
-        Ok(Self(result))
-    }
-}
-
-impl<K, V, S> Encode for SerializableHashMap<K, V, S>
-where
-    K: Encode,
-    V: Encode,
-{
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let size = u64::try_from(self.0.len()).unwrap();
-        Encode::encode(&size, encoder)?;
-        for (k, v) in &self.0 {
-            Encode::encode(k, encoder)?;
-            Encode::encode(v, encoder)?;
-        }
-        Ok(())
+impl Serialize for Bytes<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(self.0)
     }
 }
 

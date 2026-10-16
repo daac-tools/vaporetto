@@ -1,16 +1,12 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use bincode::{
-    de::BorrowDecoder,
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode,
-};
 #[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 #[cfg(not(feature = "charwise-pma"))]
 use daachorse::DoubleArrayAhoCorasick;
+use hashbrown::HashMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
@@ -18,7 +14,7 @@ use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
 use crate::predictor::{PositionalWeight, PositionalWeightWithTag, WeightVector};
 use crate::sentence::Sentence;
-use crate::utils::{SerializableHashMap, SplitMix64Builder};
+use crate::utils::{Bytes, SplitMix64Builder};
 
 pub struct CharScorerBoundaryTag {
     #[cfg(not(feature = "charwise-pma"))]
@@ -26,20 +22,22 @@ pub struct CharScorerBoundaryTag {
     #[cfg(feature = "charwise-pma")]
     pma: CharwiseDoubleArrayAhoCorasick<u32>,
     weights: Vec<Option<PositionalWeight<WeightVector>>>,
-    tag_weight: Vec<Vec<SerializableHashMap<u32, WeightVector, SplitMix64Builder>>>,
+    tag_weight: Vec<Vec<HashMap<u32, WeightVector, SplitMix64Builder>>>,
 }
 
-impl<'de, Context> BorrowDecode<'de, Context> for CharScorerBoundaryTag {
+impl<'de> Deserialize<'de> for CharScorerBoundaryTag {
     /// WARNING: This function is inherently unsafe. Do not publish this function outside this
     /// crate.
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let (pma_data, weights, tag_weight): (&[u8], _, _) =
+            Deserialize::deserialize(deserializer)?;
         #[cfg(not(feature = "charwise-pma"))]
         let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         #[cfg(feature = "charwise-pma")]
         let (pma, _) = unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
-        let weights = Decode::decode(decoder)?;
-        let tag_weight = Decode::decode(decoder)?;
         Ok(Self {
             pma,
             weights,
@@ -48,13 +46,17 @@ impl<'de, Context> BorrowDecode<'de, Context> for CharScorerBoundaryTag {
     }
 }
 
-impl Encode for CharScorerBoundaryTag {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize();
-        Encode::encode(&pma_data, encoder)?;
-        Encode::encode(&self.weights, encoder)?;
-        Encode::encode(&self.tag_weight, encoder)?;
-        Ok(())
+impl Serialize for CharScorerBoundaryTag {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        (
+            Bytes(&self.pma.serialize()),
+            &self.weights,
+            &self.tag_weight,
+        )
+            .serialize(serializer)
     }
 }
 
@@ -80,10 +82,8 @@ impl CharScorerBoundaryTag {
             let weight = PositionalWeightWithTag::with_boundary(-word_len, d.weights);
             merger.add(d.word, weight);
         }
-        let mut tag_weight = vec![
-            vec![SerializableHashMap::default(); usize::from(window_size) + 1];
-            tag_ngram_model.len()
-        ];
+        let mut tag_weight =
+            vec![vec![HashMap::default(); usize::from(window_size) + 1]; tag_ngram_model.len()];
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
             for d in tag_model.0 {
                 for w in d.weights {

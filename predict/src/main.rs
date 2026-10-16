@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, BufRead, BufWriter, Write};
+use std::io::{self, BufRead, BufWriter, IsTerminal, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Instant;
@@ -114,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         predictor.store_tag_scores(true);
     }
 
-    let is_tty = atty::is(atty::Stream::Stdout);
+    let is_tty = io::stdout().is_terminal();
 
     eprintln!("Start tokenization");
     let mut out = BufWriter::new(io::stdout().lock());

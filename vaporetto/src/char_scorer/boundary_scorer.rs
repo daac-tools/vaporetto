@@ -1,16 +1,11 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use bincode::{
-    de::BorrowDecoder,
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode,
-};
 #[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 #[cfg(not(feature = "charwise-pma"))]
 use daachorse::DoubleArrayAhoCorasick;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
@@ -18,6 +13,7 @@ use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
 use crate::predictor::{PositionalWeight, WeightVector};
 use crate::sentence::Sentence;
+use crate::utils::Bytes;
 
 pub struct CharScorerBoundary {
     #[cfg(not(feature = "charwise-pma"))]
@@ -27,28 +23,28 @@ pub struct CharScorerBoundary {
     weights: Vec<PositionalWeight<WeightVector>>,
 }
 
-impl<'de, Context> BorrowDecode<'de, Context> for CharScorerBoundary {
+impl<'de> Deserialize<'de> for CharScorerBoundary {
     /// WARNING: This function is inherently unsafe. Do not publish this function outside this
     /// crate.
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let pma_data: &[u8] = BorrowDecode::borrow_decode(decoder)?;
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let (pma_data, weights): (&[u8], _) = Deserialize::deserialize(deserializer)?;
         #[cfg(not(feature = "charwise-pma"))]
         let (pma, _) = unsafe { DoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
         #[cfg(feature = "charwise-pma")]
         let (pma, _) = unsafe { CharwiseDoubleArrayAhoCorasick::deserialize_unchecked(pma_data) };
-        Ok(Self {
-            pma,
-            weights: Decode::decode(decoder)?,
-        })
+        Ok(Self { pma, weights })
     }
 }
 
-impl Encode for CharScorerBoundary {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let pma_data = self.pma.serialize();
-        Encode::encode(&pma_data, encoder)?;
-        Encode::encode(&self.weights, encoder)?;
-        Ok(())
+impl Serialize for CharScorerBoundary {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        (Bytes(&self.pma.serialize()), &self.weights).serialize(serializer)
     }
 }
 

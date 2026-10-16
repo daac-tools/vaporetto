@@ -23,7 +23,13 @@ jobs:
       run: |
         wget 'https://github.com/daac-tools/vaporetto-models/releases/download/v0.5.0/bccwj-suw+unidic_pos+pron.tar.xz'
         tar xf 'bccwj-suw+unidic_pos+pron.tar.xz'
-        mv ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst ./src/
+
+    # The distribution model was created by Vaporetto 0.6 or earlier.
+    - name: Convert model
+      run: |
+        cargo run --release -p convert_bincode_model -- \
+          --model-in './examples/wasm/bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst' \
+          --model-out './examples/wasm/src/bccwj-suw+unidic_pos+pron.model.zst'
 
     - uses: jetli/trunk-action@v0.4.0
       with:
@@ -35,14 +41,21 @@ jobs:
         rustup target add wasm32-unknown-unknown
         trunk build --release
 
+    # Passes the branch name through an environment variable and replaces unsafe characters
+    # to avoid script injection.
+    - name: Determine branch name
+      id: branch
+      env:
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+      run: echo "name=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._/-' '-')" >> "$GITHUB_OUTPUT"
+
     - name: Publish to Cloudflare Pages
       id: cloudflare_pages_deploy
-      uses: cloudflare/pages-action@v1
+      uses: cloudflare/wrangler-action@v4
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        projectName: vaporetto-demo
-        directory: ./examples/wasm/dist
+        command: pages deploy ./examples/wasm/dist --project-name=vaporetto-demo --branch=${{ steps.branch.outputs.name }} --commit-hash=${{ github.event.pull_request.head.sha || github.sha }}
         gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Add publish URL as commit status
@@ -57,5 +70,5 @@ jobs:
             description: 'Cloudflare Pages deployment',
             state: 'success',
             sha,
-            target_url: "${{ steps.cloudflare_pages_deploy.outputs.url }}",
+            target_url: "${{ steps.cloudflare_pages_deploy.outputs.deployment-url }}",
           });

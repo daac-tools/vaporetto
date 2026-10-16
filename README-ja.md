@@ -35,6 +35,12 @@ Vaporetto はトークン化モデルを生成するための方法を3つ用意
 % tar xf ./bccwj-suw+unidic_pos+pron.tar.xz
 ```
 
+配布モデルは Vaporetto 0.6 以前で作成されており、現在のバージョンとはモデルの形式に互換性がありません。
+以下のコマンドでモデルを現在の形式に変換してください。
+```
+% cargo run --release -p convert_bincode_model -- --model-in ./bccwj-suw+unidic_pos+pron/bccwj-suw+unidic_pos+pron.model.zst --model-out path/to/bccwj-suw+unidic_pos+pron.model.zst
+```
+
 トークン化には、以下のコマンドを実行します。
 ```
 % echo 'ヴェネツィアはイタリアにあります。' | cargo run --release -p predict -- --model path/to/bccwj-suw+unidic_pos+pron.model.zst

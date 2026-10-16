@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
-use bincode::{Decode, Encode};
 use daachorse::DoubleArrayAhoCorasick;
+use serde::{Deserialize, Serialize};
 
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
@@ -11,7 +11,7 @@ const ALPHABET_SIZE: usize = 8;
 const ALPHABET_MASK: usize = ALPHABET_SIZE - 1;
 const ALPHABET_SHIFT: usize = 3;
 
-#[derive(Decode, Encode)]
+#[derive(Deserialize, Serialize)]
 pub struct TypeScorerBoundaryCache {
     scores: Vec<i32>,
     window_size: u8,

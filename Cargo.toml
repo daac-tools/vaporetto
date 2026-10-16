@@ -1,5 +1,8 @@
 [workspace]
 
+# Selects dependency versions compatible with the MSRV specified by `rust-version`.
+resolver = "3"
+
 members = [
     "vaporetto",
     "vaporetto_rules",
@@ -9,6 +12,7 @@ members = [
     "train",
     "evaluate",
     "convert_kytea_model",
+    "convert_bincode_model",
 ]
 
 exclude = [

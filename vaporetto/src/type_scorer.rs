@@ -12,7 +12,7 @@ use core::ops::AddAssign;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use bincode::{BorrowDecode, Encode};
+use serde::{Deserialize, Serialize};
 
 use crate::errors::Result;
 use crate::ngram_model::NgramModel;
@@ -89,7 +89,7 @@ where
 
 /// WARNING: Decoding is inherently unsafe. Do not publish this struct outside this
 /// crate.
-#[derive(BorrowDecode, Encode)]
+#[derive(Deserialize, Serialize)]
 pub enum TypeScorer {
     Boundary(TypeScorerBoundary),
 
