@@ -10,15 +10,19 @@ use alloc::borrow::Cow;
 #[cfg(feature = "tag-prediction")]
 use alloc::string::String;
 
+use daachorse::Serializable;
 #[cfg(feature = "tag-prediction")]
 use hashbrown::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::char_scorer::CharScorer;
-use crate::errors::Result;
+use crate::errors::{Result, VaporettoError};
 use crate::model::Model;
 use crate::sentence::{CharacterBoundary, Sentence};
 use crate::type_scorer::TypeScorer;
+
+#[cfg(feature = "tag-prediction")]
+use crate::utils::SplitMix64Builder;
 
 pub const WEIGHT_FIXED_LEN: usize = 8;
 
@@ -200,6 +204,275 @@ impl PositionalWeight<WeightVector> {
                     y += w;
                     ys.copy_from_slice(y.as_array());
                 }
+            }
+        }
+    }
+}
+
+/// Flag of a pattern value indicating that the weight is stored in the variable-length storage of
+/// [`BoundaryWeights`].
+const VARIABLE_WEIGHT_FLAG: u32 = 1 << 31;
+
+/// Flag of a pattern value indicating that the pattern has no boundary weight.
+#[cfg(any(feature = "fix-weight-length", feature = "tag-prediction"))]
+const NO_WEIGHT_FLAG: u32 = 1 << 30;
+
+/// Flag of a pattern value indicating that the pattern has tag weights.
+#[cfg(feature = "tag-prediction")]
+pub const TAG_WEIGHT_FLAG: u32 = 1 << 29;
+
+/// Mask to extract an index from a pattern value.
+const VALUE_INDEX_MASK: u32 = (1 << 29) - 1;
+
+/// Value associated with each pattern of an automaton.
+///
+/// If the boundary weight of the pattern fits in [`WEIGHT_FIXED_LEN`] elements starting from a
+/// common offset, the weight is stored in this value itself. Since the automaton returns this
+/// value on a match, the weight can be added without accessing another array. Otherwise, `id`
+/// indicates the weight stored in [`BoundaryWeights`].
+#[derive(Clone, Copy)]
+pub struct PatternValue {
+    #[cfg(feature = "fix-weight-length")]
+    weight: [i32; WEIGHT_FIXED_LEN],
+
+    /// Unique identifier of the pattern containing flags.
+    pub id: u32,
+}
+
+impl Serializable for PatternValue {
+    fn serialize_to_vec(&self, dst: &mut Vec<u8>) {
+        #[cfg(feature = "fix-weight-length")]
+        for w in &self.weight {
+            w.serialize_to_vec(dst);
+        }
+        self.id.serialize_to_vec(dst);
+    }
+
+    fn deserialize_from_slice(src: &[u8]) -> daachorse::Result<(Self, &[u8])> {
+        #[cfg(feature = "fix-weight-length")]
+        let (weight, src) = {
+            let mut weight = [0; WEIGHT_FIXED_LEN];
+            let mut src = src;
+            for w in &mut weight {
+                let (x, rest) = i32::deserialize_from_slice(src)?;
+                *w = x;
+                src = rest;
+            }
+            (weight, src)
+        };
+        let (id, src) = u32::deserialize_from_slice(src)?;
+        Ok((
+            Self {
+                #[cfg(feature = "fix-weight-length")]
+                weight,
+                id,
+            },
+            src,
+        ))
+    }
+
+    fn serialized_bytes() -> usize {
+        #[cfg(feature = "fix-weight-length")]
+        let n = WEIGHT_FIXED_LEN + 1;
+        #[cfg(not(feature = "fix-weight-length"))]
+        let n = 1;
+        core::mem::size_of::<u32>() * n
+    }
+}
+
+/// Boundary weights associated with the patterns of an automaton.
+///
+/// [`BoundaryWeights::push()`] returns a [`PatternValue`] that should be associated with the
+/// pattern, and [`BoundaryWeights::add_score()`] adds the weight specified by the value. Most
+/// weights are stored in the values, and the other weights are stored in this storage.
+#[derive(Deserialize, Serialize)]
+pub struct BoundaryWeights {
+    /// Weights stored in values cover positions
+    /// [`end + fixed_offset`, `end + fixed_offset + WEIGHT_FIXED_LEN`).
+    #[cfg(feature = "fix-weight-length")]
+    fixed_offset: i16,
+
+    /// Number of weights stored in values, which is used to assign identifiers.
+    #[cfg(feature = "fix-weight-length")]
+    #[serde(skip)]
+    n_fixed: usize,
+
+    variable: Vec<PositionalWeight<WeightVector>>,
+}
+
+impl BoundaryWeights {
+    /// Creates a new storage for weights of patterns with the given window size.
+    #[cfg_attr(not(feature = "fix-weight-length"), allow(unused_variables))]
+    pub fn new(window_size: u8) -> Self {
+        Self {
+            #[cfg(feature = "fix-weight-length")]
+            fixed_offset: i16::from(window_size) - i16::try_from(WEIGHT_FIXED_LEN).unwrap(),
+            #[cfg(feature = "fix-weight-length")]
+            n_fixed: 0,
+            variable: vec![],
+        }
+    }
+
+    /// Adds a weight and returns the value that should be associated with the pattern.
+    pub fn push(&mut self, weight: PositionalWeight<Vec<i32>>) -> Result<PatternValue> {
+        let PositionalWeight { offset, weight } = weight;
+
+        #[cfg(feature = "fix-weight-length")]
+        {
+            let start = i32::from(offset) - i32::from(self.fixed_offset);
+            // The range of weights stored in values must be within the padding of the score
+            // array, which has `WEIGHT_FIXED_LEN - 1` elements on each side. This holds when
+            // `fixed_offset < 0`.
+            if self.fixed_offset < 0
+                && start >= 0
+                && usize::try_from(start)? + weight.len() <= WEIGHT_FIXED_LEN
+            {
+                let start = usize::try_from(start)?;
+                let mut w = [0; WEIGHT_FIXED_LEN];
+                w[start..start + weight.len()].copy_from_slice(&weight);
+                let id = Self::check_index(self.n_fixed)?;
+                self.n_fixed += 1;
+                return Ok(PatternValue { weight: w, id });
+            }
+        }
+
+        let id = Self::check_index(self.variable.len())? | VARIABLE_WEIGHT_FLAG;
+        self.variable
+            .push(PositionalWeight { offset, weight }.into());
+        Ok(PatternValue {
+            #[cfg(feature = "fix-weight-length")]
+            weight: [0; WEIGHT_FIXED_LEN],
+            id,
+        })
+    }
+
+    /// Returns a value that should be associated with the `index`-th pattern without a boundary
+    /// weight.
+    #[cfg(feature = "tag-prediction")]
+    pub fn no_weight_value(index: usize) -> Result<PatternValue> {
+        Ok(PatternValue {
+            #[cfg(feature = "fix-weight-length")]
+            weight: [0; WEIGHT_FIXED_LEN],
+            id: Self::check_index(index)? | NO_WEIGHT_FLAG,
+        })
+    }
+
+    fn check_index(index: usize) -> Result<u32> {
+        let index = u32::try_from(index)?;
+        if index > VALUE_INDEX_MASK {
+            return Err(VaporettoError::invalid_model("too many patterns"));
+        }
+        Ok(index)
+    }
+
+    /// Adds the weight specified by `value` to `ys`. `end` is the position in `ys` corresponding
+    /// to the end of the pattern.
+    ///
+    /// # Safety
+    ///
+    /// `value` must be a value returned by [`BoundaryWeights::push()`] or
+    /// [`BoundaryWeights::no_weight_value()`] of this storage.
+    #[inline(always)]
+    pub unsafe fn add_score(&self, value: &PatternValue, end: usize, ys: &mut [i32]) {
+        if value.id & VARIABLE_WEIGHT_FLAG != 0 {
+            let index = usize::try_from(value.id & VALUE_INDEX_MASK).unwrap();
+            debug_assert!(index < self.variable.len());
+            self.variable
+                .get_unchecked(index)
+                .add_score(isize::try_from(end).unwrap(), ys);
+            return;
+        }
+
+        #[cfg(feature = "fix-weight-length")]
+        if value.id & NO_WEIGHT_FLAG == 0 {
+            let pos = end.wrapping_add_signed(isize::from(self.fixed_offset));
+            let ys = &mut ys[pos..pos + WEIGHT_FIXED_LEN];
+
+            #[cfg(not(feature = "portable-simd"))]
+            for (y, x) in ys.iter_mut().zip(&value.weight) {
+                *y += *x;
+            }
+
+            #[cfg(feature = "portable-simd")]
+            {
+                let mut y = I32Simd::from_slice(ys);
+                y += I32Simd::from_array(value.weight);
+                ys.copy_from_slice(y.as_array());
+            }
+        }
+    }
+}
+
+/// Tag weights of all tokens and relative positions.
+///
+/// All weights are stored in a single hash map instead of a map for each token and position
+/// because it causes fewer cache misses.
+///
+/// Values of patterns having tag weights must contain [`TAG_WEIGHT_FLAG`]. Patterns without the
+/// flag are skipped without accessing the map.
+#[cfg(feature = "tag-prediction")]
+#[derive(Deserialize, Serialize)]
+pub struct TagWeights {
+    n_positions: u32,
+    map: HashMap<u64, WeightVector, SplitMix64Builder>,
+}
+
+#[cfg(feature = "tag-prediction")]
+impl TagWeights {
+    /// Creates a new storage for tag weights of `n_tokens` tokens. Relative positions must be
+    /// smaller than or equal to `window_size`.
+    pub fn new(n_tokens: usize, window_size: u8) -> Result<Self> {
+        let n_positions = u32::from(window_size) + 1;
+        // Keys of the map contain `token_id * n_positions + rel_position` in the upper 32 bits.
+        if u32::try_from(n_tokens)?.checked_mul(n_positions).is_none() {
+            return Err(VaporettoError::invalid_model("too many tag models"));
+        }
+        Ok(Self {
+            n_positions,
+            map: HashMap::default(),
+        })
+    }
+
+    #[inline(always)]
+    fn key(&self, token_id: u32, rel_position: u32, value: u32) -> u64 {
+        ((u64::from(token_id) * u64::from(self.n_positions) + u64::from(rel_position)) << 32)
+            | u64::from(value)
+    }
+
+    /// Inserts a weight of the given token and relative position associated with the pattern of
+    /// the given value.
+    ///
+    /// `token_id` must be smaller than `n_tokens` given to [`TagWeights::new()`], and `value` must
+    /// contain [`TAG_WEIGHT_FLAG`].
+    pub fn insert(
+        &mut self,
+        token_id: usize,
+        rel_position: u8,
+        value: u32,
+        weight: Vec<i32>,
+    ) -> Result<()> {
+        debug_assert!(value & TAG_WEIGHT_FLAG != 0);
+        if u32::from(rel_position) >= self.n_positions {
+            return Err(VaporettoError::invalid_model(
+                "relative positions of tag n-grams must be smaller than or equal to the window size",
+            ));
+        }
+        let key = self.key(u32::try_from(token_id)?, u32::from(rel_position), value);
+        self.map.insert(key, weight.into());
+        Ok(())
+    }
+
+    /// Adds tag weights of the given token to `scores`. `values` is a sequence of pattern
+    /// values whose `i`-th item corresponds to the relative position `i`.
+    #[inline(always)]
+    pub fn add_scores(&self, token_id: u32, values: &[u32], scores: &mut [i32]) {
+        for (rel_position, &value) in (0..self.n_positions).zip(values) {
+            // Most patterns have no tag weights, so they are skipped without accessing the map.
+            if value & TAG_WEIGHT_FLAG == 0 {
+                continue;
+            }
+            if let Some(weight) = self.map.get(&self.key(token_id, rel_position, value)) {
+                weight.add_scores(scores);
             }
         }
     }
@@ -513,18 +786,14 @@ impl Predictor {
                         tag_predictor.bias().add_scores(&mut scores);
                         if let Some(scorer) = self.data.char_scorer.as_ref() {
                             debug_assert!(i < sentence.char_pma_states.len());
-                            // token_id is always smaller than tag_weight.len() because
-                            // tag_predictor is created to contain such values in the new()
-                            // function.
+                            // The states contain `sentence.len()` items because `predict()` initializes them.
                             unsafe {
                                 scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
                             }
                         }
                         if let Some(scorer) = self.data.type_scorer.as_ref() {
                             debug_assert!(i < sentence.type_pma_states.len());
-                            // token_id is always smaller than tag_weight.len() because
-                            // tag_predictor is created to contain such values in the new()
-                            // function.
+                            // The states contain `sentence.len()` items because `predict()` initializes them.
                             unsafe {
                                 scorer.add_tag_scores(*token_id, i, sentence, &mut scores);
                             }
@@ -550,16 +819,14 @@ impl Predictor {
                 tag_predictor.bias().add_scores(&mut scores);
                 if let Some(scorer) = self.data.char_scorer.as_ref() {
                     debug_assert!(sentence.len() <= sentence.char_pma_states.len());
-                    // token_id is always smaller than tag_weight.len() because tag_predictor is
-                    // created to contain such values in the new() function.
+                    // The states contain `sentence.len()` items because `predict()` initializes them.
                     unsafe {
                         scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
                     }
                 }
                 if let Some(scorer) = self.data.type_scorer.as_ref() {
                     debug_assert!(sentence.len() <= sentence.type_pma_states.len());
-                    // token_id is always smaller than tag_weight.len() because tag_predictor is
-                    // created to contain such values in the new() function.
+                    // The states contain `sentence.len()` items because `predict()` initializes them.
                     unsafe {
                         scorer.add_tag_scores(*token_id, sentence.len() - 1, sentence, &mut scores);
                     }

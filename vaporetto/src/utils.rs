@@ -1,3 +1,4 @@
+#[cfg(feature = "tag-prediction")]
 use core::hash::{BuildHasher, Hasher};
 
 #[cfg(feature = "kytea")]
@@ -31,10 +32,12 @@ impl Serialize for Bytes<'_> {
 }
 
 // Copied from https://prng.di.unimi.it/splitmix64.c
+#[cfg(feature = "tag-prediction")]
 pub struct SplitMix64 {
     x: u64,
 }
 
+#[cfg(feature = "tag-prediction")]
 impl SplitMix64 {
     const fn add(&mut self, i: u64) {
         self.x ^= i;
@@ -45,6 +48,7 @@ impl SplitMix64 {
     }
 }
 
+#[cfg(feature = "tag-prediction")]
 impl Hasher for SplitMix64 {
     #[inline(always)]
     fn finish(&self) -> u64 {
@@ -99,9 +103,11 @@ impl Hasher for SplitMix64 {
     }
 }
 
+#[cfg(feature = "tag-prediction")]
 #[derive(Clone, Copy, Default)]
 pub struct SplitMix64Builder;
 
+#[cfg(feature = "tag-prediction")]
 impl BuildHasher for SplitMix64Builder {
     type Hasher = SplitMix64;
 
