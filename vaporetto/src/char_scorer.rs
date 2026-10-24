@@ -135,7 +135,6 @@ impl CharScorer {
 
     /// # Satety
     ///
-    /// `token_id` must be smaller than `scorer.tag_weight.len()`.
     /// `pos` must be smaller than `sentence.char_pma_states.len()`.
     #[cfg(feature = "tag-prediction")]
     #[inline]
@@ -522,5 +521,185 @@ mod tests {
             scorer.add_tag_scores(2, 3, &sentence, &mut tag_scores);
         }
         assert_eq!(&[59, 61, 1, 1, 1, 1, 1, 1], &tag_scores);
+    }
+
+    /// Computes boundary scores by adding weights of all occurrences of patterns.
+    /// Each pattern is given as a tuple of the pattern, the offset of weights, and weights.
+    fn naive_boundary_scores(text: &str, patterns: &[(&str, isize, &[i32])]) -> Vec<i32> {
+        let chars: Vec<char> = text.chars().collect();
+        let mut ys = vec![0; chars.len() - 1];
+        for &(pattern, offset, weights) in patterns {
+            let pattern: Vec<char> = pattern.chars().collect();
+            for end in pattern.len()..=chars.len() {
+                if chars[end - pattern.len()..end] != pattern[..] {
+                    continue;
+                }
+                for (j, &w) in weights.iter().enumerate() {
+                    let k = isize::try_from(end + j).unwrap() - 1 + offset;
+                    if let Some(y) = usize::try_from(k).ok().and_then(|k| ys.get_mut(k)) {
+                        *y += w;
+                    }
+                }
+            }
+        }
+        ys
+    }
+
+    const TEST_TEXT: &str = "東京都に住む人は京都にも東京特許許可局にも行く";
+    const TEST_NGRAMS: &[&str] = &[
+        "東",
+        "京",
+        "東京",
+        "京都",
+        "都に",
+        "東京都",
+        "に住む",
+        "は京都に",
+    ];
+    const TEST_WORDS: &[&str] = &["人", "東京", "許可", "京都に", "東京特許許可局"];
+
+    /// Generates test data, whose weights have lengths of the real models.
+    fn test_data(
+        window_size: u8,
+    ) -> (
+        NgramModel<String>,
+        DictModel,
+        Vec<(String, isize, Vec<i32>)>,
+    ) {
+        let mut ngrams = vec![];
+        let mut words = vec![];
+        let mut patterns = vec![];
+        let mut x = 0;
+        for &ngram in TEST_NGRAMS {
+            let len = ngram.chars().count();
+            if len > usize::from(window_size) * 2 {
+                continue;
+            }
+            let weights: Vec<i32> = (0..usize::from(window_size) * 2 - len + 1)
+                .map(|_| {
+                    x += 1;
+                    x * 3 - 50
+                })
+                .collect();
+            patterns.push((
+                String::from(ngram),
+                -isize::from(window_size),
+                weights.clone(),
+            ));
+            ngrams.push(NgramData {
+                ngram: ngram.into(),
+                weights,
+            });
+        }
+        for &word in TEST_WORDS {
+            let len = word.chars().count();
+            let weights: Vec<i32> = (0..=len)
+                .map(|_| {
+                    x += 1;
+                    x * 5 - 70
+                })
+                .collect();
+            patterns.push((
+                String::from(word),
+                -isize::try_from(len).unwrap(),
+                weights.clone(),
+            ));
+            words.push(WordWeightRecord {
+                word: word.into(),
+                weights,
+                comment: "".into(),
+            });
+        }
+        (NgramModel(ngrams), DictModel(words), patterns)
+    }
+
+    #[test]
+    fn test_add_scores_matches_naive() {
+        // Window sizes larger than or equal to WEIGHT_FIXED_LEN do not use fixed-length weights.
+        for window_size in 1..=9 {
+            let (ngram_model, dict_model, patterns) = test_data(window_size);
+            let patterns: Vec<_> = patterns
+                .iter()
+                .map(|(p, o, w)| (p.as_str(), *o, w.as_slice()))
+                .collect();
+            let scorer = CharScorerBoundary::new(ngram_model, dict_model, window_size).unwrap();
+            let mut sentence = Sentence::from_raw(TEST_TEXT).unwrap();
+            sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+            sentence.boundary_scores.clear();
+            sentence
+                .boundary_scores
+                .resize(sentence.score_padding * 2 + sentence.len() - 1, 0);
+            scorer.add_scores(&mut sentence);
+            assert_eq!(
+                naive_boundary_scores(TEST_TEXT, &patterns),
+                sentence.boundary_scores(),
+                "window_size={window_size}",
+            );
+        }
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_add_scores_with_tags_matches_naive() {
+        for window_size in 1..=9 {
+            let (ngram_model, dict_model, patterns) = test_data(window_size);
+            let patterns: Vec<_> = patterns
+                .iter()
+                .map(|(p, o, w)| (p.as_str(), *o, w.as_slice()))
+                .collect();
+            // "特許" only has tag weights.
+            let tag_ngram_model = vec![TagNgramModel(vec![TagNgramData {
+                ngram: "特許".into(),
+                weights: vec![TagWeight {
+                    rel_position: window_size,
+                    weights: vec![1, 2],
+                }],
+            }])];
+            let scorer =
+                CharScorerBoundaryTag::new(ngram_model, dict_model, window_size, tag_ngram_model)
+                    .unwrap();
+            let mut sentence = Sentence::from_raw(TEST_TEXT).unwrap();
+            sentence.score_padding = WEIGHT_FIXED_LEN - 1;
+            sentence.boundary_scores.clear();
+            sentence
+                .boundary_scores
+                .resize(sentence.score_padding * 2 + sentence.len() - 1, 0);
+            scorer.add_scores(&mut sentence);
+            assert_eq!(
+                naive_boundary_scores(TEST_TEXT, &patterns),
+                sentence.boundary_scores(),
+                "window_size={window_size}",
+            );
+
+            // The last character of "特許" is at index 15.
+            let pos = 15 - usize::from(window_size);
+            let mut tag_scores = [0; 8];
+            unsafe {
+                scorer.add_tag_scores(0, pos, &sentence, &mut tag_scores);
+            }
+            assert_eq!(
+                &[1, 2, 0, 0, 0, 0, 0, 0],
+                &tag_scores,
+                "window_size={window_size}"
+            );
+        }
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_tag_rel_position_out_of_window() {
+        let result = CharScorerBoundaryTag::new(
+            NgramModel(vec![]),
+            DictModel(vec![]),
+            3,
+            vec![TagNgramModel(vec![TagNgramData {
+                ngram: "人".into(),
+                weights: vec![TagWeight {
+                    rel_position: 4,
+                    weights: vec![1, 2],
+                }],
+            }])],
+        );
+        assert!(result.is_err());
     }
 }

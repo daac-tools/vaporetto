@@ -1,5 +1,4 @@
 use alloc::string::String;
-use alloc::vec::Vec;
 
 #[cfg(feature = "charwise-pma")]
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
@@ -11,16 +10,16 @@ use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::NgramModel;
-use crate::predictor::{PositionalWeight, WeightVector};
+use crate::predictor::{BoundaryWeights, PatternValue, PositionalWeight};
 use crate::sentence::Sentence;
 use crate::utils::Bytes;
 
 pub struct CharScorerBoundary {
     #[cfg(not(feature = "charwise-pma"))]
-    pma: DoubleArrayAhoCorasick<u32>,
+    pma: DoubleArrayAhoCorasick<PatternValue>,
     #[cfg(feature = "charwise-pma")]
-    pma: CharwiseDoubleArrayAhoCorasick<u32>,
-    weights: Vec<PositionalWeight<WeightVector>>,
+    pma: CharwiseDoubleArrayAhoCorasick<PatternValue>,
+    weights: BoundaryWeights,
 }
 
 impl<'de> Deserialize<'de> for CharScorerBoundary {
@@ -69,22 +68,20 @@ impl CharScorerBoundary {
             let weight = PositionalWeight::new(-word_len, d.weights);
             merger.add(d.word, weight);
         }
-        let mut ngrams = vec![];
-        let mut weights = vec![];
+        let mut patvals = vec![];
+        let mut weights = BoundaryWeights::new(window_size);
         for (ngram, weight) in merger.merge() {
-            ngrams.push(ngram);
-            weights.push(weight.into());
+            patvals.push((ngram, weights.push(weight)?));
         }
         #[cfg(not(feature = "charwise-pma"))]
-        let pma = DoubleArrayAhoCorasick::new(ngrams)
+        let pma = DoubleArrayAhoCorasick::with_values(patvals)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         #[cfg(feature = "charwise-pma")]
-        let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
+        let pma = CharwiseDoubleArrayAhoCorasick::with_values(patvals)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self { pma, weights })
     }
 
-    #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
     pub fn add_scores(&self, sentence: &mut Sentence) {
         #[cfg(not(feature = "charwise-pma"))]
@@ -96,15 +93,14 @@ impl CharScorerBoundary {
         for m in it {
             debug_assert!(m.end() != 0 && sentence.text.is_char_boundary(m.end()));
             let end = unsafe { sentence.str_to_char_pos(m.end()) };
-            debug_assert!(usize::try_from(m.value()).unwrap() < self.weights.len());
-            let weight = unsafe {
-                self.weights
-                    .get_unchecked(usize::try_from(m.value()).unwrap())
-            };
-            weight.add_score(
-                (end + sentence.score_padding - 1) as isize,
-                &mut sentence.boundary_scores,
-            );
+            // The value is always returned by `BoundaryWeights::push()`.
+            unsafe {
+                self.weights.add_score(
+                    &m.value(),
+                    end + sentence.score_padding - 1,
+                    &mut sentence.boundary_scores,
+                );
+            }
         }
     }
 }

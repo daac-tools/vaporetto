@@ -5,24 +5,25 @@ use alloc::vec::Vec;
 use daachorse::charwise::CharwiseDoubleArrayAhoCorasick;
 #[cfg(not(feature = "charwise-pma"))]
 use daachorse::DoubleArrayAhoCorasick;
-use hashbrown::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::char_scorer::CharWeightMerger;
 use crate::dict_model::DictModel;
 use crate::errors::{Result, VaporettoError};
 use crate::ngram_model::{NgramModel, TagNgramModel};
-use crate::predictor::{PositionalWeight, PositionalWeightWithTag, WeightVector};
+use crate::predictor::{
+    BoundaryWeights, PatternValue, PositionalWeightWithTag, TagWeights, TAG_WEIGHT_FLAG,
+};
 use crate::sentence::Sentence;
-use crate::utils::{Bytes, SplitMix64Builder};
+use crate::utils::Bytes;
 
 pub struct CharScorerBoundaryTag {
     #[cfg(not(feature = "charwise-pma"))]
-    pma: DoubleArrayAhoCorasick<u32>,
+    pma: DoubleArrayAhoCorasick<PatternValue>,
     #[cfg(feature = "charwise-pma")]
-    pma: CharwiseDoubleArrayAhoCorasick<u32>,
-    weights: Vec<Option<PositionalWeight<WeightVector>>>,
-    tag_weight: Vec<Vec<HashMap<u32, WeightVector, SplitMix64Builder>>>,
+    pma: CharwiseDoubleArrayAhoCorasick<PatternValue>,
+    weights: BoundaryWeights,
+    tag_weight: TagWeights,
 }
 
 impl<'de> Deserialize<'de> for CharScorerBoundaryTag {
@@ -82,8 +83,7 @@ impl CharScorerBoundaryTag {
             let weight = PositionalWeightWithTag::with_boundary(-word_len, d.weights);
             merger.add(d.word, weight);
         }
-        let mut tag_weight =
-            vec![vec![HashMap::default(); usize::from(window_size) + 1]; tag_ngram_model.len()];
+        let mut tag_weight = TagWeights::new(tag_ngram_model.len(), window_size)?;
         for (i, tag_model) in tag_ngram_model.into_iter().enumerate() {
             for d in tag_model.0 {
                 for w in d.weights {
@@ -92,21 +92,28 @@ impl CharScorerBoundaryTag {
                 }
             }
         }
-        let mut ngrams = vec![];
-        let mut weights = vec![];
+        let mut patvals = vec![];
+        let mut weights = BoundaryWeights::new(window_size);
         for (i, (ngram, weight)) in merger.merge().into_iter().enumerate() {
-            ngrams.push(ngram);
-            weights.push(weight.weight.map(|w| w.into()));
-            for ((token_id, rel_position), weight) in weight.tag_info {
-                tag_weight[token_id][usize::from(rel_position)]
-                    .insert(u32::try_from(i).unwrap(), weight.into());
+            let value = if let Some(w) = weight.weight {
+                weights.push(w)?
+            } else {
+                BoundaryWeights::no_weight_value(i)?
+            };
+            let mut value = value;
+            if !weight.tag_info.is_empty() {
+                value.id |= TAG_WEIGHT_FLAG;
             }
+            for ((token_id, rel_position), weight) in weight.tag_info {
+                tag_weight.insert(token_id, rel_position, value.id, weight)?;
+            }
+            patvals.push((ngram, value));
         }
         #[cfg(not(feature = "charwise-pma"))]
-        let pma = DoubleArrayAhoCorasick::new(ngrams)
+        let pma = DoubleArrayAhoCorasick::with_values(patvals)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         #[cfg(feature = "charwise-pma")]
-        let pma = CharwiseDoubleArrayAhoCorasick::new(ngrams)
+        let pma = CharwiseDoubleArrayAhoCorasick::with_values(patvals)
             .map_err(|_| VaporettoError::invalid_model("failed to build the automaton"))?;
         Ok(Self {
             pma,
@@ -115,8 +122,6 @@ impl CharScorerBoundaryTag {
         })
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_possible_wrap)]
     #[inline(always)]
     pub fn add_scores(&self, sentence: &mut Sentence) {
         sentence.char_pma_states.clear();
@@ -130,25 +135,23 @@ impl CharScorerBoundaryTag {
         for m in it {
             debug_assert!(m.end() != 0 && sentence.text.is_char_boundary(m.end()));
             let end = unsafe { sentence.str_to_char_pos(m.end()) };
-            debug_assert!(usize::try_from(m.value()).unwrap() < self.weights.len());
-            if let Some(weight) = unsafe {
-                self.weights
-                    .get_unchecked(usize::try_from(m.value()).unwrap())
-                    .as_ref()
-            } {
-                weight.add_score(
-                    (end + sentence.score_padding - 1) as isize,
+            // The value is always returned by `BoundaryWeights::push()` or
+            // `BoundaryWeights::no_weight_value()`.
+            let value = m.value();
+            unsafe {
+                self.weights.add_score(
+                    &value,
+                    end + sentence.score_padding - 1,
                     &mut sentence.boundary_scores,
                 );
             }
             debug_assert!(end <= sentence.char_pma_states.len());
-            unsafe { *sentence.char_pma_states.get_unchecked_mut(end - 1) = m.value() };
+            unsafe { *sentence.char_pma_states.get_unchecked_mut(end - 1) = value.id };
         }
     }
 
     /// # Satety
     ///
-    /// `token_id` must be smaller than `scorer.tag_weight.len()`.
     /// `pos` must be smaller than `sentence.char_pma_states.len()`.
     #[inline(always)]
     pub unsafe fn add_tag_scores(
@@ -158,18 +161,10 @@ impl CharScorerBoundaryTag {
         sentence: &Sentence,
         scores: &mut [i32],
     ) {
-        let tag_weight = self
-            .tag_weight
-            .get_unchecked(usize::try_from(token_id).unwrap());
-        for (state_id, tag_weights) in sentence
-            .char_pma_states
-            .get_unchecked(pos..)
-            .iter()
-            .zip(tag_weight)
-        {
-            if let Some(weight) = tag_weights.get(state_id) {
-                weight.add_scores(scores);
-            }
-        }
+        self.tag_weight.add_scores(
+            token_id,
+            sentence.char_pma_states.get_unchecked(pos..),
+            scores,
+        );
     }
 }
