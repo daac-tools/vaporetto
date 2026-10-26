@@ -1372,7 +1372,7 @@ impl<'a, 'b> Iterator for TokenIterator<'a, 'b> {
         for (i, &b) in boundaries.iter().enumerate() {
             if b == CharacterBoundary::WordBoundary {
                 if skip_token {
-                    self.token.start += i + 1;
+                    self.token.start = self.token.end + i + 1;
                     skip_token = false;
                 } else {
                     self.token.end += i + 1;
@@ -2818,6 +2818,20 @@ mod tests {
 
         let token = it.next().unwrap();
         assert_eq!("生態", token.surface());
+
+        assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn test_sentence_to_tokenized_vec_consecutive_unknown() {
+        let s = Sentence::from_partial_annotation("ホ ー ム|ペ ー ジ|を|見 る|こ-と").unwrap();
+        let mut it = s.iter_tokens();
+
+        let token = it.next().unwrap();
+        assert_eq!("を", token.surface());
+
+        let token = it.next().unwrap();
+        assert_eq!("こと", token.surface());
 
         assert!(it.next().is_none());
     }
