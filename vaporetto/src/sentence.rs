@@ -980,7 +980,19 @@ impl<'a, 'b> Sentence<'a, 'b> {
         }
     }
 
+    fn push_escaped_tag(buf: &mut String, tag: &str) {
+        for c in tag.chars() {
+            if matches!(c, ' ' | '-' | '/' | '\\' | '|') {
+                buf.push('\\');
+            }
+            buf.push(c);
+        }
+    }
+
     /// Writes a text with partial annotations.
+    ///
+    /// Backslashes (`'\\'`), slashes (`'/'`), dashes (`'-'`), pipe symbols (`'|'`), and whitespaces
+    /// (`' '`) in tags are escaped with backslashes.
     ///
     /// # Examples
     ///
@@ -1009,7 +1021,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
             for tag in &ts[..ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)] {
                 buf.push('/');
                 if let Some(tag) = tag {
-                    buf.push_str(tag);
+                    Self::push_escaped_tag(buf, tag);
                 }
             }
             for ((c, ts), &b) in char_iter.zip(tag_iter).zip(&self.boundaries) {
@@ -1022,7 +1034,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
                 for tag in &ts[..ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)] {
                     buf.push('/');
                     if let Some(tag) = tag {
-                        buf.push_str(tag);
+                        Self::push_escaped_tag(buf, tag);
                     }
                 }
             }
@@ -2806,6 +2818,27 @@ mod tests {
         s.write_tokenized_text(&mut buf);
 
         assert_eq!("火星猫 の \\  生態 \\\\n", buf);
+    }
+
+    #[test]
+    fn test_sentence_to_partial_annotation_string_escape() {
+        let s = Sentence::from_tokenized("火星/名詞-普通名詞-一般 猫/a|b\\ c\\/d\\\\e").unwrap();
+        let mut buf = String::new();
+        s.write_partial_annotation_text(&mut buf);
+
+        assert_eq!("火-星/名詞\\-普通名詞\\-一般|猫/a\\|b\\ c\\/d\\\\e", buf);
+    }
+
+    #[test]
+    fn test_sentence_partial_annotation_string_roundtrip() {
+        let text = "火星/名詞-普通名詞-一般 猫/a|b\\ c\\/d\\\\e の/助詞";
+        let s = Sentence::from_tokenized(text).unwrap();
+        let mut buf = String::new();
+        s.write_partial_annotation_text(&mut buf);
+        let s = Sentence::from_partial_annotation(&buf).unwrap();
+        s.write_tokenized_text(&mut buf);
+
+        assert_eq!(text, buf);
     }
 
     #[test]
