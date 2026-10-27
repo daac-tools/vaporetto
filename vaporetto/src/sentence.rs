@@ -242,6 +242,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
         self.char_pma_states.clear();
         self.type_pma_states.clear();
         self.tags.clear();
+        #[cfg(feature = "tag-prediction")]
+        self.tag_scores.clear();
         self.n_tags = 0;
         self.predictor.take();
         self.str_to_char_pos.clear();
@@ -374,6 +376,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
         self.type_pma_states.clear();
         self.predictor.take();
         self.tags.clear();
+        #[cfg(feature = "tag-prediction")]
+        self.tag_scores.clear();
+        self.n_tags = 0;
         Ok(())
     }
 
@@ -475,6 +480,12 @@ impl<'a, 'b> Sentence<'a, 'b> {
                 "must not end with a whitespace",
             ));
         }
+        if text.is_empty() {
+            return Err(VaporettoError::invalid_argument(
+                "tokenized_text",
+                "must contain at least one character",
+            ));
+        }
         str_to_char_pos.resize(pos + 1, 0);
         for (i, &pos) in char_to_str_pos.iter().enumerate() {
             str_to_char_pos[pos] = i;
@@ -503,14 +514,21 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// Creates a new [`Sentence`] from a tokenized text.
     ///
     /// A tokenized text must be annotated by the following rules:
-    ///   - A whitespace (`' '`) is inserted to each token boundary.
-    ///   - If necessary, multiple tags following each slash (`'/'`) can be added to each token.
-    ///   - Each character following a back slash (`'\\'`) is escaped.
+    ///
+    /// * A whitespace (`' '`) is inserted to each token boundary.
+    /// * If necessary, multiple tags following each slash (`'/'`) can be added to each token.
+    /// * Each character following a back slash (`'\\'`) is escaped.
     ///
     /// # Errors
     ///
-    /// This function will return an error variant when the given text is empty, starts/ends with a
-    /// whitespace, or contains consecutive whitespaces.
+    /// This function will return an error variant when the given text:
+    ///
+    /// * is empty,
+    /// * contains no characters except for escape characters,
+    /// * contains consecutive whitespaces,
+    /// * contains a slash that does not follow a character,
+    /// * contains NULL, or
+    /// * starts/ends with a whitespace,
     ///
     /// # Examples
     ///
@@ -564,14 +582,21 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// Updates the [`Sentence`] using a tokenized text.
     ///
     /// A tokenized text must be annotated by the following rules:
-    ///   - A whitespace (`' '`) is inserted to each token boundary.
-    ///   - If necessary, multiple tags following each slash (`'/'`) can be added to each token.
-    ///   - Each character following a back slash (`'\\'`) is escaped.
+    ///
+    /// * A whitespace (`' '`) is inserted to each token boundary.
+    /// * If necessary, multiple tags following each slash (`'/'`) can be added to each token.
+    /// * Each character following a back slash (`'\\'`) is escaped.
     ///
     /// # Errors
     ///
-    /// This function will return an error variant when the given text is empty, starts/ends with a
-    /// whitespace, or contains consecutive whitespaces.
+    /// This function will return an error variant when the given text:
+    ///
+    /// * is empty,
+    /// * contains no characters except for escape characters,
+    /// * contains consecutive whitespaces,
+    /// * contains a slash that does not follow a character,
+    /// * contains NULL, or
+    /// * starts/ends with a whitespace,
     ///
     /// # Examples
     ///
@@ -604,6 +629,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
         self.char_pma_states.clear();
         self.type_pma_states.clear();
         self.predictor.take();
+        #[cfg(feature = "tag-prediction")]
+        self.tag_scores.clear();
         self.n_tags = self.tags.len() / self.char_types.len();
         Ok(())
     }
@@ -728,9 +755,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// Creates a new [`Sentence`] from a text with partial annotations.
     ///
     /// Each character boundary must be annotated by the following rules:
-    ///   - If the boundary is a token boundary, a pipe symbol (`'|'`) is inserted.
-    ///   - If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
-    ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
+    /// * If the boundary is a token boundary, a pipe symbol (`'|'`) is inserted.
+    /// * If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
+    /// * If the boundary is not annotated, a whitespace (`' '`) is inserted.
     ///
     /// In addition, multiple tags following each slash (`'/'`) can be inserted to each token.
     /// Tags can also be inserted at non-word boundaries, but such tags are ignored.
@@ -803,9 +830,10 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// Updates the [`Sentence`] using a text with partial annotations.
     ///
     /// Each character boundary must be annotated by the following rules:
-    ///   - If the boundary is a token boundary, a pipe symbol (`'|'`) is inserted.
-    ///   - If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
-    ///   - If the boundary is not annotated, a whitespace (`' '`) is inserted.
+    ///
+    /// * If the boundary is a token boundary, a pipe symbol (`'|'`) is inserted.
+    /// * If the boundary is not a token boundary, a dash symobl (`'-'`) is inserted.
+    /// * If the boundary is not annotated, a whitespace (`' '`) is inserted.
     ///
     /// In addition, multiple tags following each slash (`'/'`) can be inserted to each token.
     /// Tags can also be inserted at non-word boundaries, but such tags are ignored.
@@ -859,6 +887,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
         self.char_pma_states.clear();
         self.type_pma_states.clear();
         self.predictor.take();
+        #[cfg(feature = "tag-prediction")]
+        self.tag_scores.clear();
         self.n_tags = self.tags.len() / self.char_types.len();
         Ok(())
     }
@@ -1199,6 +1229,9 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// If you want to predict tags, call this function after calling [`Predictor::predict()`] and
     /// word boundaries are fixed.
     ///
+    /// This function does nothing if [`Predictor::predict()`] has not been called after the
+    /// sentence was created or updated.
+    ///
     /// # Panics
     ///
     /// The predictor must be created with `predict_tags = true`.
@@ -1317,7 +1350,9 @@ impl<'a, 'b> Token<'a, 'b> {
     ///
     /// # Panics
     ///
-    /// This function panics if [`Predictor::store_tag_scores()`] is set to false.
+    /// This function panics if [`Predictor::store_tag_scores()`] is set to false,
+    /// [`Sentence::fill_tags()`] has not been called after [`Predictor::predict()`], or the model
+    /// does not contain tags.
     #[cfg(feature = "tag-prediction")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tag-prediction")))]
     pub fn tag_candidates(&self) -> Vec<Vec<(&'b str, i32)>> {
@@ -1592,6 +1627,66 @@ mod tests {
             "InvalidArgumentError: tokenized_text: must contain at least one character",
             &s.err().unwrap().to_string()
         );
+    }
+
+    #[test]
+    fn test_sentence_from_tokenized_only_escape() {
+        let s = Sentence::from_tokenized("\\");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: must contain at least one character",
+            &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_update_tokenized_only_escape() {
+        let mut s = Sentence::from_raw("12345").unwrap();
+        let result = s.update_tokenized("\\");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: must contain at least one character",
+            &result.err().unwrap().to_string()
+        );
+
+        assert_eq!(" ", s.as_raw_text());
+        assert_eq!(0, s.n_tags());
+    }
+
+    #[test]
+    fn test_sentence_update_raw_resets_tags() {
+        let mut s = Sentence::from_tokenized("火星/名詞 猫").unwrap();
+        assert_eq!(1, s.n_tags());
+
+        s.update_raw("まぁ良いだろう").unwrap();
+
+        assert_eq!(0, s.n_tags());
+        assert!(s.tags().is_empty());
+        let mut buf = String::new();
+        s.write_partial_annotation_text(&mut buf);
+        assert_eq!("ま ぁ 良 い だ ろ う", buf);
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_sentence_update_clears_tag_scores() {
+        let mut s = Sentence::from_raw("火星猫").unwrap();
+
+        s.tag_scores.push(None);
+        s.update_raw("まぁ良いだろう").unwrap();
+        assert!(s.tag_scores.is_empty());
+
+        s.tag_scores.push(None);
+        s.update_tokenized("まぁ 良い だろう").unwrap();
+        assert!(s.tag_scores.is_empty());
+
+        s.tag_scores.push(None);
+        s.update_partial_annotation("ま-ぁ|良-い|だ ろ う").unwrap();
+        assert!(s.tag_scores.is_empty());
+
+        s.tag_scores.push(None);
+        assert!(s.update_raw("").is_err());
+        assert!(s.tag_scores.is_empty());
     }
 
     #[test]

@@ -725,6 +725,8 @@ impl Predictor {
 
     /// Predicts word boundaries of the given sentence.
     /// If necessary, this function also prepares for predicting tags.
+    ///
+    /// Tags of the given sentence are removed. Use [`Sentence::fill_tags()`] to predict tags.
     pub fn predict<'a>(&'a self, sentence: &mut Sentence<'_, 'a>) {
         sentence.score_padding = WEIGHT_FIXED_LEN - 1;
         sentence.boundary_scores.clear();
@@ -749,6 +751,10 @@ impl Predictor {
                 *b = CharacterBoundary::NotWordBoundary;
             }
         }
+        sentence.tags.clear();
+        #[cfg(feature = "tag-prediction")]
+        sentence.tag_scores.clear();
+        sentence.n_tags = 0;
         sentence.set_predictor(self);
     }
 
@@ -949,6 +955,20 @@ mod tests {
         y += &x;
         assert_eq!(-7, y.offset);
         assert_eq!(vec![2, 4, 8, 0, 0, 1, 2, 3, 4], y.weight);
+    }
+
+    #[test]
+    fn test_predict_removes_tags() {
+        let model = create_test_model();
+        let predictor = Predictor::new(model, false).unwrap();
+        let mut sentence = Sentence::from_tokenized("この/名詞 人は地球人だ").unwrap();
+        predictor.predict(&mut sentence);
+
+        assert_eq!(0, sentence.n_tags());
+        assert!(sentence.tags().is_empty());
+        let mut buf = alloc::string::String::new();
+        sentence.write_tokenized_text(&mut buf);
+        assert_eq!("この 人 は 地球 人 だ", buf);
     }
 
     fn create_test_model() -> Model {
