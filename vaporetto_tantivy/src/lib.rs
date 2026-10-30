@@ -99,6 +99,7 @@ impl VaporettoTokenizer {
     /// # Errors
     ///
     /// Error is returned when
+    ///
     /// * the model is invalid, or
     /// * `wsconst` contains an invalid character type.
     pub fn new(model: Model, wsconst: &str) -> Result<Self, Box<dyn std::error::Error>> {
@@ -123,6 +124,7 @@ impl VaporettoTokenizer {
     /// # Errors
     ///
     /// Error is returned when
+    ///
     /// * the data is invalid, or
     /// * `wsconst` contains an invalid character type.
     ///
