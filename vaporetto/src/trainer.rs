@@ -357,8 +357,8 @@ impl<'a> Trainer<'a> {
     ///
     /// # Errors
     ///
-    /// If the solver returns an error, that will be propagated.
-    /// If the dataset contains no word boundaries, an error variant will be returned.
+    /// * If the solver returns an error, that will be propagated.
+    /// * If the dataset contains no word boundaries, an error variant will be returned.
     pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Model> {
         let mut builder = liblinear::Builder::new();
         let training_input = liblinear::util::TrainingInput::from_sparse_features(self.ys, self.xs)
