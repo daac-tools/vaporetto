@@ -683,6 +683,12 @@ impl<'a, 'b> Sentence<'a, 'b> {
                 }
                 _ => {
                     escape = false;
+                    if c == '\0' {
+                        return Err(VaporettoError::invalid_argument(
+                            "partial_annotation_text",
+                            "must not contain NULL",
+                        ));
+                    }
                     if let Some(tag) = tag_str.as_mut() {
                         tag.push(c);
                     } else {
@@ -737,8 +743,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// # Errors
     ///
-    /// This function will return an error variant when the text is empty, the length of the text
-    /// is even numbers, or the text contains invalid boundary characters.
+    /// This function will return an error variant when the text is empty, does not end with a
+    /// character or a tag, contains invalid boundary characters, or contains NULL.
     ///
     /// # Examples
     ///
@@ -763,7 +769,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火/名詞/ヒ-星|猫|だ/助動詞/ダ"
     /// ).unwrap();
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星 猫 だ/助動詞/ダ", buf);
+    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星// 猫// だ/助動詞/ダ", buf);
     /// ```
     pub fn from_partial_annotation(partial_annotation_text: &str) -> Result<Self> {
         let mut text = String::new();
@@ -812,8 +818,8 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///
     /// # Errors
     ///
-    /// This function will return an error variant when the text is empty, the length of the text
-    /// is even numbers, or the text contains invalid boundary characters.
+    /// This function will return an error variant when the text is empty, does not end with a
+    /// character or a tag, contains invalid boundary characters, or contains NULL.
     ///
     /// # Examples
     ///
@@ -839,7 +845,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
     ///     "ま-ぁ/名詞/マー|社-長/名詞/シャチョー|は/助詞/ワ|火/名詞/ヒ-星|猫|だ/助動詞/ダ"
     /// ).unwrap();
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星 猫 だ/助動詞/ダ", buf);
+    /// assert_eq!("まぁ/名詞/マー 社長/名詞/シャチョー は/助詞/ワ 火星// 猫// だ/助動詞/ダ", buf);
     /// ```
     pub fn update_partial_annotation(&mut self, partial_annotation_text: &str) -> Result<()> {
         if let Err(e) = Self::parse_partial_annotation(
@@ -961,8 +967,7 @@ impl<'a, 'b> Sentence<'a, 'b> {
                     }
                     buf.push(b);
                 }
-                let ts = token.tags();
-                for tag in &ts[..ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)] {
+                for tag in token.tags() {
                     buf.push(b'/');
                     if let Some(tag) = tag {
                         for &b in tag.as_bytes() {
@@ -980,7 +985,19 @@ impl<'a, 'b> Sentence<'a, 'b> {
         }
     }
 
+    fn push_escaped_tag(buf: &mut String, tag: &str) {
+        for c in tag.chars() {
+            if matches!(c, ' ' | '-' | '/' | '\\' | '|') {
+                buf.push('\\');
+            }
+            buf.push(c);
+        }
+    }
+
     /// Writes a text with partial annotations.
+    ///
+    /// Backslashes (`'\\'`), slashes (`'/'`), dashes (`'-'`), pipe symbols (`'|'`), and whitespaces
+    /// (`' '`) in tags are escaped with backslashes.
     ///
     /// # Examples
     ///
@@ -1001,39 +1018,33 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// ```
     pub fn write_partial_annotation_text(&self, buf: &mut String) {
         buf.clear();
-        let mut char_iter = self.text.chars();
-        buf.push(char_iter.next().unwrap());
-        if self.n_tags != 0 {
-            let mut tag_iter = self.tags.chunks_exact(self.n_tags);
-            let ts = tag_iter.next().unwrap();
-            for tag in &ts[..ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)] {
+        for (i, c) in self.text.chars().enumerate() {
+            if i != 0 {
+                buf.push(match self.boundaries[i - 1] {
+                    CharacterBoundary::NotWordBoundary => '-',
+                    CharacterBoundary::WordBoundary => '|',
+                    CharacterBoundary::Unknown => ' ',
+                });
+            }
+            buf.push(c);
+            if self.n_tags == 0 {
+                continue;
+            }
+            let ts = &self.tags[i * self.n_tags..(i + 1) * self.n_tags];
+            let n_written_tags = if self
+                .boundaries
+                .get(i)
+                .is_none_or(|&b| b == CharacterBoundary::WordBoundary)
+            {
+                ts.len()
+            } else {
+                ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)
+            };
+            for tag in &ts[..n_written_tags] {
                 buf.push('/');
                 if let Some(tag) = tag {
-                    buf.push_str(tag);
+                    Self::push_escaped_tag(buf, tag);
                 }
-            }
-            for ((c, ts), &b) in char_iter.zip(tag_iter).zip(&self.boundaries) {
-                buf.push(match b {
-                    CharacterBoundary::NotWordBoundary => '-',
-                    CharacterBoundary::WordBoundary => '|',
-                    CharacterBoundary::Unknown => ' ',
-                });
-                buf.push(c);
-                for tag in &ts[..ts.iter().rposition(|x| x.is_some()).map_or(0, |x| x + 1)] {
-                    buf.push('/');
-                    if let Some(tag) = tag {
-                        buf.push_str(tag);
-                    }
-                }
-            }
-        } else {
-            for (c, &b) in char_iter.zip(&self.boundaries) {
-                buf.push(match b {
-                    CharacterBoundary::NotWordBoundary => '-',
-                    CharacterBoundary::WordBoundary => '|',
-                    CharacterBoundary::Unknown => ' ',
-                });
-                buf.push(c);
             }
         }
     }
@@ -1050,13 +1061,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// assert_eq!(2, s.n_tags());
     /// assert_eq!(16, s.tags().len());
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た", buf);
+    /// assert_eq!("火星/名詞/カセー に// 行き/動詞/ まし/助動詞/マシ た//", buf);
     ///
     /// s.reset_tags(1);
     /// assert_eq!(1, s.n_tags());
     /// assert_eq!(8, s.tags().len());
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("火星 に 行き まし た", buf);
+    /// assert_eq!("火星/ に/ 行き/ まし/ た/", buf);
     /// ```
     #[inline]
     pub fn reset_tags(&mut self, n_tags: usize) {
@@ -1182,13 +1193,13 @@ impl<'a, 'b> Sentence<'a, 'b> {
     /// let mut s = Sentence::from_tokenized("火星/名詞/カセー に 行き/動詞 まし/助動詞/マシ た").unwrap();
     /// s.tags_mut()[4].replace("助詞".into());
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("火星/名詞/カセー に/助詞 行き/動詞 まし/助動詞/マシ た", buf);
+    /// assert_eq!("火星/名詞/カセー に/助詞/ 行き/動詞/ まし/助動詞/マシ た//", buf);
     ///
     /// // Sets a pronunciation of the first character (`火`), but this character is not the last
     /// // of a word.
     /// s.tags_mut()[1].replace("ヒ".into());
     /// s.write_tokenized_text(&mut buf);
-    /// assert_eq!("火星/名詞/カセー に/助詞 行き/動詞 まし/助動詞/マシ た", buf);
+    /// assert_eq!("火星/名詞/カセー に/助詞/ 行き/動詞/ まし/助動詞/マシ た//", buf);
     /// ```
     #[inline]
     pub fn tags_mut(&mut self) -> &mut [Option<Cow<'b, str>>] {
@@ -1372,7 +1383,7 @@ impl<'a, 'b> Iterator for TokenIterator<'a, 'b> {
         for (i, &b) in boundaries.iter().enumerate() {
             if b == CharacterBoundary::WordBoundary {
                 if skip_token {
-                    self.token.start += i + 1;
+                    self.token.start = self.token.end + i + 1;
                     skip_token = false;
                 } else {
                     self.token.end += i + 1;
@@ -2794,9 +2805,26 @@ mod tests {
         s.write_tokenized_text(&mut buf);
 
         assert_eq!(
-            "Rust/名詞 で 良い/形容詞 プログラミング 体験 を ！/補助記号",
+            "Rust/名詞 で/ 良い/形容詞 プログラミング/ 体験/ を/ ！/補助記号",
             buf,
         );
+    }
+
+    #[test]
+    fn test_sentence_tokenized_string_roundtrip_empty_tags() {
+        for text in ["a/x/ b", "a/ b", "a/x/y b/z"] {
+            let s = Sentence::from_tokenized(text).unwrap();
+            let mut buf = String::new();
+            s.write_tokenized_text(&mut buf);
+            let s2 = Sentence::from_tokenized(&buf).unwrap();
+            assert_eq!(s.n_tags(), s2.n_tags(), "{text} -> {buf}");
+            assert_eq!(s.tags(), s2.tags(), "{text} -> {buf}");
+
+            s.write_partial_annotation_text(&mut buf);
+            let s2 = Sentence::from_partial_annotation(&buf).unwrap();
+            assert_eq!(s.n_tags(), s2.n_tags(), "{text} -> {buf}");
+            assert_eq!(s.tags(), s2.tags(), "{text} -> {buf}");
+        }
     }
 
     #[test]
@@ -2809,6 +2837,27 @@ mod tests {
     }
 
     #[test]
+    fn test_sentence_to_partial_annotation_string_escape() {
+        let s = Sentence::from_tokenized("火星/名詞-普通名詞-一般 猫/a|b\\ c\\/d\\\\e").unwrap();
+        let mut buf = String::new();
+        s.write_partial_annotation_text(&mut buf);
+
+        assert_eq!("火-星/名詞\\-普通名詞\\-一般|猫/a\\|b\\ c\\/d\\\\e", buf);
+    }
+
+    #[test]
+    fn test_sentence_partial_annotation_string_roundtrip() {
+        let text = "火星/名詞-普通名詞-一般 猫/a|b\\ c\\/d\\\\e の/助詞";
+        let s = Sentence::from_tokenized(text).unwrap();
+        let mut buf = String::new();
+        s.write_partial_annotation_text(&mut buf);
+        let s = Sentence::from_partial_annotation(&buf).unwrap();
+        s.write_tokenized_text(&mut buf);
+
+        assert_eq!(text, buf);
+    }
+
+    #[test]
     fn test_sentence_to_tokenized_vec_unknown() {
         let s = Sentence::from_partial_annotation("火-星 猫|の|生-態").unwrap();
         let mut it = s.iter_tokens();
@@ -2818,6 +2867,20 @@ mod tests {
 
         let token = it.next().unwrap();
         assert_eq!("生態", token.surface());
+
+        assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn test_sentence_to_tokenized_vec_consecutive_unknown() {
+        let s = Sentence::from_partial_annotation("ホ ー ム|ペ ー ジ|を|見 る|こ-と").unwrap();
+        let mut it = s.iter_tokens();
+
+        let token = it.next().unwrap();
+        assert_eq!("を", token.surface());
+
+        let token = it.next().unwrap();
+        assert_eq!("こと", token.surface());
 
         assert!(it.next().is_none());
     }
@@ -2920,6 +2983,26 @@ mod tests {
     #[test]
     fn test_sentence_from_partial_annotation_null() {
         let s = Sentence::from_partial_annotation("A-1-あ-\0-ア-亜");
+
+        assert_eq!(
+            "InvalidArgumentError: partial_annotation_text: must not contain NULL",
+            &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_from_tokenized_null_in_tag() {
+        let s = Sentence::from_tokenized("A1/名\0詞 あ");
+
+        assert_eq!(
+            "InvalidArgumentError: tokenized_text: must not contain NULL",
+            &s.err().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn test_sentence_from_partial_annotation_null_in_tag() {
+        let s = Sentence::from_partial_annotation("A-1/名\0詞|あ");
 
         assert_eq!(
             "InvalidArgumentError: partial_annotation_text: must not contain NULL",
