@@ -68,6 +68,19 @@ pub struct ModelData {
     pub(crate) tag_models: Vec<TagModel>,
 }
 
+impl ModelData {
+    fn validate(&self) -> Result<()> {
+        for record in self.dict_model.dictionary() {
+            if record.weights.len() != record.word.chars().count() + 1 {
+                return Err(VaporettoError::invalid_model(
+                    "weights of a dictionary word do not match the length of the word",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Model {
     #[cfg(any(feature = "train", feature = "kytea", test))]
     pub(crate) const fn new(
@@ -118,12 +131,14 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// When postcard generates an error, it will be returned as is.
+    /// * If postcard generates an error, it will be returned as is.
+    /// * If the model is invalid, an error variant will be returned.
     pub fn read_slice(slice: &[u8]) -> Result<(Self, &[u8])> {
         let Some(slice) = slice.strip_prefix(MODEL_MAGIC) else {
             return Err(VaporettoError::invalid_model("model version mismatch"));
         };
-        let (data, rest) = postcard::take_from_bytes(slice)?;
+        let (data, rest): (ModelData, _) = postcard::take_from_bytes(slice)?;
+        data.validate()?;
         Ok((Self(data), rest))
     }
 
@@ -131,7 +146,8 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// When postcard generates an error, it will be returned as is.
+    /// * If postcard generates an error, it will be returned as is.
+    /// * If the model is invalid, an error variant will be returned.
     #[cfg(feature = "std")]
     pub fn read<R>(mut rdr: R) -> Result<Self>
     where
@@ -146,7 +162,9 @@ impl Model {
         // is loaded into memory first.
         let mut data = vec![];
         rdr.read_to_end(&mut data)?;
-        Ok(Self(postcard::from_bytes(&data)?))
+        let data: ModelData = postcard::from_bytes(&data)?;
+        data.validate()?;
+        Ok(Self(data))
     }
 
     /// Returns the slice of dictionary words.
@@ -190,6 +208,41 @@ mod tests {
         ));
         assert!(matches!(
             Model::read_slice(b"Vaporetto"),
+            Err(VaporettoError::InvalidModel(_)),
+        ));
+    }
+
+    fn create_model_with_invalid_dictionary() -> Model {
+        Model::new(
+            NgramModel(vec![]),
+            NgramModel(vec![]),
+            DictModel(vec![WordWeightRecord {
+                word: "火星".into(),
+                weights: vec![1],
+                comment: "".into(),
+            }]),
+            0,
+            3,
+            3,
+            vec![],
+        )
+    }
+
+    #[test]
+    fn test_read_slice_invalid_dictionary() {
+        let data = create_model_with_invalid_dictionary().to_vec().unwrap();
+        assert!(matches!(
+            Model::read_slice(&data),
+            Err(VaporettoError::InvalidModel(_)),
+        ));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_invalid_dictionary() {
+        let data = create_model_with_invalid_dictionary().to_vec().unwrap();
+        assert!(matches!(
+            Model::read(data.as_slice()),
             Err(VaporettoError::InvalidModel(_)),
         ));
     }

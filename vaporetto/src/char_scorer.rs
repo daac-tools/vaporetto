@@ -95,7 +95,18 @@ impl CharScorer {
         window_size: u8,
         #[cfg(feature = "tag-prediction")] tag_ngram_model: Vec<TagNgramModel<String>>,
     ) -> Result<Option<Self>> {
-        if ngram_model.0.is_empty() && dict_model.0.is_empty() || window_size == 0 {
+        let ngram_model = if window_size == 0 {
+            NgramModel(vec![])
+        } else {
+            ngram_model
+        };
+
+        #[cfg(feature = "tag-prediction")]
+        let no_tag_ngram = tag_ngram_model.iter().all(|model| model.0.is_empty());
+        #[cfg(not(feature = "tag-prediction"))]
+        let no_tag_ngram = true;
+
+        if ngram_model.0.is_empty() && dict_model.0.is_empty() && no_tag_ngram {
             return Ok(None);
         }
 
