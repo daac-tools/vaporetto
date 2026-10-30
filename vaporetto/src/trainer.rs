@@ -322,6 +322,9 @@ impl<'a> Trainer<'a> {
         let mut examples = vec![];
         self.gen_features(sentence, &mut examples);
         for (features, b) in examples {
+            if b == CharacterBoundary::Unknown {
+                continue;
+            }
             let mut feature_vector = HashMap::new();
             for feature in features {
                 let new_id = self.feature_ids.len() + 1;
@@ -864,5 +867,14 @@ mod tests {
             examples[6].0,
         );
         assert_eq!(NotWordBoundary, examples[6].1);
+    }
+
+    #[test]
+    fn check_add_example_partial() {
+        let s = Sentence::from_partial_annotation("ホ ー ム ペ ー ジ|を|見-る").unwrap();
+        let mut trainer = Trainer::new(3, 3, 3, 3, vec![], 4, &[]).unwrap();
+        trainer.add_example(&s);
+        assert_eq!(3, trainer.xs.len());
+        assert_eq!(vec![1.0, 1.0, 0.0], trainer.ys);
     }
 }
