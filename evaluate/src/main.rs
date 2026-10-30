@@ -96,9 +96,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let mut s = Sentence::from_tokenized(&line)?;
         let ref_boundaries = s.boundaries().to_vec();
+        let n_tags = if args.predict_tags { s.n_tags() } else { 0 };
         let mut ref_tags = vec![];
         for i in 0..=ref_boundaries.len() {
-            ref_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
+            ref_tags.push(s.tags()[i * s.n_tags()..i * s.n_tags() + n_tags].to_vec());
         }
         if !args.no_norm {
             let new_line = fullwidth_filter.filter(s.as_raw_text());
@@ -112,7 +113,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let sys_boundaries = s.boundaries().to_vec();
         let mut sys_tags = vec![];
         for i in 0..=sys_boundaries.len() {
-            sys_tags.push(s.tags()[i * s.n_tags()..(i + 1) * s.n_tags()].to_vec());
+            let mut tags =
+                s.tags()[i * s.n_tags()..i * s.n_tags() + n_tags.min(s.n_tags())].to_vec();
+            tags.resize(n_tags, None);
+            sys_tags.push(tags);
         }
         results.push((ref_boundaries, ref_tags, sys_boundaries, sys_tags));
     }

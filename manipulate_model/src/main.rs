@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, File};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -59,16 +59,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(path) = args.replace_dict {
         eprintln!("Loading dictionary file...");
-        let file = fs::File::open(path)?;
-        let mut rdr = csv::Reader::from_reader(file);
+        let mut rdr = csv::Reader::from_reader(File::open(&path)?);
+        let headers = rdr.headers()?.clone();
         let mut dict = vec![];
-        for result in rdr.deserialize() {
-            let record: WordWeightRecordFlatten = result?;
+        for result in rdr.records() {
+            let record = result?;
+            let line = record.position().map_or(0, |pos| pos.line());
+            let record: WordWeightRecordFlatten = record
+                .deserialize(Some(&headers))
+                .map_err(|e| format!("{}:{line}: {e}", path.display()))?;
             let mut weights = vec![];
-            for w in record.weights.split(' ') {
-                weights.push(w.parse()?);
+            for w in record.weights.split_whitespace() {
+                weights.push(w.parse().map_err(|e| {
+                    format!("{}:{line}: invalid weight `{w}`: {e}", path.display())
+                })?);
             }
-            dict.push(WordWeightRecord::new(record.word, weights, record.comment)?);
+            dict.push(
+                WordWeightRecord::new(record.word, weights, record.comment)
+                    .map_err(|e| format!("{}:{line}: {e}", path.display()))?,
+            );
         }
         model.replace_dictionary(dict);
     }
