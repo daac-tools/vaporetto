@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
@@ -28,12 +28,9 @@ fn run(name: &str, args: &[&str], input: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    if let Err(e) = child.stdin.take().unwrap().write_all(input.as_bytes()) {
+        assert_eq!(io::ErrorKind::BrokenPipe, e.kind(), "{e}");
+    }
     let output = child.wait_with_output().unwrap();
     fs::remove_file(model).unwrap();
     output
