@@ -220,6 +220,12 @@ impl<'a> Trainer<'a> {
         dict_word_max_len: u8,
         tag_dictionary: &'a [Sentence<'a, '_>],
     ) -> Result<Self> {
+        if dict_word_max_len == 0 && !dict_words.is_empty() {
+            return Err(VaporettoError::invalid_argument(
+                "dict_word_max_len",
+                "must be greater than 0 if dict_words is not empty",
+            ));
+        }
         let dict_pma = if dict_words.is_empty() {
             None
         } else {
@@ -351,7 +357,8 @@ impl<'a> Trainer<'a> {
     ///
     /// # Errors
     ///
-    /// If the solver returns an error, that will be propagated.
+    /// * If the solver returns an error, that will be propagated.
+    /// * If the dataset contains no word boundaries, an error variant will be returned.
     pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Model> {
         let mut builder = liblinear::Builder::new();
         let training_input = liblinear::util::TrainingInput::from_sparse_features(self.ys, self.xs)
@@ -371,7 +378,12 @@ impl<'a> Trainer<'a> {
                 .labels()
                 .iter()
                 .position(|&cls| CharacterBoundary::WordBoundary as i32 == cls)
-                .unwrap(),
+                .ok_or_else(|| {
+                    VaporettoError::invalid_argument(
+                        "dataset",
+                        "must contain at least one word boundary",
+                    )
+                })?,
         )?;
 
         let bias = model.label_bias(wb_idx);
@@ -427,13 +439,13 @@ impl<'a> Trainer<'a> {
                 }) => {
                     let len = ngram.len();
                     let pos = usize::try_from(
-                        isize::from(self.char_window_size) - isize::try_from(len)? - rel_position,
+                        isize::from(self.type_window_size) - isize::try_from(len)? - rel_position,
                     )
                     .unwrap();
                     if let Some(weights) = type_ngram_weights.get_mut(ngram) {
                         weights[pos] = weight;
                     } else {
-                        let mut weights = vec![0; usize::from(self.char_window_size) * 2 - len + 1];
+                        let mut weights = vec![0; usize::from(self.type_window_size) * 2 - len + 1];
                         weights[pos] = weight;
                         type_ngram_weights.insert(ngram.to_vec(), weights);
                     }
@@ -500,6 +512,138 @@ mod tests {
     use super::*;
     use crate::sentence::CharacterBoundary::*;
     use crate::sentence::CharacterType::*;
+
+    fn train_model(
+        texts: &[&str],
+        char_window_size: u8,
+        char_ngram_size: u8,
+        type_window_size: u8,
+        type_ngram_size: u8,
+        solver: SolverType,
+    ) -> Result<Model> {
+        let sentences: Vec<_> = texts
+            .iter()
+            .map(|text| Sentence::from_tokenized(text).unwrap())
+            .collect();
+        let mut trainer = Trainer::new(
+            char_window_size,
+            char_ngram_size,
+            type_window_size,
+            type_ngram_size,
+            vec![],
+            4,
+            &[],
+        )?;
+        for _ in 0..10 {
+            for s in &sentences {
+                trainer.add_example(s);
+            }
+        }
+        trainer.train(0.01, 1.0, solver)
+    }
+
+    #[test]
+    fn check_train_type_window_size() {
+        // Only character type n-grams are used.
+        let texts = [
+            "漢字 ひらがな",
+            "カタカナ 漢字",
+            "ひらがな カタカナ",
+            "漢字 カタカナ",
+        ];
+        for (char_window_size, type_window_size) in [(1, 1), (3, 1), (1, 3), (2, 3)] {
+            let model = train_model(
+                &texts,
+                char_window_size,
+                0,
+                type_window_size,
+                2,
+                SolverType::L2RegularizedLogistic,
+            )
+            .unwrap();
+            for data in &model.0.type_ngram_model.0 {
+                assert_eq!(
+                    usize::from(type_window_size) * 2 - data.ngram.len() + 1,
+                    data.weights.len(),
+                );
+            }
+            let predictor = crate::Predictor::new(model, false).unwrap();
+            let mut s = Sentence::from_raw("東京とうきょう").unwrap();
+            predictor.predict(&mut s);
+            let mut buf = String::new();
+            s.write_tokenized_text(&mut buf);
+            assert_eq!(
+                "東京 とうきょう", buf,
+                "char_window_size={char_window_size}, type_window_size={type_window_size}",
+            );
+        }
+    }
+
+    #[test]
+    fn check_train_no_word_boundary() {
+        let result = train_model(
+            &["あいう", "かきく"],
+            3,
+            3,
+            3,
+            3,
+            SolverType::L1RegularizedL2LossSVC,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn check_new_dict_word_max_len_zero() {
+        assert!(Trainer::new(3, 3, 3, 3, vec!["これ".into()], 0, &[]).is_err());
+        assert!(Trainer::new(3, 3, 3, 3, vec![], 0, &[]).is_ok());
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn check_train_tag_rel_position() {
+        // "猫" has two tags depending on the context.
+        let texts = [
+            "あの/連体詞 火星/名詞 猫/名詞 だ/助動詞 よ/助詞 ね/助詞",
+            "その/連体詞 地球/名詞 猫/接尾辞 です/助動詞 よ/助詞 ね/助詞",
+            "あの/連体詞 火星/名詞 に/助詞 猫/名詞 が/助詞 いる/動詞",
+            "その/連体詞 地球/名詞 で/助詞 猫/接尾辞 を/助詞 見る/動詞",
+        ];
+        for (char_window_size, char_ngram_size, type_window_size, type_ngram_size) in
+            [(2, 3, 2, 2), (1, 3, 1, 1), (3, 3, 0, 3)]
+        {
+            let model = train_model(
+                &texts,
+                char_window_size,
+                char_ngram_size,
+                type_window_size,
+                type_ngram_size,
+                SolverType::L2RegularizedLogistic,
+            )
+            .unwrap();
+            for tag_model in &model.0.tag_models {
+                for data in &tag_model.char_ngram_model.0 {
+                    for w in &data.weights {
+                        assert!(w.rel_position <= char_window_size);
+                    }
+                }
+                for data in &tag_model.type_ngram_model.0 {
+                    for w in &data.weights {
+                        assert!(w.rel_position <= type_window_size);
+                    }
+                }
+            }
+            assert!(
+                crate::Predictor::new(model, true).is_ok(),
+                "window_sizes={:?}",
+                (
+                    char_window_size,
+                    char_ngram_size,
+                    type_window_size,
+                    type_ngram_size,
+                ),
+            );
+        }
+    }
 
     #[test]
     fn check_features_3322() {
