@@ -81,14 +81,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for path in args.tok {
         eprintln!("Loading {path:?} ...");
-        let f = File::open(path)?;
-        let f = BufReader::new(f);
+        let f = BufReader::new(File::open(&path)?);
         for (i, line) in f.lines().enumerate() {
             if i % 10000 == 0 {
                 eprint!("# of sentences: {i}\r");
                 stderr().flush()?;
             }
-            let s = Sentence::from_tokenized(&line?)?;
+            let line = line?;
+            if line.is_empty() {
+                continue;
+            }
+            let s = Sentence::from_tokenized(&line)
+                .map_err(|e| format!("{}:{}: {e}", path.display(), i + 1))?;
             let s = if args.no_norm {
                 s
             } else {
@@ -105,14 +109,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     for path in args.part {
         eprintln!("Loading {path:?} ...");
-        let f = File::open(path)?;
-        let f = BufReader::new(f);
+        let f = BufReader::new(File::open(&path)?);
         for (i, line) in f.lines().enumerate() {
             if i % 10000 == 0 {
                 eprint!("# of sentences: {i}\r");
                 stderr().flush()?;
             }
-            let s = Sentence::from_partial_annotation(&line?)?;
+            let line = line?;
+            if line.is_empty() {
+                continue;
+            }
+            let s = Sentence::from_partial_annotation(&line)
+                .map_err(|e| format!("{}:{}: {e}", path.display(), i + 1))?;
             let s = if args.no_norm {
                 s
             } else {
@@ -132,14 +140,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut dictionary = BTreeSet::new();
     for path in args.dict {
         eprintln!("Loading {path:?} ...");
-        let f = File::open(path)?;
-        let f = BufReader::new(f);
-        for line in f.lines() {
+        let f = BufReader::new(File::open(&path)?);
+        for (i, line) in f.lines().enumerate() {
             if dictionary.len() % 10000 == 0 {
                 eprint!("# of words: {}\r", dictionary.len());
                 stderr().flush()?;
             }
-            let s = Sentence::from_tokenized(&line?)?;
+            let line = line?;
+            if line.is_empty() {
+                continue;
+            }
+            let s = Sentence::from_tokenized(&line)
+                .map_err(|e| format!("{}:{}: {e}", path.display(), i + 1))?;
             let s = if args.no_norm {
                 s
             } else {

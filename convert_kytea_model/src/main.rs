@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     eprintln!("Loading model file...");
-    let mut f = BufReader::new(fs::File::open(args.model_in).unwrap());
+    let mut f = BufReader::new(fs::File::open(args.model_in)?);
     let model = KyteaModel::read(&mut f)?;
 
     eprintln!("Saving model file...");

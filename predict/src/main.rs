@@ -54,8 +54,8 @@ struct Args {
     #[arg(long)]
     scores: bool,
 
-    /// Prints tag scores.
-    #[arg(long)]
+    /// Prints tag scores. This option requires --predict-tags.
+    #[arg(long, requires = "predict_tags")]
     tag_scores: bool,
 
     /// Do not normalize input strings before prediction.
@@ -63,8 +63,15 @@ struct Args {
     no_norm: bool,
 }
 
-fn print_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::error::Error>> {
-    let mut chars_iter = s.as_raw_text().chars();
+/// Prints boundary scores of `s` with the characters of `orig`.
+///
+/// `orig` must have the same number of characters as `s`.
+fn print_scores(
+    orig: &Sentence,
+    s: &Sentence,
+    mut out: impl Write,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut chars_iter = orig.as_raw_text().chars();
     let mut prev_c = chars_iter.next().unwrap();
     for (i, (c, score)) in chars_iter.zip(s.boundary_scores()).enumerate() {
         writeln!(out, "{i}:{prev_c}{c} {score}")?;
@@ -74,9 +81,16 @@ fn print_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn print_tag_scores(s: &Sentence, mut out: impl Write) -> Result<(), Box<dyn std::error::Error>> {
-    for token in s.iter_tokens() {
-        out.write_all(token.surface().as_bytes())?;
+/// Prints tag scores of `s` with the tokens of `orig`.
+///
+/// `orig` must have the same boundaries as `s`.
+fn print_tag_scores(
+    orig: &Sentence,
+    s: &Sentence,
+    mut out: impl Write,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (orig_token, token) in orig.iter_tokens().zip(s.iter_tokens()) {
+        out.write_all(orig_token.surface().as_bytes())?;
         for cands in token.tag_candidates() {
             out.write_all(b"\t")?;
             for (i, (tag, score)) in cands.iter().enumerate() {
@@ -134,13 +148,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 s.write_tokenized_text(&mut buf);
                 out.write_all(buf.as_bytes())?;
+                out.write_all(b"\n")?;
                 if args.scores {
-                    print_scores(&s, &mut out)?;
+                    print_scores(&s, &s, &mut out)?;
                 }
-            }
-            out.write_all(b"\n")?;
-            if args.tag_scores {
-                print_tag_scores(&s, &mut out)?;
+                if args.tag_scores {
+                    print_tag_scores(&s, &s, &mut out)?;
+                }
+            } else {
+                out.write_all(b"\n")?;
+                if args.tag_scores {
+                    out.write_all(b"\n")?;
+                }
             }
             if is_tty {
                 out.flush()?;
@@ -166,13 +185,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 out.write_all(buf.as_bytes())?;
                 out.write_all(b"\n")?;
                 if args.scores {
-                    print_scores(&s, &mut out)?;
+                    print_scores(&s_orig, &s, &mut out)?;
+                }
+                if args.tag_scores {
+                    print_tag_scores(&s_orig, &s, &mut out)?;
                 }
             } else {
                 out.write_all(b"\n")?;
-            }
-            if args.tag_scores {
-                print_tag_scores(&s, &mut out)?;
+                if args.tag_scores {
+                    out.write_all(b"\n")?;
+                }
             }
             if is_tty {
                 out.flush()?;
