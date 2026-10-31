@@ -27,8 +27,8 @@ let schema = schema_builder.build();
 let index = Index::create_in_ram(schema);
 
 // Loads a model with decompression.
-let mut f = BufReader::new(File::open("bccwj-suw+unidic.model.zst").unwrap());
-let mut decoder = ruzstd::StreamingDecoder::new(&mut f).unwrap();
+let mut f = BufReader::new(File::open("bccwj-suw+unidic_pos+pron.model.zst").unwrap());
+let mut decoder = ruzstd::decoding::StreamingDecoder::new(&mut f).unwrap();
 let mut buff = vec![];
 decoder.read_to_end(&mut buff).unwrap();
 let model = Model::read(&mut buff.as_slice()).unwrap();

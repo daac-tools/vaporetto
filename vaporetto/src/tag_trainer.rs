@@ -42,9 +42,9 @@ struct TagExample<'a> {
 }
 
 pub struct TagTrainer<'a> {
-    _char_window_size: u8,
+    char_window_size: u8,
     char_ngram_size: u8,
-    _type_window_size: u8,
+    type_window_size: u8,
     type_ngram_size: u8,
     default_tags: HashMap<&'a str, &'a [Option<Cow<'a, str>>]>,
     // Uses BTreeMap to improve compression ratio.
@@ -60,9 +60,9 @@ impl<'a> TagTrainer<'a> {
         default_tags: HashMap<&'a str, &'a [Option<Cow<'a, str>>]>,
     ) -> Self {
         Self {
-            _char_window_size: char_window_size,
+            char_window_size,
             char_ngram_size,
-            _type_window_size: type_window_size,
+            type_window_size,
             type_ngram_size,
             default_tags,
             examples: BTreeMap::new(),
@@ -79,7 +79,12 @@ impl<'a> TagTrainer<'a> {
             for n in 0..usize::from(self.char_ngram_size) {
                 let ngram_len = token_len + n + 1;
                 for i in token.end().saturating_sub(ngram_len)
-                    ..(token.start() + 1).min(sentence.len().saturating_sub(ngram_len - 1))
+                    ..(token.start() + 1)
+                        .min(sentence.len().saturating_sub(ngram_len - 1))
+                        .min(
+                            (token.end() + usize::from(self.char_window_size) + 1)
+                                .saturating_sub(ngram_len),
+                        )
                 {
                     features.push(TagFeature::char_ngram(
                         sentence.text_substring(i, i + ngram_len),
@@ -90,7 +95,12 @@ impl<'a> TagTrainer<'a> {
             for n in 0..usize::from(self.type_ngram_size) {
                 let ngram_len = token_len + n + 1;
                 for i in token.end().saturating_sub(ngram_len)
-                    ..(token.start() + 1).min(sentence.len().saturating_sub(ngram_len - 1))
+                    ..(token.start() + 1)
+                        .min(sentence.len().saturating_sub(ngram_len - 1))
+                        .min(
+                            (token.end() + usize::from(self.type_window_size) + 1)
+                                .saturating_sub(ngram_len),
+                        )
                 {
                     features.push(TagFeature::type_ngram(
                         &sentence.char_types()[i..i + ngram_len],

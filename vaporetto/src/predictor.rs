@@ -337,8 +337,14 @@ impl BoundaryWeights {
         }
 
         let id = Self::check_index(self.variable.len())? | VARIABLE_WEIGHT_FLAG;
-        self.variable
-            .push(PositionalWeight { offset, weight }.into());
+        // The fixed-length vector can only be used if the range of the weight is within the
+        // padding of the score array, which has `WEIGHT_FIXED_LEN - 1` elements on each side.
+        let weight = if (1 - i16::try_from(WEIGHT_FIXED_LEN)?..0).contains(&offset) {
+            WeightVector::from(weight)
+        } else {
+            WeightVector::Variable(weight)
+        };
+        self.variable.push(PositionalWeight { offset, weight });
         Ok(PatternValue {
             #[cfg(feature = "fix-weight-length")]
             weight: [0; WEIGHT_FIXED_LEN],
@@ -1081,6 +1087,121 @@ mod tests {
             ],
             sentence.boundaries(),
         );
+    }
+
+    #[test]
+    fn test_predict_short_weight_with_long_window() {
+        // Weights shorter than the standard length are placed far from the end of the n-gram.
+        let model = Model::new(
+            NgramModel(vec![
+                NgramData {
+                    ngram: "a".into(),
+                    weights: vec![5],
+                },
+                NgramData {
+                    ngram: "b".into(),
+                    weights: vec![7, 11],
+                },
+            ]),
+            NgramModel(vec![]),
+            DictModel(vec![]),
+            0,
+            10,
+            3,
+            vec![],
+        );
+        let predictor = Predictor::new(model, false).unwrap();
+        let mut sentence = Sentence::from_raw("abc").unwrap();
+        predictor.predict(&mut sentence);
+        assert_eq!(&[0, 0], sentence.boundary_scores());
+
+        let mut sentence = Sentence::from_raw("cccccccccccccb").unwrap();
+        predictor.predict(&mut sentence);
+        assert_eq!(
+            &[0, 0, 0, 7, 11, 0, 0, 0, 0, 0, 0, 0, 0],
+            sentence.boundary_scores()
+        );
+    }
+
+    #[test]
+    fn test_predict_dictionary_with_window_size_0() {
+        let model = Model::new(
+            NgramModel(vec![]),
+            NgramModel(vec![]),
+            DictModel(vec![WordWeightRecord {
+                word: "火星".into(),
+                weights: vec![100, -100, 100],
+                comment: "".into(),
+            }]),
+            -1,
+            0,
+            3,
+            vec![],
+        );
+        let predictor = Predictor::new(model, false).unwrap();
+        let mut sentence = Sentence::from_raw("の火星だ").unwrap();
+        predictor.predict(&mut sentence);
+        assert_eq!(&[99, -101, 99], sentence.boundary_scores());
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    fn create_tag_only_model(char_ngram: bool, type_ngram: bool) -> Model {
+        let char_ngram_model = if char_ngram {
+            TagNgramModel(vec![TagNgramData {
+                ngram: "人".into(),
+                weights: vec![TagWeight {
+                    rel_position: 0,
+                    weights: vec![0, 20],
+                }],
+            }])
+        } else {
+            TagNgramModel(vec![])
+        };
+        let type_ngram_model = if type_ngram {
+            TagNgramModel(vec![TagNgramData {
+                ngram: vec![Kanji as u8],
+                weights: vec![TagWeight {
+                    rel_position: 0,
+                    weights: vec![0, 20],
+                }],
+            }])
+        } else {
+            TagNgramModel(vec![])
+        };
+        Model::new(
+            NgramModel(vec![]),
+            NgramModel(vec![]),
+            DictModel(vec![]),
+            1,
+            3,
+            3,
+            vec![TagModel {
+                token: "人".into(),
+                tags: vec![vec!["名詞".into(), "接尾辞".into()]],
+                char_ngram_model,
+                type_ngram_model,
+                bias: vec![10, 0],
+            }],
+        )
+    }
+
+    #[cfg(feature = "tag-prediction")]
+    #[test]
+    fn test_predict_tags_without_boundary_ngrams() {
+        // The bias selects 名詞, but the tag n-gram weights select 接尾辞.
+        for (char_ngram, type_ngram) in [(true, false), (false, true)] {
+            let model = create_tag_only_model(char_ngram, type_ngram);
+            let predictor = Predictor::new(model, true).unwrap();
+            let mut sentence = Sentence::from_raw("人").unwrap();
+            predictor.predict(&mut sentence);
+            sentence.fill_tags();
+            let mut buf = String::new();
+            sentence.write_tokenized_text(&mut buf);
+            assert_eq!(
+                "人/接尾辞", buf,
+                "char_ngram={char_ngram}, type_ngram={type_ngram}"
+            );
+        }
     }
 
     #[cfg(feature = "tag-prediction")]

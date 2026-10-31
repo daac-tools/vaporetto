@@ -69,7 +69,7 @@ pub struct VaporettoTokenizer {
 fn build_post_filters(
     wsconst: &str,
 ) -> Result<Vec<Arc<dyn SentenceFilter>>, Box<dyn std::error::Error>> {
-    let mut postfilters: Vec<Arc<dyn SentenceFilter>> = vec![Arc::new(SplitLinebreaksFilter)];
+    let mut postfilters: Vec<Arc<dyn SentenceFilter>> = vec![];
     for c in wsconst.chars() {
         postfilters.push(match c {
             'D' => Arc::new(KyteaWsConstFilter::new(CharacterType::Digit)),
@@ -82,6 +82,7 @@ fn build_post_filters(
             _ => return Err("Could not parse a wsconst value".into()),
         });
     }
+    postfilters.push(Arc::new(SplitLinebreaksFilter));
     Ok(postfilters)
 }
 
@@ -98,8 +99,9 @@ impl VaporettoTokenizer {
     /// # Errors
     ///
     /// Error is returned when
-    ///   - the model is invalid, or
-    ///   - `wsconst` contains an invalid character type.
+    ///
+    /// * the model is invalid, or
+    /// * `wsconst` contains an invalid character type.
     pub fn new(model: Model, wsconst: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let postfilters = build_post_filters(wsconst)?;
         Ok(Self {
@@ -122,8 +124,9 @@ impl VaporettoTokenizer {
     /// # Errors
     ///
     /// Error is returned when
-    ///   - the data is invalid, or
-    ///   - `wsconst` contains an invalid character type.
+    ///
+    /// * the data is invalid, or
+    /// * `wsconst` contains an invalid character type.
     ///
     /// # Safety
     ///
@@ -211,7 +214,7 @@ impl TokenStream for VaporettoTokenStream<'_> {
                 .text
                 .push_str(&self.text[self.token.offset_from..self.token.offset_to]);
             self.token.position = self.position;
-            self.token.position_length = self.boundary_pos.len();
+            self.token.position_length = 1;
             self.position += 1;
             true
         } else {
@@ -270,28 +273,28 @@ mod tests {
         assert_eq!(token.offset_from, 0);
         assert_eq!(token.offset_to, 6);
         assert_eq!(token.position, 0);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[1];
         assert_eq!(token.text, "特許");
         assert_eq!(token.offset_from, 6);
         assert_eq!(token.offset_to, 12);
         assert_eq!(token.position, 1);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[2];
         assert_eq!(token.text, "許可");
         assert_eq!(token.offset_from, 12);
         assert_eq!(token.offset_to, 18);
         assert_eq!(token.position, 2);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[3];
         assert_eq!(token.text, "局");
         assert_eq!(token.offset_from, 18);
         assert_eq!(token.offset_to, 21);
         assert_eq!(token.position, 3);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
     }
 
     #[test]
@@ -305,63 +308,63 @@ mod tests {
         assert_eq!(token.offset_from, 0);
         assert_eq!(token.offset_to, 1);
         assert_eq!(token.position, 0);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[1];
         assert_eq!(token.text, "2");
         assert_eq!(token.offset_from, 1);
         assert_eq!(token.offset_to, 2);
         assert_eq!(token.position, 1);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[2];
         assert_eq!(token.text, "3");
         assert_eq!(token.offset_from, 2);
         assert_eq!(token.offset_to, 3);
         assert_eq!(token.position, 2);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[3];
         assert_eq!(token.text, "4");
         assert_eq!(token.offset_from, 3);
         assert_eq!(token.offset_to, 4);
         assert_eq!(token.position, 3);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[4];
         assert_eq!(token.text, "5");
         assert_eq!(token.offset_from, 4);
         assert_eq!(token.offset_to, 5);
         assert_eq!(token.position, 4);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[5];
         assert_eq!(token.text, "6");
         assert_eq!(token.offset_from, 5);
         assert_eq!(token.offset_to, 6);
         assert_eq!(token.position, 5);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[6];
         assert_eq!(token.text, "円");
         assert_eq!(token.offset_from, 6);
         assert_eq!(token.offset_to, 9);
         assert_eq!(token.position, 6);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[7];
         assert_eq!(token.text, "🤌");
         assert_eq!(token.offset_from, 9);
         assert_eq!(token.offset_to, 13);
         assert_eq!(token.position, 7);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[8];
         assert_eq!(token.text, "🏿");
         assert_eq!(token.offset_from, 13);
         assert_eq!(token.offset_to, 17);
         assert_eq!(token.position, 8);
-        assert_eq!(token.position_length, 9);
+        assert_eq!(token.position_length, 1);
     }
 
     #[test]
@@ -375,28 +378,28 @@ mod tests {
         assert_eq!(token.offset_from, 0);
         assert_eq!(token.offset_to, 6);
         assert_eq!(token.position, 0);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[1];
         assert_eq!(token.text, "円");
         assert_eq!(token.offset_from, 6);
         assert_eq!(token.offset_to, 9);
         assert_eq!(token.position, 1);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[2];
         assert_eq!(token.text, "🤌");
         assert_eq!(token.offset_from, 9);
         assert_eq!(token.offset_to, 13);
         assert_eq!(token.position, 2);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[3];
         assert_eq!(token.text, "🏿");
         assert_eq!(token.offset_from, 13);
         assert_eq!(token.offset_to, 17);
         assert_eq!(token.position, 3);
-        assert_eq!(token.position_length, 4);
+        assert_eq!(token.position_length, 1);
     }
 
     #[test]
@@ -410,56 +413,81 @@ mod tests {
         assert_eq!(token.offset_from, 0);
         assert_eq!(token.offset_to, 1);
         assert_eq!(token.position, 0);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[1];
         assert_eq!(token.text, "2");
         assert_eq!(token.offset_from, 1);
         assert_eq!(token.offset_to, 2);
         assert_eq!(token.position, 1);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[2];
         assert_eq!(token.text, "3");
         assert_eq!(token.offset_from, 2);
         assert_eq!(token.offset_to, 3);
         assert_eq!(token.position, 2);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[3];
         assert_eq!(token.text, "4");
         assert_eq!(token.offset_from, 3);
         assert_eq!(token.offset_to, 4);
         assert_eq!(token.position, 3);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[4];
         assert_eq!(token.text, "5");
         assert_eq!(token.offset_from, 4);
         assert_eq!(token.offset_to, 5);
         assert_eq!(token.position, 4);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[5];
         assert_eq!(token.text, "6");
         assert_eq!(token.offset_from, 5);
         assert_eq!(token.offset_to, 6);
         assert_eq!(token.position, 5);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[6];
         assert_eq!(token.text, "円");
         assert_eq!(token.offset_from, 6);
         assert_eq!(token.offset_to, 9);
         assert_eq!(token.position, 6);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[7];
         assert_eq!(token.text, "🤌🏿");
         assert_eq!(token.offset_from, 9);
         assert_eq!(token.offset_to, 17);
         assert_eq!(token.position, 7);
-        assert_eq!(token.position_length, 8);
+        assert_eq!(token.position_length, 1);
+    }
+
+    #[test]
+    fn test_tokenize_wsconst_o_linebreak() {
+        // Line breaks must be split even if wsconst contains `O`.
+        let tokens = token_stream_helper("局。\n「東京", "O");
+
+        assert_eq!(tokens.len(), 6);
+
+        let expected = [
+            ("局", 0, 3),
+            ("。", 3, 6),
+            ("\n", 6, 7),
+            ("「", 7, 10),
+            ("東", 10, 13),
+            ("京", 13, 16),
+        ];
+        for (i, (token, (text, offset_from, offset_to))) in tokens.iter().zip(expected).enumerate()
+        {
+            assert_eq!(token.text, text);
+            assert_eq!(token.offset_from, offset_from);
+            assert_eq!(token.offset_to, offset_to);
+            assert_eq!(token.position, i);
+            assert_eq!(token.position_length, 1);
+        }
     }
 
     #[test]
@@ -473,20 +501,20 @@ mod tests {
         assert_eq!(token.offset_from, 0);
         assert_eq!(token.offset_to, 6);
         assert_eq!(token.position, 0);
-        assert_eq!(token.position_length, 3);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[1];
         assert_eq!(token.text, "円");
         assert_eq!(token.offset_from, 6);
         assert_eq!(token.offset_to, 9);
         assert_eq!(token.position, 1);
-        assert_eq!(token.position_length, 3);
+        assert_eq!(token.position_length, 1);
 
         let token = &tokens[2];
         assert_eq!(token.text, "🤌🏿");
         assert_eq!(token.offset_from, 9);
         assert_eq!(token.offset_to, 17);
         assert_eq!(token.position, 2);
-        assert_eq!(token.position_length, 3);
+        assert_eq!(token.position_length, 1);
     }
 }
