@@ -72,6 +72,8 @@ mod utils;
 pub mod errors;
 
 #[cfg(feature = "train")]
+mod linear_solver;
+#[cfg(feature = "train")]
 mod tag_trainer;
 #[cfg(feature = "train")]
 mod trainer;
@@ -85,7 +87,10 @@ pub use predictor::Predictor;
 pub use sentence::{CharacterBoundary, CharacterType, Sentence, Token, TokenIterator};
 
 #[cfg(feature = "train")]
-pub use trainer::{SolverType, Trainer};
+pub use trainer::{Solver, Trainer};
+
+#[cfg(feature = "liblinear")]
+pub use trainer::LiblinearSolver;
 
 #[cfg(feature = "kytea")]
 pub use kytea_model::KyteaModel;
