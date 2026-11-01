@@ -5,6 +5,10 @@
 //! added. The other solvers are ports of LIBLINEAR's dual coordinate descent solvers. All of them
 //! keep the training data in single precision and need less memory and time than LIBLINEAR.
 
+// The solvers keep the arithmetic of LIBLINEAR.
+// `mul_add` rounds differently and is slow without FMA instructions.
+#![allow(clippy::suboptimal_flops)]
+
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -41,10 +45,14 @@ impl Columns {
         let mut values = vec![0f32; nnz];
         let mut fill = offsets.clone();
         for (i, x) in xs.iter().enumerate() {
+            let i = u32::try_from(i).unwrap();
             for &(j, v) in x.iter().chain(&[(u32::try_from(n_features).unwrap(), 1.)]) {
                 let j = j as usize;
-                rows[fill[j]] = i as u32;
-                values[fill[j]] = v as f32;
+                rows[fill[j]] = i;
+                // The values are counts, exact in single precision.
+                #[allow(clippy::cast_possible_truncation)]
+                let v = v as f32;
+                values[fill[j]] = v;
                 fill[j] += 1;
             }
         }
@@ -84,7 +92,10 @@ impl XorShift {
         x ^= x >> 7;
         x ^= x << 17;
         self.0 = x;
-        (x % n as u64) as usize
+        // Less than `n`, so it fits in `usize`.
+        #[allow(clippy::cast_possible_truncation)]
+        let r = (x % n as u64) as usize;
+        r
     }
 }
 
@@ -97,6 +108,8 @@ impl XorShift {
 /// * `eps` - The stopping tolerance.
 /// * `cost` - The cost C.
 /// * `l2` - The weight λ of the L2 term.
+// Kept in one function as LIBLINEAR's `solve_l1r_l2_svc`, so that they can be compared.
+#[allow(clippy::cognitive_complexity)]
 fn solve(cols: &Columns, y: &[i8], eps: f64, cost: f64, l2: f64) -> Vec<f64> {
     let l = y.len();
     let w_size = cols.n();
@@ -269,7 +282,10 @@ impl Rows {
         for x in xs {
             for &(fid, v) in x {
                 cols.push(fid);
-                values.push(v as f32);
+                // The values are counts, exact in single precision.
+                #[allow(clippy::cast_possible_truncation)]
+                let v = v as f32;
+                values.push(v);
             }
             cols.push(u32::try_from(n_features).unwrap());
             values.push(1.);
@@ -551,6 +567,8 @@ impl LinearModel {
         };
         drop(xs);
         let mut labels: Vec<i32> = vec![];
+        // The labels are integers.
+        #[allow(clippy::cast_possible_truncation)]
         let ys: Vec<i32> = ys.iter().map(|&y| y as i32).collect();
         for &y in &ys {
             if !labels.contains(&y) {

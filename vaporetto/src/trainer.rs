@@ -142,7 +142,7 @@ impl Solver {
 }
 
 /// The accessors of a trained linear model. The feature IDs start from 0.
-pub(crate) trait Linear {
+pub trait Linear {
     fn labels(&self) -> &[i32];
     fn num_features(&self) -> usize;
     fn feature_coefficient(&self, feature: usize, label_index: usize) -> f64;
@@ -151,16 +151,16 @@ pub(crate) trait Linear {
 
 impl Linear for LinearModel {
     fn labels(&self) -> &[i32] {
-        LinearModel::labels(self)
+        Self::labels(self)
     }
     fn num_features(&self) -> usize {
-        LinearModel::num_features(self)
+        Self::num_features(self)
     }
     fn feature_coefficient(&self, feature: usize, label_index: usize) -> f64 {
-        LinearModel::feature_coefficient(self, feature, label_index)
+        Self::feature_coefficient(self, feature, label_index)
     }
     fn label_bias(&self, label_index: usize) -> f64 {
-        LinearModel::label_bias(self, label_index)
+        Self::label_bias(self, label_index)
     }
 }
 
@@ -193,7 +193,7 @@ impl<M: liblinear::LibLinearModel> Linear for LiblinearModel<M> {
 ///
 /// * `ys` - The labels.
 /// * `xs` - The features of each instance.
-pub(crate) fn fit(
+pub fn fit(
     ys: Vec<f64>,
     xs: Vec<Vec<(u32, f64)>>,
     epsilon: f64,
