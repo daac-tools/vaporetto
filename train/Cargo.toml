@@ -8,3 +8,7 @@ clap = { version = "4.6", features = ["derive"] }  # MIT or Apache-2.0
 vaporetto = { path = "../vaporetto", features = ["train"] }  # MIT or Apache-2.0
 vaporetto_rules = { path = "../vaporetto_rules" }  # MIT or Apache-2.0
 zstd = { version = "0.14.1", features = ["zstdmt"] }  # MIT
+
+[features]
+default = ["liblinear"]
+liblinear = ["vaporetto/liblinear"]

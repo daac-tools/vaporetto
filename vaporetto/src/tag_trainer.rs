@@ -3,13 +3,12 @@ use alloc::collections::BTreeMap;
 use alloc::string::ToString;
 
 use hashbrown::HashMap;
-use liblinear::LibLinearModel;
 
-use crate::errors::{Result, VaporettoError};
+use crate::errors::Result;
 use crate::model::TagModel;
 use crate::ngram_model::{TagNgramData, TagNgramModel, TagWeight};
 use crate::sentence::Sentence;
-use crate::trainer::{NgramFeature, SolverType};
+use crate::trainer::{NgramFeature, Solver};
 
 use crate::trainer::QUANTIZE_BIT_DEPTH;
 
@@ -139,7 +138,7 @@ impl<'a> TagTrainer<'a> {
             }
             let mut feature_vec = vec![];
             for feature in &example.features {
-                let new_id = u32::try_from(feature_ids.len() + 1).unwrap();
+                let new_id = u32::try_from(feature_ids.len()).unwrap();
                 let feature_id = *feature_ids.entry(feature).or_insert(new_id);
                 feature_vec.push((feature_id, 1f64));
             }
@@ -152,8 +151,7 @@ impl<'a> TagTrainer<'a> {
         token: String,
         examples: &[TagExample<'a>],
         epsilon: f64,
-        cost: f64,
-        solver: SolverType,
+        solver: Solver,
     ) -> Result<TagModel> {
         let n_tags = examples.iter().fold(0, |acc, x| acc.max(x.tags.len()));
         let mut tag_ids = vec![HashMap::new(); n_tags];
@@ -189,26 +187,15 @@ impl<'a> TagTrainer<'a> {
             // train
             let (feature_ids, xs, ys) = Self::gen_feature_vecs(examples, i, tag_ids);
 
-            let mut builder = liblinear::Builder::new();
-            let training_input = liblinear::util::TrainingInput::from_sparse_features(ys, xs)
-                .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {e:?}")))?;
-            builder.problem().input_data(training_input).bias(1.0);
-            builder
-                .parameters()
-                .solver_type(solver.into())
-                .stopping_criterion(epsilon)
-                .constraints_violation_cost(cost);
-            let model = builder
-                .build_model()
-                .map_err(|e| VaporettoError::invalid_model(e.to_string()))?;
+            let model = crate::trainer::fit(ys, xs, epsilon, solver)?;
 
             // Calculates the quantize multiplier
             let mut weight_max = 1e-6f64;
-            for i in 0..i32::try_from(tag_ids.len()).unwrap() {
+            for i in 0..tag_ids.len() {
                 let bias = model.label_bias(i).abs();
                 weight_max = weight_max.max(bias);
                 for fid in 0..model.num_features() {
-                    let weight = model.feature_coefficient(i32::try_from(fid + 1)?, i).abs();
+                    let weight = model.feature_coefficient(fid, i).abs();
                     weight_max = weight_max.max(weight);
                 }
             }
@@ -216,8 +203,7 @@ impl<'a> TagTrainer<'a> {
 
             for (i, &cls) in model.labels().iter().enumerate() {
                 bias[class_offset + usize::try_from(cls).unwrap()] = unsafe {
-                    (model.label_bias(i32::try_from(i).unwrap()) / quantize_multiplier)
-                        .to_int_unchecked::<i32>()
+                    (model.label_bias(i) / quantize_multiplier).to_int_unchecked::<i32>()
                 };
             }
             for (feature, fid) in feature_ids {
@@ -227,10 +213,7 @@ impl<'a> TagTrainer<'a> {
                         rel_position,
                     }) => {
                         for (i, &cls) in model.labels().iter().enumerate() {
-                            let raw_weight = model.feature_coefficient(
-                                i32::try_from(fid)?,
-                                i32::try_from(i).unwrap(),
-                            );
+                            let raw_weight = model.feature_coefficient(fid as usize, i);
                             let weight = unsafe {
                                 (raw_weight / quantize_multiplier).to_int_unchecked::<i32>()
                             };
@@ -248,10 +231,7 @@ impl<'a> TagTrainer<'a> {
                         rel_position,
                     }) => {
                         for (i, &cls) in model.labels().iter().enumerate() {
-                            let raw_weight = model.feature_coefficient(
-                                i32::try_from(fid)?,
-                                i32::try_from(i).unwrap(),
-                            );
+                            let raw_weight = model.feature_coefficient(fid as usize, i);
                             let weight = unsafe {
                                 (raw_weight / quantize_multiplier).to_int_unchecked::<i32>()
                             };
@@ -308,7 +288,7 @@ impl<'a> TagTrainer<'a> {
         })
     }
 
-    pub fn train(mut self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Vec<TagModel>> {
+    pub fn train(mut self, epsilon: f64, solver: Solver) -> Result<Vec<TagModel>> {
         for (token, tags) in self.default_tags {
             if tags.iter().any(|t| t.is_some()) && !self.examples.contains_key(token) {
                 self.examples.insert(
@@ -320,20 +300,16 @@ impl<'a> TagTrainer<'a> {
                 );
             }
         }
-        let mut tag_models = vec![];
-        liblinear::toggle_liblinear_stdout_output(false);
         let n_tokens = self.examples.len();
+        let mut tag_models = vec![];
+        #[cfg(feature = "liblinear")]
+        liblinear::toggle_liblinear_stdout_output(false);
         for (i, (token, examples)) in self.examples.into_iter().enumerate() {
-            tag_models.push(Self::train_tag(
-                token.into(),
-                &examples,
-                epsilon,
-                cost,
-                solver,
-            )?);
+            tag_models.push(Self::train_tag(token.into(), &examples, epsilon, solver)?);
             eprint!("Tags: {i}/{n_tokens}\r");
         }
         eprintln!("Tags: {n_tokens}/{n_tokens}");
+        #[cfg(feature = "liblinear")]
         liblinear::toggle_liblinear_stdout_output(true);
         Ok(tag_models)
     }

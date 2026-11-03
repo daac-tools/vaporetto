@@ -32,7 +32,10 @@ tag-prediction = ["alloc"]
 charwise-pma = ["alloc"]
 
 kytea = ["std"]
-train = ["std", "liblinear"]
+# The trainer needs the standard library for the logarithm (`f64::ln`) in the solver of logistic
+# regression, which is not available in the core library.
+train = ["std"]
+liblinear = ["train", "dep:liblinear"]
 portable-simd = ["fix-weight-length"]
 
 [package.metadata.docs.rs]

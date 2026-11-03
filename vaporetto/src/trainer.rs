@@ -1,14 +1,14 @@
-use core::str::FromStr;
-
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::string::ToString;
 
 use hashbrown::HashMap;
 
 use daachorse::DoubleArrayAhoCorasick;
-use liblinear::LibLinearModel;
 
 use crate::dict_model::{DictModel, WordWeightRecord};
 use crate::errors::{Result, VaporettoError};
+use crate::linear_solver::{LinearModel, Problem};
 use crate::model::Model;
 use crate::ngram_model::{NgramData, NgramModel};
 use crate::sentence::{CharacterBoundary, Sentence};
@@ -17,10 +17,11 @@ use crate::tag_trainer::TagTrainer;
 // Bit depth for weight quantization.
 pub const QUANTIZE_BIT_DEPTH: u8 = 16;
 
-/// Solver type.
-#[cfg_attr(docsrs, doc(cfg(feature = "train")))]
-#[derive(Clone, Copy, Debug)]
-pub enum SolverType {
+/// A solver of LIBLINEAR, used with [`Solver::Liblinear`]. The numbers are LIBLINEAR's.
+#[cfg(feature = "liblinear")]
+#[cfg_attr(docsrs, doc(cfg(feature = "liblinear")))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LiblinearSolver {
     /// L2-regularized logistic regression (primal).
     L2RegularizedLogistic = 0,
 
@@ -46,37 +47,195 @@ pub enum SolverType {
     L2RegularizedLogisticDual = 7,
 }
 
-impl FromStr for SolverType {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "0" => Ok(Self::L2RegularizedLogistic),
-            "1" => Ok(Self::L2RegularizedL2LossSVCDual),
-            "2" => Ok(Self::L2RegularizedL2LossSVC),
-            "3" => Ok(Self::L2RegularizedL1LossSVCDual),
-            "4" => Ok(Self::CrammerSingerSVC),
-            "5" => Ok(Self::L1RegularizedL2LossSVC),
-            "6" => Ok(Self::L1RegularizedLogistic),
-            "7" => Ok(Self::L2RegularizedLogisticDual),
-            _ => Err("Unsupported solver type."),
+#[cfg(feature = "liblinear")]
+impl From<LiblinearSolver> for liblinear::SolverType {
+    fn from(solver: LiblinearSolver) -> Self {
+        match solver {
+            LiblinearSolver::L2RegularizedLogistic => Self::L2R_LR,
+            LiblinearSolver::L2RegularizedL2LossSVCDual => Self::L2R_L2LOSS_SVC_DUAL,
+            LiblinearSolver::L2RegularizedL2LossSVC => Self::L2R_L2LOSS_SVC,
+            LiblinearSolver::L2RegularizedL1LossSVCDual => Self::L2R_L1LOSS_SVC_DUAL,
+            LiblinearSolver::CrammerSingerSVC => Self::MCSVM_CS,
+            LiblinearSolver::L1RegularizedL2LossSVC => Self::L1R_L2LOSS_SVC,
+            LiblinearSolver::L1RegularizedLogistic => Self::L1R_LR,
+            LiblinearSolver::L2RegularizedLogisticDual => Self::L2R_LR_DUAL,
         }
     }
 }
 
-impl From<SolverType> for liblinear::SolverType {
-    fn from(solver: SolverType) -> Self {
-        match solver {
-            SolverType::L2RegularizedLogistic => Self::L2R_LR,
-            SolverType::L2RegularizedL2LossSVCDual => Self::L2R_L2LOSS_SVC_DUAL,
-            SolverType::L2RegularizedL2LossSVC => Self::L2R_L2LOSS_SVC,
-            SolverType::L2RegularizedL1LossSVCDual => Self::L2R_L1LOSS_SVC_DUAL,
-            SolverType::CrammerSingerSVC => Self::MCSVM_CS,
-            SolverType::L1RegularizedL2LossSVC => Self::L1R_L2LOSS_SVC,
-            SolverType::L1RegularizedLogistic => Self::L1R_LR,
-            SolverType::L2RegularizedLogisticDual => Self::L2R_LR_DUAL,
+/// A solver with its costs, used by [`Trainer::train`].
+#[cfg_attr(docsrs, doc(cfg(feature = "train")))]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Solver {
+    /// L1-regularized L2-loss support vector classification:
+    /// `min_w ||w||_1 + C Σ max(0, 1 - y w^T x)^2`.
+    L1RegularizedL2LossSVC {
+        /// The cost C.
+        cost: f64,
+    },
+
+    /// L2-regularized L2-loss support vector classification:
+    /// `min_w ||w||_2^2 / 2 + C Σ max(0, 1 - y w^T x)^2`, solved in the dual.
+    L2RegularizedL2LossSVCDual {
+        /// The cost C.
+        cost: f64,
+    },
+
+    /// L2-regularized L1-loss support vector classification:
+    /// `min_w ||w||_2^2 / 2 + C Σ max(0, 1 - y w^T x)`, solved in the dual.
+    L2RegularizedL1LossSVCDual {
+        /// The cost C.
+        cost: f64,
+    },
+
+    /// L2-regularized logistic regression: `min_w ||w||_2^2 / 2 + C Σ log(1 + exp(-y w^T x))`,
+    /// solved in the dual.
+    L2RegularizedLogisticDual {
+        /// The cost C.
+        cost: f64,
+    },
+
+    /// Elastic-net regularized L2-loss support vector classification:
+    /// `min_w ||w||_1 / C1 + ||w||_2^2 / (2 C2) + Σ max(0, 1 - y w^T x)^2`.
+    ///
+    /// With `C2 = inf`, this is [`Solver::L1RegularizedL2LossSVC`] with the cost C1.
+    ElasticNet {
+        /// The cost C1 of the L1 term (finite).
+        l1_cost: f64,
+        /// The cost C2 of the L2 term (may be infinite).
+        l2_cost: f64,
+    },
+
+    /// A solver of LIBLINEAR.
+    #[cfg(feature = "liblinear")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "liblinear")))]
+    Liblinear {
+        /// The solver.
+        solver: LiblinearSolver,
+        /// The cost C.
+        cost: f64,
+    },
+}
+
+impl Solver {
+    fn check(&self) -> Result<()> {
+        let valid = match *self {
+            Self::L1RegularizedL2LossSVC { cost }
+            | Self::L2RegularizedL2LossSVCDual { cost }
+            | Self::L2RegularizedL1LossSVCDual { cost }
+            | Self::L2RegularizedLogisticDual { cost } => cost.is_finite() && cost > 0.,
+            Self::ElasticNet { l1_cost, l2_cost } => {
+                l1_cost.is_finite() && l1_cost > 0. && l2_cost > 0.
+            }
+            #[cfg(feature = "liblinear")]
+            Self::Liblinear { cost, .. } => cost.is_finite() && cost > 0.,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(VaporettoError::invalid_argument(
+                "solver",
+                "costs must be positive (only the cost of the L2 term may be infinite)",
+            ))
         }
     }
+}
+
+/// The accessors of a trained linear model. The feature IDs start from 0.
+pub trait Linear {
+    fn labels(&self) -> &[i32];
+    fn num_features(&self) -> usize;
+    fn feature_coefficient(&self, feature: usize, label_index: usize) -> f64;
+    fn label_bias(&self, label_index: usize) -> f64;
+}
+
+impl Linear for LinearModel {
+    fn labels(&self) -> &[i32] {
+        Self::labels(self)
+    }
+    fn num_features(&self) -> usize {
+        Self::num_features(self)
+    }
+    fn feature_coefficient(&self, feature: usize, label_index: usize) -> f64 {
+        Self::feature_coefficient(self, feature, label_index)
+    }
+    fn label_bias(&self, label_index: usize) -> f64 {
+        Self::label_bias(self, label_index)
+    }
+}
+
+/// A model trained by LIBLINEAR, whose feature IDs start from 1.
+#[cfg(feature = "liblinear")]
+struct LiblinearModel<M>(M);
+
+#[cfg(feature = "liblinear")]
+impl<M: liblinear::LibLinearModel> Linear for LiblinearModel<M> {
+    fn labels(&self) -> &[i32] {
+        self.0.labels()
+    }
+    fn num_features(&self) -> usize {
+        self.0.num_features()
+    }
+    fn feature_coefficient(&self, feature: usize, label_index: usize) -> f64 {
+        self.0.feature_coefficient(
+            i32::try_from(feature + 1).unwrap(),
+            i32::try_from(label_index).unwrap(),
+        )
+    }
+    fn label_bias(&self, label_index: usize) -> f64 {
+        self.0.label_bias(i32::try_from(label_index).unwrap())
+    }
+}
+
+/// Trains a classifier with the solver.
+///
+/// # Arguments
+///
+/// * `ys` - The labels.
+/// * `xs` - The features of each instance.
+pub fn fit(
+    ys: Vec<f64>,
+    xs: Vec<Vec<(u32, f64)>>,
+    epsilon: f64,
+    solver: Solver,
+) -> Result<Box<dyn Linear>> {
+    if ys.is_empty() {
+        return Err(VaporettoError::invalid_argument(
+            "dataset",
+            "must contain at least one example",
+        ));
+    }
+    let problem = match solver {
+        Solver::L1RegularizedL2LossSVC { cost } => Problem::ElasticNetL2LossSvc { cost, l2: 0. },
+        // ||w||_1 / C1 + ||w||^2 / (2 C2) + loss = (||w||_1 + (C1 / C2) ||w||^2 / 2 + C1 loss) / C1
+        Solver::ElasticNet { l1_cost, l2_cost } => Problem::ElasticNetL2LossSvc {
+            cost: l1_cost,
+            l2: l1_cost / l2_cost,
+        },
+        Solver::L2RegularizedL2LossSVCDual { cost } => Problem::L2RegularizedL2LossSvcDual { cost },
+        Solver::L2RegularizedL1LossSVCDual { cost } => Problem::L2RegularizedL1LossSvcDual { cost },
+        Solver::L2RegularizedLogisticDual { cost } => Problem::L2RegularizedLogisticDual { cost },
+        #[cfg(feature = "liblinear")]
+        Solver::Liblinear { solver, cost } => {
+            let mut xs = xs;
+            // LIBLINEAR's feature IDs start from 1.
+            xs.iter_mut().flatten().for_each(|(fid, _)| *fid += 1);
+            let mut builder = liblinear::Builder::new();
+            let training_input = liblinear::util::TrainingInput::from_sparse_features(ys, xs)
+                .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {e:?}")))?;
+            builder.problem().input_data(training_input).bias(1.0);
+            builder
+                .parameters()
+                .solver_type(solver.into())
+                .stopping_criterion(epsilon)
+                .constraints_violation_cost(cost);
+            let model = builder
+                .build_model()
+                .map_err(|e| VaporettoError::invalid_model(e.to_string()))?;
+            return Ok(Box::new(LiblinearModel(model)));
+        }
+    };
+    Ok(Box::new(LinearModel::train(&ys, xs, epsilon, problem)))
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
@@ -159,7 +318,7 @@ impl From<usize> for DummyValue {
 /// use std::fs::File;
 /// use std::io::{prelude::*, BufReader, BufWriter};
 ///
-/// use vaporetto::{Sentence, SolverType, Trainer};
+/// use vaporetto::{Sentence, Solver, Trainer};
 ///
 /// let mut train_sents = vec![];
 /// let f = BufReader::new(File::open("dataset-train.txt").unwrap());
@@ -173,7 +332,9 @@ impl From<usize> for DummyValue {
 ///     trainer.add_example(&s);
 /// }
 ///
-/// let model = trainer.train(0.01, 1., SolverType::L1RegularizedL2LossSVC).unwrap();
+/// let model = trainer
+///     .train(0.01, Solver::L1RegularizedL2LossSVC { cost: 1. })
+///     .unwrap();
 /// let mut f = BufWriter::new(File::create("model.bin").unwrap());
 /// model.write(&mut f).unwrap();
 /// ```
@@ -333,7 +494,7 @@ impl<'a> Trainer<'a> {
             }
             let mut feature_vector = HashMap::new();
             for feature in features {
-                let new_id = self.feature_ids.len() + 1;
+                let new_id = self.feature_ids.len();
                 let feature_id = *self
                     .feature_ids
                     .entry(feature)
@@ -352,47 +513,40 @@ impl<'a> Trainer<'a> {
     /// # Arguments
     ///
     /// * `epsilon` - The tolerance of the termination criterion.
-    /// * `cost` - The parameter C.
-    /// * `solver` - Solver type.
+    /// * `solver` - The solver and its costs.
     ///
     /// # Errors
     ///
-    /// * If the solver returns an error, that will be propagated.
+    /// * If `epsilon` is not a positive finite value, an error variant will be returned.
+    /// * If `solver` returns an error, that will be propagated.
+    /// * If the costs are invalid, an error variant will be returned.
     /// * If the dataset contains no word boundaries, an error variant will be returned.
-    pub fn train(self, epsilon: f64, cost: f64, solver: SolverType) -> Result<Model> {
-        let mut builder = liblinear::Builder::new();
-        let training_input = liblinear::util::TrainingInput::from_sparse_features(self.ys, self.xs)
-            .map_err(|e| VaporettoError::invalid_model(format!("liblinear error: {e:?}")))?;
-        builder.problem().input_data(training_input).bias(1.0);
-        builder
-            .parameters()
-            .solver_type(solver.into())
-            .stopping_criterion(epsilon)
-            .constraints_violation_cost(cost);
-        let model = builder
-            .build_model()
-            .map_err(|e| VaporettoError::invalid_model(e.to_string()))?;
+    pub fn train(self, epsilon: f64, solver: Solver) -> Result<Model> {
+        if !(epsilon.is_finite() && epsilon > 0.) {
+            return Err(VaporettoError::invalid_argument(
+                "epsilon",
+                "must be a positive finite value",
+            ));
+        }
+        solver.check()?;
+        let model = fit(self.ys, self.xs, epsilon, solver)?;
 
-        let wb_idx = i32::try_from(
-            model
-                .labels()
-                .iter()
-                .position(|&cls| CharacterBoundary::WordBoundary as i32 == cls)
-                .ok_or_else(|| {
-                    VaporettoError::invalid_argument(
-                        "dataset",
-                        "must contain at least one word boundary",
-                    )
-                })?,
-        )?;
+        let wb_idx = model
+            .labels()
+            .iter()
+            .position(|&cls| CharacterBoundary::WordBoundary as i32 == cls)
+            .ok_or_else(|| {
+                VaporettoError::invalid_argument(
+                    "dataset",
+                    "must contain at least one word boundary",
+                )
+            })?;
 
         let bias = model.label_bias(wb_idx);
 
         let mut weight_max = bias.abs();
         for fid in 0..model.num_features() {
-            let weight = model
-                .feature_coefficient(i32::try_from(fid + 1)?, wb_idx)
-                .abs();
+            let weight = model.feature_coefficient(fid, wb_idx).abs();
             weight_max = weight_max.max(weight);
         }
         let quantize_multiplier = weight_max / f64::from((1 << (QUANTIZE_BIT_DEPTH - 1)) - 1);
@@ -408,7 +562,7 @@ impl<'a> Trainer<'a> {
         let bias = unsafe { (bias / quantize_multiplier).to_int_unchecked::<i32>() };
 
         for (feature, fid) in self.feature_ids {
-            let raw_weight = model.feature_coefficient(i32::try_from(fid)?, wb_idx);
+            let raw_weight = model.feature_coefficient(fid as usize, wb_idx);
             let weight = unsafe { (raw_weight / quantize_multiplier).to_int_unchecked::<i32>() };
 
             if weight == 0 {
@@ -461,7 +615,7 @@ impl<'a> Trainer<'a> {
             }
         }
 
-        let tag_models = self.tag_trainer.train(epsilon, cost, solver)?;
+        let tag_models = self.tag_trainer.train(epsilon, solver)?;
 
         Ok(Model::new(
             NgramModel(
@@ -513,13 +667,40 @@ mod tests {
     use crate::sentence::CharacterBoundary::*;
     use crate::sentence::CharacterType::*;
 
+    /// The solvers to test: the solvers in Rust, and LIBLINEAR's if enabled.
+    fn solvers() -> Vec<Solver> {
+        #[cfg_attr(not(feature = "liblinear"), allow(unused_mut))]
+        let mut solvers = vec![
+            Solver::L1RegularizedL2LossSVC { cost: 1.0 },
+            Solver::L2RegularizedL2LossSVCDual { cost: 1.0 },
+            Solver::L2RegularizedL1LossSVCDual { cost: 1.0 },
+            Solver::L2RegularizedLogisticDual { cost: 1.0 },
+            Solver::ElasticNet {
+                l1_cost: 1.0,
+                l2_cost: 1.0,
+            },
+        ];
+        #[cfg(feature = "liblinear")]
+        solvers.extend([
+            Solver::Liblinear {
+                solver: LiblinearSolver::L2RegularizedLogistic,
+                cost: 1.0,
+            },
+            Solver::Liblinear {
+                solver: LiblinearSolver::L1RegularizedL2LossSVC,
+                cost: 1.0,
+            },
+        ]);
+        solvers
+    }
+
     fn train_model(
         texts: &[&str],
         char_window_size: u8,
         char_ngram_size: u8,
         type_window_size: u8,
         type_ngram_size: u8,
-        solver: SolverType,
+        solver: Solver,
     ) -> Result<Model> {
         let sentences: Vec<_> = texts
             .iter()
@@ -539,7 +720,7 @@ mod tests {
                 trainer.add_example(s);
             }
         }
-        trainer.train(0.01, 1.0, solver)
+        trainer.train(0.01, solver)
     }
 
     #[test]
@@ -551,16 +732,12 @@ mod tests {
             "ひらがな カタカナ",
             "漢字 カタカナ",
         ];
-        for (char_window_size, type_window_size) in [(1, 1), (3, 1), (1, 3), (2, 3)] {
-            let model = train_model(
-                &texts,
-                char_window_size,
-                0,
-                type_window_size,
-                2,
-                SolverType::L2RegularizedLogistic,
-            )
-            .unwrap();
+        for (solver, (char_window_size, type_window_size)) in solvers()
+            .into_iter()
+            .flat_map(|a| [(1, 1), (3, 1), (1, 3), (2, 3)].map(|w| (a, w)))
+        {
+            let model =
+                train_model(&texts, char_window_size, 0, type_window_size, 2, solver).unwrap();
             for data in &model.0.type_ngram_model.0 {
                 assert_eq!(
                     usize::from(type_window_size) * 2 - data.ngram.len() + 1,
@@ -574,22 +751,64 @@ mod tests {
             s.write_tokenized_text(&mut buf);
             assert_eq!(
                 "東京 とうきょう", buf,
-                "char_window_size={char_window_size}, type_window_size={type_window_size}",
+                "{solver:?}, char_window_size={char_window_size}, type_window_size={type_window_size}",
             );
         }
     }
 
     #[test]
     fn check_train_no_word_boundary() {
-        let result = train_model(
-            &["あいう", "かきく"],
-            3,
-            3,
-            3,
-            3,
-            SolverType::L1RegularizedL2LossSVC,
-        );
-        assert!(result.is_err());
+        for solver in solvers() {
+            let result = train_model(&["あいう", "かきく"], 3, 3, 3, 3, solver);
+            assert!(result.is_err(), "{solver:?}");
+        }
+    }
+
+    #[test]
+    fn check_train_no_example() {
+        for solver in solvers() {
+            // A sentence of one character has no character boundary.
+            let result = train_model(&["あ"], 3, 3, 3, 3, solver);
+            assert!(result.is_err(), "{solver:?}");
+        }
+    }
+
+    #[test]
+    fn check_train_invalid_epsilon() {
+        for solver in solvers() {
+            for epsilon in [0., -0.01, f64::NAN, f64::INFINITY] {
+                let s = Sentence::from_tokenized("あい う").unwrap();
+                let mut trainer = Trainer::new(3, 3, 3, 3, vec![], 4, &[]).unwrap();
+                trainer.add_example(&s);
+                assert!(
+                    trainer.train(epsilon, solver).is_err(),
+                    "{solver:?}, epsilon={epsilon}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn check_train_invalid_cost() {
+        for solver in [
+            Solver::L1RegularizedL2LossSVC { cost: 0. },
+            Solver::L2RegularizedLogisticDual {
+                cost: f64::INFINITY,
+            },
+            Solver::ElasticNet {
+                l1_cost: f64::INFINITY,
+                l2_cost: 1.,
+            },
+            Solver::ElasticNet {
+                l1_cost: 1.,
+                l2_cost: -1.,
+            },
+        ] {
+            let s = Sentence::from_tokenized("あい う").unwrap();
+            let mut trainer = Trainer::new(3, 3, 3, 3, vec![], 4, &[]).unwrap();
+            trainer.add_example(&s);
+            assert!(trainer.train(0.01, solver).is_err(), "{solver:?}");
+        }
     }
 
     #[test]
@@ -608,8 +827,10 @@ mod tests {
             "あの/連体詞 火星/名詞 に/助詞 猫/名詞 が/助詞 いる/動詞",
             "その/連体詞 地球/名詞 で/助詞 猫/接尾辞 を/助詞 見る/動詞",
         ];
-        for (char_window_size, char_ngram_size, type_window_size, type_ngram_size) in
-            [(2, 3, 2, 2), (1, 3, 1, 1), (3, 3, 0, 3)]
+        for (solver, (char_window_size, char_ngram_size, type_window_size, type_ngram_size)) in
+            solvers()
+                .into_iter()
+                .flat_map(|a| [(2, 3, 2, 2), (1, 3, 1, 1), (3, 3, 0, 3)].map(|w| (a, w)))
         {
             let model = train_model(
                 &texts,
@@ -617,7 +838,7 @@ mod tests {
                 char_ngram_size,
                 type_window_size,
                 type_ngram_size,
-                SolverType::L2RegularizedLogistic,
+                solver,
             )
             .unwrap();
             for tag_model in &model.0.tag_models {
@@ -634,7 +855,7 @@ mod tests {
             }
             assert!(
                 crate::Predictor::new(model, true).is_ok(),
-                "window_sizes={:?}",
+                "{solver:?}, window_sizes={:?}",
                 (
                     char_window_size,
                     char_ngram_size,
