@@ -517,10 +517,17 @@ impl<'a> Trainer<'a> {
     ///
     /// # Errors
     ///
+    /// * If `epsilon` is not a positive finite value, an error variant will be returned.
+    /// * If `solver` returns an error, that will be propagated.
     /// * If the costs are invalid, an error variant will be returned.
-    /// * If the solver returns an error, that will be propagated.
     /// * If the dataset contains no word boundaries, an error variant will be returned.
     pub fn train(self, epsilon: f64, solver: Solver) -> Result<Model> {
+        if !(epsilon.is_finite() && epsilon > 0.) {
+            return Err(VaporettoError::invalid_argument(
+                "epsilon",
+                "must be a positive finite value",
+            ));
+        }
         solver.check()?;
         let model = fit(self.ys, self.xs, epsilon, solver)?;
 
@@ -763,6 +770,21 @@ mod tests {
             // A sentence of one character has no character boundary.
             let result = train_model(&["あ"], 3, 3, 3, 3, solver);
             assert!(result.is_err(), "{solver:?}");
+        }
+    }
+
+    #[test]
+    fn check_train_invalid_epsilon() {
+        for solver in solvers() {
+            for epsilon in [0., -0.01, f64::NAN, f64::INFINITY] {
+                let s = Sentence::from_tokenized("あい う").unwrap();
+                let mut trainer = Trainer::new(3, 3, 3, 3, vec![], 4, &[]).unwrap();
+                trainer.add_example(&s);
+                assert!(
+                    trainer.train(epsilon, solver).is_err(),
+                    "{solver:?}, epsilon={epsilon}",
+                );
+            }
         }
     }
 
